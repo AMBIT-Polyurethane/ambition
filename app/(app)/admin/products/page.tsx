@@ -3,6 +3,7 @@ import { money, searchSafe } from "@/lib/format";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { CsvImport } from "@/components/csv-import";
+import { BulkPhotoUpload, ProductPhotoField } from "@/components/product-photos";
 import { saveCategory, saveProduct } from "@/app/(app)/admin/actions";
 import type { Category, Product } from "@/lib/types";
 
@@ -53,6 +54,11 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
       <CsvImport kind="products" />
 
       <details className="card">
+        <summary><b>Product photos</b> <span className="small muted">· {products.filter((p) => p.image_url).length} of {products.length} have a photo</span></summary>
+        <div style={{ marginTop: 14 }}><BulkPhotoUpload skus={products.map((p) => p.sku)} /></div>
+      </details>
+
+      <details className="card">
         <summary><b>Categories</b> <span className="small muted">· choose which show &ldquo;Based on customer pricing&rdquo;</span></summary>
         <div className="col" style={{ marginTop: 14 }}>
           {cats.map((c) => (
@@ -89,12 +95,14 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
           return (
             <details key={p.id}>
               <summary className="item" style={{ minHeight: 56, opacity: p.active ? 1 : 0.5 }}>
+                {p.image_url ? <img className="thumb sm" src={p.image_url} alt="" loading="lazy" /> : <div className="thumb sm empty" />}
                 <div className="grow">
                   <div className="t ellipsis">{p.name}{p.active ? "" : " (hidden)"}</div>
                   <div className="s ellipsis">{p.sku} · {cat?.name ?? "No category"} · {p.unit}</div>
                 </div>
                 <span className="small nowrap">{cp ? <span className="cp-tag" style={{ marginTop: 0 }}>Customer pricing</span> : p.list_price !== null ? money(p.list_price) : <span className="faint">On invoice</span>}</span>
               </summary>
+              <div style={{ padding: "4px 16px 12px" }}><ProductPhotoField sku={p.sku} url={p.image_url} /></div>
               <form action={saveProduct} className="col" style={{ padding: "0 16px 16px" }}>
                 <input type="hidden" name="id" value={p.id} />
                 <ProductFields p={p} cats={cats} />

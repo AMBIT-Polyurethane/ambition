@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, CircleAlert, Minus, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, CircleAlert, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, type Cart } from "@/lib/cart";
 import { money } from "@/lib/format";
@@ -16,6 +16,7 @@ export type CatalogProduct = {
   description: string | null;
   category_id: string | null;
   unit: string;
+  image_url: string | null;
   list_price: number | null;
   cp: boolean; // "Based on customer pricing"
 };
@@ -71,6 +72,7 @@ export function OrderBuilder(props: Props) {
   const [cat, setCat] = useState("all");
   const [q, setQ] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [zoom, setZoom] = useState<CatalogProduct | null>(null);
 
   const [delivery, setDelivery] = useState<"pickup" | "jobsite" | "dropship">("pickup");
   const [branchId, setBranchId] = useState(me.defaultBranch ?? branches[0]?.id ?? "");
@@ -161,6 +163,32 @@ export function OrderBuilder(props: Props) {
     });
   };
 
+  const thumb = (p: CatalogProduct, size?: "sm") =>
+    p.image_url ? (
+      <button type="button" className="thumb-btn" onClick={() => setZoom(p)} aria-label={`Bigger photo of ${p.name}`}>
+        <img className={`thumb${size ? " " + size : ""}`} src={p.image_url} alt="" loading="lazy" />
+      </button>
+    ) : size ? null : (
+      <div className="ic"><Icon name={categoryIcon(p.category_id)} size={22} /></div>
+    );
+
+  const lightbox = zoom ? (
+    <div className="lightbox" role="dialog" aria-modal="true" aria-label={zoom.name} onClick={() => setZoom(null)}>
+      <div className="panel" onClick={(e) => e.stopPropagation()}>
+        <div className="row between">
+          <div>
+            <div className="cap">{zoom.name}</div>
+            <div className="sub">{zoom.sku}{zoom.description ? ` · ${zoom.description}` : ""}</div>
+          </div>
+          <button type="button" className="iconbtn" style={{ background: "#f2f2f4", color: "#18181b", border: 0 }} onClick={() => setZoom(null)} aria-label="Close">
+            <X size={20} />
+          </button>
+        </div>
+        <img src={zoom.image_url ?? ""} alt={zoom.name} />
+      </div>
+    </div>
+  ) : null;
+
   // ------------------------------------------------------------------ review
   if (step === "review") {
     const forName =
@@ -214,6 +242,7 @@ export function OrderBuilder(props: Props) {
             <div className="list">
               {lines.map(({ p, qty }) => (
                 <div key={p.id} className="product">
+                  {thumb(p, "sm")}
                   <div className="grow">
                     <div className="name">{p.name}</div>
                     <div className="desc">{p.sku}{p.description ? ` · ${p.description}` : ""}</div>
@@ -299,6 +328,7 @@ export function OrderBuilder(props: Props) {
             Goes to orders@ambitpu.com{forName ? ` for ${forName}` : ""}. A copy goes to {me.email}.
           </p>
         </div>
+        {lightbox}
       </main>
     );
   }
@@ -334,7 +364,7 @@ export function OrderBuilder(props: Props) {
             const qty = cart[p.id] ?? 0;
             return (
               <div key={p.id} className="product">
-                <div className="ic"><Icon name={categoryIcon(p.category_id)} size={22} /></div>
+                {thumb(p)}
                 <div className="grow">
                   <div className="name">{p.name}</div>
                   <div className="desc">{p.description ? p.description : p.sku}</div>
@@ -362,6 +392,7 @@ export function OrderBuilder(props: Props) {
           </div>
         </div>
       ) : null}
+      {lightbox}
     </main>
   );
 }

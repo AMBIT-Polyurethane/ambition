@@ -3,7 +3,10 @@
 import { useState, useTransition } from "react";
 import Papa from "papaparse";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
-import { importCompanies, importProducts, type ImportResult } from "@/app/(app)/admin/actions";
+import { importCompanies, importProducts, setProductImages, type ImportResult } from "@/app/(app)/admin/actions";
+import { createClient } from "@/lib/supabase/client";
+import { runPool, toJpeg, uploadProductPhoto } from "@/lib/images";
+import type { WorkbookPhoto } from "@/lib/xlsx-photos";
 import {
   CUSTOMER_KEYS, CUSTOMER_PRICED_CATEGORIES, PRODUCT_KEYS, cellText, normalizeProductRows, pick, rowsFromGrid, type ProductRow,
 } from "@/lib/product-import";
@@ -57,12 +60,16 @@ export function CsvImport({ kind }: { kind: Kind }) {
   const [hideMissing, setHideMissing] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [reading, setReading] = useState(false);
+  const [photos, setPhotos] = useState<WorkbookPhoto[]>([]);
+  const [withPhotos, setWithPhotos] = useState(true);
+  const [progress, setProgress] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const onFile = async (file: File | undefined) => {
     setResult(null);
     setRows(null);
     setPreview(null);
+    setPhotos([]);
     if (!file) return;
     setFileName(file.name);
     setReading(true);
@@ -73,6 +80,16 @@ export function CsvImport({ kind }: { kind: Kind }) {
       if (kind === "products") {
         parsed = parsed.filter((r) => (r.sku ?? "").trim() !== "" && !/^example/i.test((r.sku ?? "").trim()));
         setPreview(normalizeProductRows(parsed).products);
+        if (/\.xlsx$/i.test(file.name)) {
+          try {
+            const { extractWorkbookPhotos } = await import("@/lib/xlsx-photos");
+            const skus = new Set(parsed.map((r) => (r.sku ?? "").trim().toLowerCase()));
+            const found = extractWorkbookPhotos(await file.arrayBuffer(), cfg.preferredSheets).filter((ph) => skus.has(ph.sku.toLowerCase()));
+            setPhotos(found);
+          } catch {
+            setPhotos([]);
+          }
+        }
       } else {
         parsed = parsed.filter((r) => (r.name || r.company || r.customer || "").trim() !== "" && !/^example/i.test(r.name || r.company || r.customer || ""));
       }
@@ -91,9 +108,30 @@ export function CsvImport({ kind }: { kind: Kind }) {
   const run = () =>
     start(async () => {
       if (!rows) return;
-      const res = kind === "products" ? await importProducts(rows, hideMissing) : await importCompanies(rows);
+      let res = kind === "products" ? await importProducts(rows, hideMissing) : await importCompanies(rows);
+      if (res.ok && kind === "products" && withPhotos && photos.length) {
+        const supabase = createClient();
+        const resized = new Map<string, Promise<Blob>>();
+        const saved: { sku: string; url: string }[] = [];
+        let failed = 0;
+        await runPool(photos, 4, async (ph) => {
+          try {
+            if (!resized.has(ph.media)) resized.set(ph.media, toJpeg(ph.blob));
+            saved.push({ sku: ph.sku, url: await uploadProductPhoto(supabase, ph.sku, await resized.get(ph.media)!) });
+          } catch {
+            failed++;
+          }
+        }, (n) => setProgress(`Uploading photos ${n} of ${photos.length}…`));
+        setProgress(null);
+        const ph = saved.length ? await setProductImages(saved) : { ok: false, message: "No photos could be uploaded." };
+        res = {
+          ok: res.ok && ph.ok,
+          message: `${res.message} ${ph.message}${failed ? ` ${failed} photos failed to upload.` : ""}`,
+        };
+      }
       setResult(res);
       if (res.ok) {
+        setPhotos([]);
         setRows(null);
         setPreview(null);
       }
@@ -186,6 +224,12 @@ export function CsvImport({ kind }: { kind: Kind }) {
           </div>
           {rows.length > 8 ? <div className="tiny faint">Showing the first 8 of {rows.length}.</div> : null}
 
+          {photos.length ? (
+            <label className="check">
+              <input type="checkbox" checked={withPhotos} onChange={(e) => setWithPhotos(e.target.checked)} />
+              Also import the {photos.length} product photos in this file
+            </label>
+          ) : null}
           {kind === "products" ? (
             <label className="check">
               <input type="checkbox" checked={hideMissing} onChange={(e) => setHideMissing(e.target.checked)} />
@@ -194,7 +238,7 @@ export function CsvImport({ kind }: { kind: Kind }) {
           ) : null}
           <div className="row" style={{ gap: 10 }}>
             <button type="button" className="btn sm" disabled={pending} onClick={run}>
-              {pending ? "Importing…" : `Import ${rows.length} ${kind === "products" ? "products" : "customers"}`}
+              {pending ? progress ?? "Importing…" : `Import ${rows.length} ${kind === "products" ? "products" : "customers"}`}
             </button>
             <button type="button" className="btn sm dark" disabled={pending} onClick={() => { setRows(null); setPreview(null); setFileName(""); }}>
               Cancel

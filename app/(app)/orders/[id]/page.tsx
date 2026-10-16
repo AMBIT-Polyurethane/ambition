@@ -25,10 +25,10 @@ export default async function OrderDetailPage({
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) notFound();
   const [{ data: items }, { data: branch }] = await Promise.all([
-    supabase.from("order_items").select("*").eq("order_id", id).order("id"),
+    supabase.from("order_items").select("*, product:products(image_url)").eq("order_id", id).order("id"),
     order.branch_id ? supabase.from("branches").select("*").eq("id", order.branch_id).maybeSingle<Branch>() : Promise.resolve({ data: null }),
   ]);
-  const lines = (items ?? []) as OrderItem[];
+  const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null } | null })[];
   const justSent = sp.sent === "1";
 
   return (
@@ -73,6 +73,7 @@ export default async function OrderDetailPage({
         <div className="list">
           {lines.map((l) => (
             <div key={l.id} className="product">
+              {l.product?.image_url ? <img className="thumb sm" src={l.product.image_url} alt="" loading="lazy" /> : null}
               <div className="grow">
                 <div className="name">{l.name}</div>
                 <div className="desc">{l.sku} · {qtyText(l.qty, l.unit)}</div>

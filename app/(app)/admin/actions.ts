@@ -363,3 +363,22 @@ export async function saveBranch(form: FormData) {
   revalidatePath("/admin/branches");
   revalidatePath("/branches");
 }
+
+// ------------------------------------------------------------ product photos
+export async function setProductImages(list: { sku: string; url: string | null }[]): Promise<ImportResult> {
+  const { supabase } = await requireAdmin();
+  const clean = list
+    .filter((x) => x && typeof x.sku === "string" && x.sku.trim())
+    .map((x) => ({ sku: x.sku.trim(), url: x.url && /^https?:\/\//.test(x.url) ? x.url : null }));
+  if (clean.length === 0) return { ok: false, message: "No photos to save." };
+  const { data, error } = await supabase.rpc("admin_set_product_images", { p: clean });
+  if (error) {
+    if (/function .* does not exist|Could not find the function/i.test(error.message)) {
+      return { ok: false, message: "Photos need database update 0006. Run update-0006-product-images.sql in Supabase, then try again." };
+    }
+    return { ok: false, message: error.message };
+  }
+  revalidatePath("/admin/products");
+  revalidatePath("/order");
+  return { ok: true, message: `${data ?? 0} product photo${data === 1 ? "" : "s"} saved.` };
+}

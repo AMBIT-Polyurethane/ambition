@@ -30,6 +30,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
     description: p.description,
     category_id: p.category_id,
     unit: p.unit,
+    image_url: p.image_url,
     list_price: p.list_price === null ? null : Number(p.list_price),
     cp: p.customer_priced ?? (p.category_id ? cpByCat.get(p.category_id) ?? false : false),
   }));
