@@ -35,7 +35,7 @@ No checkout, payments or inventory: AMBIT handles invoices and POs as usual.
    - Site URL: your Vercel address, e.g. `https://ambition-xxxx.vercel.app`
    - Redirect URLs: add `https://ambition-xxxx.vercel.app/**` (and later `https://app.ambitpu.com/**`)
 4. **Vercel → Add New → Project →** import the `ambition` GitHub repo. Before deploying, add the environment
-   variables from `.env.example` (at minimum the two `NEXT_PUBLIC_SUPABASE_*` values and `NEXT_PUBLIC_SITE_URL`).
+   variables from `.env.example` (at minimum the two `NEXT_PUBLIC_SUPABASE_*` values and `ADMIN_NOTIFY_EMAIL`).
    The values are in Supabase → Project Settings → API Keys.
 5. Open the app, **Request contractor access** with your own email, then in Supabase SQL Editor run:
    ```sql

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { currentOrigin, safeNext } from "@/lib/origin";
-import { ADMIN_NOTIFY_EMAIL } from "@/lib/env";
+import { ADMIN_NOTIFY_EMAIL, MICROSOFT_SIGNIN } from "@/lib/env";
 import { sendEmail, wrapEmail } from "@/lib/email";
 import { escapeHtml as h } from "@/lib/format";
 
@@ -51,8 +51,8 @@ export async function requestAccess(_prev: FormState, form: FormData): Promise<F
   if (!full_name || !company || !phone || !email) return { error: "Please fill in your name, company, phone and email." };
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "That email address doesn't look right." };
   if (password.length < 8) return { error: "Use a password with at least 8 characters." };
-  if (email.endsWith("@ambitpu.com")) {
-    return { error: "AMBIT employees don't need to request access. Use Sign in with Microsoft, or ask your admin." };
+  if (MICROSOFT_SIGNIN && email.endsWith("@ambitpu.com")) {
+    return { error: "AMBIT employees don't need to request access. Go back and use Sign in with Microsoft." };
   }
 
   const supabase = await createClient();
