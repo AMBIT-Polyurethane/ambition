@@ -51,6 +51,15 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         </form>
       </div>
 
+      {sp.error ? <div className="alert err">{sp.error}</div> : null}
+      {sp.saved ? <div className="alert ok">Saved {sp.saved}.</div> : null}
+      {tab === "pending" ? (
+        <div className="alert info small">
+          Staff access (internal forms, directory, ordering for customers) is only possible for @ambitpu.com accounts.
+          Until Microsoft sign-in is on, only approve AMBIT emails for people you know: anyone can type any email when requesting access.
+        </div>
+      ) : null}
+
       {list.length === 0 ? (
         <Empty icon="users" title={tab === "pending" ? "No one is waiting" : "No accounts here"} />
       ) : (
@@ -62,12 +71,15 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
               cos.find((c) => u.requested_company && c.name.toLowerCase() === u.requested_company.toLowerCase())?.id ??
               (u.requested_company ? "__new" : "");
             const isMe = u.id === me.id;
+            const ambit = u.email.toLowerCase().endsWith("@ambitpu.com");
+            const roleDefault = u.status === "pending" && ambit && u.role === "customer" ? "employee" : u.role;
             return (
               <form key={u.id} action={saveUser} className="card col" style={{ gap: 12 }}>
                 <input type="hidden" name="user_id" value={u.id} />
+                <input type="hidden" name="tab" value={tab} />
                 <div className="row between wrap">
                   <div>
-                    <div style={{ fontWeight: 800 }}>{u.full_name ?? "(no name)"} {isMe ? <span className="pill grey">You</span> : null}</div>
+                    <div style={{ fontWeight: 800 }}>{u.full_name ?? "(no name)"} {isMe ? <span className="pill grey">You</span> : null} {ambit ? <span className="pill">AMBIT email</span> : <span className="pill grey">Outside email</span>}</div>
                     <div className="small muted">{u.email}{u.phone ? ` · ${u.phone}` : ""}</div>
                     {u.requested_company ? (
                       <div className="small">Requested: <b>{u.requested_company}</b>{u.requested_account_no ? ` · acct ${u.requested_account_no}` : ""}</div>
@@ -78,10 +90,10 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                 <div className="grid3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
                   <label className="field">
                     <span className="label">Role</span>
-                    <select className="select sm" name="role" defaultValue={u.role} disabled={isMe}>
+                    <select className="select sm" name="role" defaultValue={roleDefault} disabled={isMe}>
                       <option value="customer">Contractor</option>
-                      <option value="employee">AMBIT employee</option>
-                      <option value="admin">Admin</option>
+                      <option value="employee" disabled={!ambit}>AMBIT employee{ambit ? "" : " (needs @ambitpu.com)"}</option>
+                      <option value="admin" disabled={!ambit}>Admin{ambit ? "" : " (needs @ambitpu.com)"}</option>
                     </select>
                     {isMe ? <input type="hidden" name="role" value={u.role} /> : null}
                   </label>
@@ -96,7 +108,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   </label>
                   <label className="field">
                     <span className="label">Company (contractors)</span>
-                    <select className="select sm" name="company_id" defaultValue={match}>
+                    <select className="select sm" name="company_id" defaultValue={ambit ? "" : match}>
                       <option value="">-</option>
                       {u.requested_company ? <option value="__new">+ New: {u.requested_company}</option> : null}
                       {cos.map((c) => <option key={c.id} value={c.id}>{c.name}{c.account_no ? ` · ${c.account_no}` : ""}</option>)}

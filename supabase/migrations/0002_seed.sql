@@ -39,8 +39,9 @@ on conflict (sku) do nothing;
 insert into public.links (title, subtitle, url, icon, section, audience, open_in_app, sort) values
   ('Price request',      'Quote pricing for a customer',  null, 'tag',       'forms',     'employee', true,  1),
   ('Travel request',     'Trips, mileage, lodging',       null, 'plane',     'forms',     'employee', true,  2),
-  ('Customer complaint', 'Product quality report',        null, 'alert',     'forms',     'employee', true,  3),
-  ('Spray job data log', 'Field conditions & settings',   null, 'clipboard', 'forms',     'all',      true,  4),
+  ('Time off request',   'Vacation, sick and personal days', null, 'calendar', 'forms',   'employee', true,  3),
+  ('Customer complaint', 'Product quality report',        null, 'alert',     'forms',     'employee', true,  4),
+  ('Spray job data log', 'Field conditions & settings',   null, 'clipboard', 'forms',     'all',      true,  5),
   ('Marketing kit',      'Co-branded material',           null, 'megaphone', 'resources', 'customer', false, 10),
   ('Marketing content',  'Co-branded material',           null, 'megaphone', 'resources', 'employee', false, 10),
   ('Training videos',    'Watch on the job',              null, 'play',      'resources', 'all',      false, 11),

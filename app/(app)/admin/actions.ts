@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { sendEmail, wrapEmail } from "@/lib/email";
 import { currentOrigin } from "@/lib/origin";
@@ -26,13 +27,20 @@ export async function saveUser(form: FormData) {
   const userId = s(form, "user_id");
   const role = s(form, "role") as Profile["role"];
   const status = s(form, "status") as Profile["status"];
+  const tab = s(form, "tab") || "pending";
   let companyId: string | null = n(form, "company_id");
   const branchId = n(form, "branch_id");
+  const back = (q: string) => `/admin/users?tab=${encodeURIComponent(tab)}&${q}`;
 
   const { data: before } = await supabase.from("profiles").select("*").eq("id", userId).single<Profile>();
-  if (!before) return;
+  if (!before) redirect(back("error=" + encodeURIComponent("That account no longer exists.")));
 
-  if (companyId === "__new") {
+  const staff = role === "employee" || role === "admin";
+  if (staff && !before.email.toLowerCase().endsWith("@ambitpu.com")) {
+    redirect(back("error=" + encodeURIComponent(`${before.email} isn't an @ambitpu.com address, so it can only be a contractor account.`)));
+  }
+
+  if (!staff && companyId === "__new") {
     const name = before.requested_company || before.full_name || before.email;
     const { data: created, error } = await supabase
       .from("companies")
@@ -48,13 +56,14 @@ export async function saveUser(form: FormData) {
     }
   }
 
-  await supabase.rpc("admin_update_user", {
+  const { error } = await supabase.rpc("admin_update_user", {
     p_user: userId,
     p_role: role,
     p_status: status,
-    p_company: role === "customer" ? companyId : null,
+    p_company: staff ? null : companyId === "__new" ? null : companyId,
     p_branch: branchId,
   });
+  if (error) redirect(back("error=" + encodeURIComponent(error.message)));
 
   if (before.status !== "active" && status === "active") {
     const origin = await currentOrigin();
@@ -64,7 +73,11 @@ export async function saveUser(form: FormData) {
       html: wrapEmail(
         "Welcome",
         `<div style="font-size:22px;font-weight:800;margin-bottom:10px;">You're in, ${h(firstName(before.full_name, before.email))}.</div>
-<p style="font-size:15px;line-height:1.5;margin:0 0 18px;">Your AMBITION account is approved. You can now place orders, find product docs and bulletins, and take AMBIT Academy courses.</p>
+<p style="font-size:15px;line-height:1.5;margin:0 0 18px;">Your AMBITION account is approved. ${
+          staff
+            ? "You now have the AMBIT team side of the app: internal forms, the company directory, ordering for customers, docs and AMBIT Academy."
+            : "You can now place orders, find product docs and bulletins, and take AMBIT Academy courses."
+        }</p>
 <p style="margin:0;"><a href="${h(origin)}" style="display:inline-block;background:#E33527;color:#fff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:12px 18px;border-radius:8px;">OPEN AMBITION</a></p>
 <p style="font-size:13px;color:#52525b;margin:18px 0 0;">Tip: on your phone, open the link and choose "Add to Home Screen" to use it like an app.</p>`,
       ),
@@ -73,6 +86,7 @@ export async function saveUser(form: FormData) {
   }
   revalidatePath("/admin/users");
   revalidatePath("/admin");
+  redirect(back("saved=" + encodeURIComponent(before.full_name || before.email)));
 }
 
 // ----------------------------------------------------------------- companies
