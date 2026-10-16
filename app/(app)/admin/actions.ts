@@ -7,6 +7,7 @@ import { sendEmail, wrapEmail } from "@/lib/email";
 import { currentOrigin } from "@/lib/origin";
 import { escapeHtml as h, firstName } from "@/lib/format";
 import type { Profile } from "@/lib/types";
+import { CUSTOMER_PRICED_CATEGORIES, normalizeProductRows } from "@/lib/product-import";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const n = (f: FormData, k: string) => (s(f, k) === "" ? null : s(f, k));
@@ -16,7 +17,6 @@ const num = (v: unknown): number | null => {
   const x = Number(t);
   return Number.isFinite(x) ? x : null;
 };
-const yes = (v: unknown) => /^(y|yes|true|1|x|on)$/i.test(String(v ?? "").trim());
 const slug = (t: string) => t.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 
 export type ImportResult = { ok: boolean; message: string };
@@ -185,64 +185,59 @@ export async function saveProduct(form: FormData) {
 
 export async function importProducts(rows: Record<string, string>[], hideMissing: boolean): Promise<ImportResult> {
   const { supabase } = await requireAdmin();
-  const { data: cats } = await supabase.from("categories").select("id, name, sort");
-  const catByKey = new Map<string, string>();
+  const { products, problems } = normalizeProductRows(rows);
+  if (products.length === 0) {
+    return { ok: false, message: problems[0] ?? "No product rows found. The file needs a SKU column and a name (or Description) column." };
+  }
+
+  // Match categories by name or code; create any new ones.
+  const { data: cats } = await supabase.from("categories").select("id, name, sort, customer_priced");
+  const catByKey = new Map<string, { id: string; cp: boolean }>();
   for (const c of cats ?? []) {
-    catByKey.set(c.id.toLowerCase(), c.id);
-    catByKey.set(c.name.toLowerCase(), c.id);
+    const v = { id: c.id, cp: c.customer_priced };
+    catByKey.set(c.id.toLowerCase(), v);
+    catByKey.set(c.name.toLowerCase(), v);
+    catByKey.set(slug(c.name), v);
   }
   let nextSort = Math.max(0, ...(cats ?? []).map((c) => c.sort)) + 1;
-
-  const products: Record<string, unknown>[] = [];
-  const problems: string[] = [];
-  const seen = new Set<string>();
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const sku = (r.sku || r.item || r["item_#"] || r["part_#"] || "").trim();
-    const name = (r.name || r.description_short || r.product || "").trim();
-    if (!sku && !name) continue;
-    if (!sku || !name) { problems.push(`row ${i + 2}: needs both sku and name`); continue; }
-    if (seen.has(sku.toLowerCase())) { problems.push(`row ${i + 2}: duplicate sku ${sku}`); continue; }
-    seen.add(sku.toLowerCase());
-
-    let category_id: string | null = null;
-    const catName = (r.category || "").trim();
-    if (catName) {
-      category_id = catByKey.get(catName.toLowerCase()) ?? null;
-      if (!category_id) {
-        const id = slug(catName);
-        const cp = /foam|fiberglass|fibreglass/i.test(catName);
-        await supabase.from("categories").upsert({ id, name: catName, customer_priced: cp, sort: nextSort++ }, { onConflict: "id", ignoreDuplicates: true });
-        catByKey.set(catName.toLowerCase(), id);
-        catByKey.set(id, id);
-        category_id = id;
-      }
-    }
-    const cpRaw = (r.customer_priced || r.customer_pricing || "").trim();
-    const activeRaw = (r.active || "").trim();
-    products.push({
-      sku,
-      name,
-      description: (r.description || r.detail || "").trim() || null,
-      category_id,
-      unit: (r.unit || r.uom || "each").trim() || "each",
-      list_price: num(r.list_price ?? r.price ?? r.list),
-      customer_priced: cpRaw ? yes(cpRaw) : null,
-      active: activeRaw ? yes(activeRaw) : true,
-      sort: num(r.sort) ?? i + 1,
-    });
+  for (const p of products) {
+    const name = p.categoryName;
+    if (!name || catByKey.has(name.toLowerCase()) || catByKey.has(slug(name))) continue;
+    const id = slug(name);
+    const cp = CUSTOMER_PRICED_CATEGORIES.includes(name.toLowerCase());
+    await supabase.from("categories").upsert({ id, name, customer_priced: cp, sort: nextSort++ }, { onConflict: "id", ignoreDuplicates: true });
+    catByKey.set(name.toLowerCase(), { id, cp });
+    catByKey.set(id, { id, cp });
   }
-  if (products.length === 0) return { ok: false, message: problems[0] ?? "No product rows found. Check the column names match the template." };
 
-  for (let i = 0; i < products.length; i += 200) {
-    const { error } = await supabase.from("products").upsert(products.slice(i, i + 200), { onConflict: "sku" });
+  let masked = 0;
+  const payload = products.map((p) => {
+    const cat = p.categoryName ? catByKey.get(p.categoryName.toLowerCase()) ?? catByKey.get(slug(p.categoryName)) : undefined;
+    const cp = p.customer_priced ?? cat?.cp ?? false;
+    // Customer-priced items never store a list price, so it can't leak to contractors.
+    if (cp && p.list_price !== null) masked++;
+    return {
+      sku: p.sku,
+      name: p.name,
+      description: p.description,
+      category_id: cat?.id ?? null,
+      unit: p.unit,
+      list_price: cp ? null : p.list_price,
+      customer_priced: p.customer_priced,
+      active: p.active,
+      sort: p.sort,
+    };
+  });
+
+  for (let i = 0; i < payload.length; i += 200) {
+    const { error } = await supabase.from("products").upsert(payload.slice(i, i + 200), { onConflict: "sku" });
     if (error) return { ok: false, message: `Import stopped: ${error.message}` };
   }
 
   let hidden = 0;
   if (hideMissing) {
     const { data: all } = await supabase.from("products").select("id, sku, active");
-    const keep = new Set(products.map((p) => String(p.sku).toLowerCase()));
+    const keep = new Set(payload.map((p) => p.sku.toLowerCase()));
     const toHide = (all ?? []).filter((p) => p.active && !keep.has(p.sku.toLowerCase())).map((p) => p.id);
     if (toHide.length) {
       await supabase.from("products").update({ active: false }).in("id", toHide);
@@ -251,9 +246,16 @@ export async function importProducts(rows: Record<string, string>[], hideMissing
   }
   revalidatePath("/admin/products");
   revalidatePath("/order");
+  const noPrice = payload.filter((p) => p.list_price === null && !(p.customer_priced ?? false) && !(catByKey.get(p.category_id ?? "")?.cp)).length;
+  const parts = [
+    `${payload.length} products imported`,
+    hidden ? `${hidden} hidden` : "",
+    noPrice ? `${noPrice} have no price yet (they show "Price confirmed on invoice")` : "",
+    masked ? `${masked} customer-priced prices left out on purpose` : "",
+  ].filter(Boolean);
   return {
     ok: true,
-    message: `${products.length} products imported${hidden ? `, ${hidden} hidden` : ""}.${problems.length ? ` Skipped: ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "…" : ""}` : ""}`,
+    message: `${parts.join(", ")}.${problems.length ? ` Skipped: ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "…" : ""}` : ""}`,
   };
 }
 

@@ -44,9 +44,13 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
 
 export function categoryIcon(categoryId: string | null | undefined): string {
   const id = (categoryId ?? "").toLowerCase();
+  if (id.includes("gun-foam")) return "drum";
   if (id.includes("foam")) return "drum";
   if (id.includes("fiber") || id.includes("insul")) return "layers";
   if (id.includes("gun") || id.includes("part")) return "wrench";
-  if (id.includes("ppe") || id.includes("safety")) return "shield";
+  if (id.includes("ppe") || id.includes("safety") || id.includes("protective")) return "shield";
+  if (id.includes("tool")) return "hammer";
+  if (id.includes("coating") || id.includes("sealant") || id.includes("adhesive") || id.includes("clean")) return "drum";
+  if (id.includes("plastic") || id.includes("netting") || id.includes("tape")) return "layers";
   return "box";
 }

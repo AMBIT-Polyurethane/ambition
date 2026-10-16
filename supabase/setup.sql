@@ -523,8 +523,8 @@ grant execute on function public.sync_microsoft_employee() to authenticated;
 
 insert into public.branches (id, name, state, sort) values
   ('okc', 'Oklahoma City', 'OK', 1),
-  ('arl', 'Arlington',     'TX', 2),
-  ('smt', 'San Marcos',    'TX', 3),
+  ('atx', 'Arlington',     'TX', 2),
+  ('smx', 'San Marcos',    'TX', 3),
   ('jax', 'Jacksonville',  'FL', 4),
   ('mob', 'Mobile',        'AL', 5)
 on conflict (id) do nothing;
@@ -676,3 +676,17 @@ revoke execute on function public.make_admin(text) from public, anon, authentica
 insert into public.links (title, subtitle, url, icon, section, audience, open_in_app, sort)
 select 'Time off request', 'Vacation, sick and personal days', null, 'calendar', 'forms', 'employee', true, 3
 where not exists (select 1 from public.links where lower(title) = 'time off request');
+
+-- =====================================================================
+-- AMBITION update 0005
+-- * Branch codes match the Inventory Control Workbook: OKC, ATX, SMX, JAX, MOB
+--   (customers, staff and past orders follow automatically).
+-- * Removes the sample products and any category left with no products.
+-- Run once in Supabase > SQL Editor. Safe to run again.
+-- =====================================================================
+
+update public.branches set id = 'atx' where id = 'arl' and not exists (select 1 from public.branches where id = 'atx');
+update public.branches set id = 'smx' where id = 'smt' and not exists (select 1 from public.branches where id = 'smx');
+
+delete from public.products where sku like 'SAMPLE-%';
+delete from public.categories c where not exists (select 1 from public.products p where p.category_id = c.id);

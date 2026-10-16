@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Papa from "papaparse";
 import { Upload } from "lucide-react";
 import { importCompanies, importProducts, type ImportResult } from "@/app/(app)/admin/actions";
+import { rowsFromGrid } from "@/lib/product-import";
 
 type Kind = "products" | "companies";
 
@@ -18,11 +19,16 @@ export function CsvImport({ kind }: { kind: Kind }) {
     setResult(null);
     if (!file) return;
     setFileName(file.name);
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
+    Papa.parse<string[]>(file, {
+      header: false,
       skipEmptyLines: true,
-      transformHeader: (h) => h.trim().toLowerCase().replace(/\s+/g, "_"),
-      complete: (res) => setRows(res.data),
+      complete: (res) => {
+        // Title rows above the header (like the Inventory Workbook's) are skipped automatically.
+        const keys = kind === "products" ? ["sku"] : ["name", "company", "customer", "account_no"];
+        const parsed = rowsFromGrid(res.data as string[][], keys);
+        const keyCol = kind === "products" ? "sku" : null;
+        setRows(keyCol ? parsed.filter((r) => (r[keyCol] ?? "").trim() !== "") : parsed);
+      },
       error: (err) => setResult({ ok: false, message: err.message }),
     });
   };
@@ -45,7 +51,7 @@ export function CsvImport({ kind }: { kind: Kind }) {
       </div>
       <p className="small muted" style={{ margin: 0 }}>
         {kind === "products"
-          ? "Save your product list as CSV (Excel: File → Save As → CSV) with columns sku, name, description, category, unit, list_price. Existing SKUs are updated; new ones are added. Spray foam and fiberglass categories show “Based on customer pricing”."
+          ? "Use the template, or open the Inventory Control Workbook, click the Item Master tab and choose File → Save As → CSV. Rows are matched by SKU: existing products update, new ones are added. Costs and margins are never imported. AMBIT Foam and Fiberglass show “Based on customer pricing”."
           : "Save your customer list as CSV with columns name, account_no, branch, phone, email. Matching account numbers are updated."}
       </p>
       <label className="btn dark sm" style={{ alignSelf: "flex-start" }}>

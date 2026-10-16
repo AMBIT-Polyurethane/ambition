@@ -6,8 +6,8 @@
 
 insert into public.branches (id, name, state, sort) values
   ('okc', 'Oklahoma City', 'OK', 1),
-  ('arl', 'Arlington',     'TX', 2),
-  ('smt', 'San Marcos',    'TX', 3),
+  ('atx', 'Arlington',     'TX', 2),
+  ('smx', 'San Marcos',    'TX', 3),
   ('jax', 'Jacksonville',  'FL', 4),
   ('mob', 'Mobile',        'AL', 5)
 on conflict (id) do nothing;
