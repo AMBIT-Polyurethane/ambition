@@ -1,0 +1,139 @@
+export type Role = "customer" | "employee" | "admin";
+export type Status = "pending" | "active" | "disabled";
+export type Audience = "all" | "customer" | "employee";
+export type OrderStatus = "new" | "processing" | "completed" | "cancelled";
+
+export type Company = {
+  id: string;
+  name: string;
+  account_no: string | null;
+  default_branch_id: string | null;
+  phone?: string | null;
+  email?: string | null;
+  city?: string | null;
+  state?: string | null;
+  notes?: string | null;
+  active?: boolean;
+};
+
+export type Profile = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  phone: string | null;
+  title: string | null;
+  role: Role;
+  status: Status;
+  company_id: string | null;
+  branch_id: string | null;
+  requested_company: string | null;
+  requested_account_no: string | null;
+  created_at: string;
+  approved_at: string | null;
+  company?: Pick<Company, "id" | "name" | "account_no" | "default_branch_id"> | null;
+};
+
+export type Branch = {
+  id: string;
+  name: string;
+  state: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  sort: number;
+  active: boolean;
+};
+
+export type Category = { id: string; name: string; customer_priced: boolean; sort: number };
+
+export type Product = {
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  category_id: string | null;
+  unit: string;
+  list_price: number | null;
+  customer_priced: boolean | null;
+  image_url: string | null;
+  active: boolean;
+  sort: number;
+};
+
+export type Order = {
+  id: string;
+  order_no: number;
+  placed_by: string;
+  company_id: string | null;
+  company_name: string;
+  account_no: string | null;
+  placed_by_name: string | null;
+  placed_by_email: string | null;
+  placed_by_phone: string | null;
+  placed_by_role: Role;
+  delivery_method: "pickup" | "jobsite" | "dropship";
+  branch_id: string | null;
+  ship_address: string | null;
+  po_number: string | null;
+  needed_by: string | null;
+  notes: string | null;
+  est_subtotal: number;
+  has_customer_pricing: boolean;
+  status: OrderStatus;
+  email_status: string;
+  email_error: string | null;
+  created_at: string;
+};
+
+export type OrderItem = {
+  id: number;
+  order_id: string;
+  product_id: string | null;
+  sku: string;
+  name: string;
+  unit: string;
+  qty: number;
+  unit_price: number | null;
+  customer_priced: boolean;
+  line_total: number | null;
+};
+
+export type LinkRow = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  url: string | null;
+  icon: string;
+  section: "forms" | "resources";
+  audience: Audience;
+  open_in_app: boolean;
+  sort: number;
+  active: boolean;
+};
+
+export type DocumentRow = {
+  id: string;
+  title: string;
+  doc_type: string;
+  product: string | null;
+  code: string | null;
+  description: string | null;
+  url: string | null;
+  storage_path: string | null;
+  audience: Audience;
+  published_on: string | null;
+  sort: number;
+  active: boolean;
+};
+
+export type Course = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  minutes: number | null;
+  lessons: number | null;
+  audience: Audience;
+  status: "coming_soon" | "live";
+  url: string | null;
+  sort: number;
+};
