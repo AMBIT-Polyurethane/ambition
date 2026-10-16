@@ -90,6 +90,8 @@ export function normalizeProductRows(rows: Record<string, string>[]): { products
       return;
     }
     const key = sku.toLowerCase();
+    // The example row in the template is skipped, so it's safe to leave it in.
+    if (key.startsWith("example")) return;
     if (seen.has(key)) {
       problems.push(`${sku}: listed twice, kept the first`);
       return;
@@ -131,4 +133,29 @@ export function rowsFromGrid(grid: string[][], keyHeaders: string[]): Record<str
     out.push(o);
   }
   return out;
+}
+
+// Turns any spreadsheet cell into text the way it reads in Excel.
+export function cellText(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? "" : v.toISOString().slice(0, 10);
+  if (typeof v === "boolean") return v ? "yes" : "no";
+  return String(v);
+}
+
+// Only these columns are ever sent to the app. Cost, margin and vendor columns stay on your computer.
+export const PRODUCT_KEYS = [
+  "sku", "item", "item_#", "part_#", "name", "description", "detail", "product", "group", "category",
+  "unit", "uom", "list_price", "sell_price", "price", "list", "customer_priced", "customer_pricing", "active", "status", "sort",
+];
+export const CUSTOMER_KEYS = [
+  "name", "company", "customer", "account_no", "account", "account_#", "branch", "default_branch", "phone", "email", "city", "state",
+];
+
+export function pick(rows: Record<string, string>[], keys: string[]): Record<string, string>[] {
+  return rows.map((r) => {
+    const o: Record<string, string> = {};
+    for (const k of keys) if (k in r) o[k] = r[k];
+    return o;
+  });
 }

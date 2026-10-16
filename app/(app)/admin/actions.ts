@@ -128,6 +128,7 @@ export async function importCompanies(rows: Record<string, string>[]): Promise<I
   for (const r of rows) {
     const name = (r.name || r.company || r.customer || "").trim();
     if (!name) { skipped++; continue; }
+    if (name.toLowerCase().startsWith("example")) continue; // the template's example row
     const acct = (r.account_no || r.account || r["account_#"] || "").trim() || null;
     const row = {
       name,
