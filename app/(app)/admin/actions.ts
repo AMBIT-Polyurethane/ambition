@@ -6,7 +6,8 @@ import { requireAdmin } from "@/lib/session";
 import { sendEmail, wrapEmail } from "@/lib/email";
 import { currentOrigin } from "@/lib/origin";
 import { escapeHtml as h, firstName } from "@/lib/format";
-import type { Profile } from "@/lib/types";
+import type { DocumentRow, Profile } from "@/lib/types";
+import { DOC_TYPES, fileKind, parseProducts, storageKeyFor } from "@/lib/docs";
 import { CUSTOMER_PRICED_CATEGORIES, normalizeProductRows } from "@/lib/product-import";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -290,28 +291,119 @@ export async function deleteLink(form: FormData) {
 }
 
 // --------------------------------------------------------------------- docs
+const MAX_DOC_BYTES = 50 * 1024 * 1024; // matches the docs bucket limit
+type DocForCopy = Pick<DocumentRow, "id" | "title" | "doc_type" | "audience" | "url" | "storage_path">;
+type Db = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
+
+/** Downloads a document's link and keeps the file in the app's own storage. */
+async function copyFromLink(supabase: Db, doc: DocForCopy): Promise<ImportResult> {
+  if (!doc.url) return { ok: false, message: "There's no link to copy from." };
+  let link: URL;
+  try {
+    link = new URL(doc.url);
+  } catch {
+    return { ok: false, message: "That link isn't a web address." };
+  }
+  if (link.protocol !== "https:" && link.protocol !== "http:") return { ok: false, message: "Only http(s) links can be copied." };
+
+  let res: Response;
+  try {
+    res = await fetch(link, {
+      redirect: "follow",
+      cache: "no-store",
+      signal: AbortSignal.timeout(25_000),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; AMBITION docs copier)", Accept: "application/pdf,image/*,*/*;q=0.8" },
+    });
+  } catch {
+    return { ok: false, message: "The website didn't answer. Try again in a minute." };
+  }
+  if (!res.ok) return { ok: false, message: `The website said ${res.status} (the file may have moved).` };
+  const kind = fileKind(res.headers.get("content-type"), res.url || doc.url);
+  if (!kind) return { ok: false, message: "That link isn't a PDF, image or Office file." };
+  if (Number(res.headers.get("content-length") ?? 0) > MAX_DOC_BYTES) return { ok: false, message: "That file is over 50 MB." };
+  const bytes = await res.arrayBuffer();
+  if (bytes.byteLength > MAX_DOC_BYTES) return { ok: false, message: "That file is over 50 MB." };
+  if (kind.ext === "pdf" && new TextDecoder().decode(bytes.slice(0, 5)) !== "%PDF-") {
+    return { ok: false, message: "The link didn't return a PDF (it may point to a web page)." };
+  }
+
+  const key = storageKeyFor(doc, kind.ext);
+  const { error } = await supabase.storage.from("docs").upload(key, bytes, { contentType: kind.type, upsert: true });
+  if (error) return { ok: false, message: `Couldn't store the file: ${error.message}` };
+  const { error: upd } = await supabase.from("documents").update({ storage_path: key }).eq("id", doc.id);
+  if (upd) return { ok: false, message: upd.message };
+  if (doc.storage_path && doc.storage_path !== key) await supabase.storage.from("docs").remove([doc.storage_path]);
+  const mb = bytes.byteLength / 1024 / 1024;
+  return { ok: true, message: `Copied into the app (${mb < 0.1 ? "<0.1" : mb.toFixed(1)} MB).` };
+}
+
+/** Admin > Docs: copy one linked file into the app (the bulk button calls this once per document). */
+export async function copyDocFile(id: string): Promise<ImportResult> {
+  const { supabase } = await requireAdmin();
+  const { data: doc } = await supabase
+    .from("documents")
+    .select("id, title, doc_type, audience, url, storage_path")
+    .eq("id", id)
+    .maybeSingle<DocForCopy>();
+  if (!doc) return { ok: false, message: "That document no longer exists." };
+  const res = await copyFromLink(supabase, doc);
+  revalidatePath("/admin/docs");
+  revalidatePath("/docs");
+  return res;
+}
+
 export async function saveDoc(form: FormData): Promise<ImportResult> {
   const { supabase } = await requireAdmin();
   const id = n(form, "id");
+  const products = parseProducts(s(form, "products"));
+  const renewal = s(form, "renewal_on");
   const row = {
     title: s(form, "title"),
-    doc_type: s(form, "doc_type") || "Other",
-    product: n(form, "product"),
+    doc_type: DOC_TYPES.some((t) => t.id === s(form, "doc_type")) ? s(form, "doc_type") : "Other",
+    products,
+    product: products[0] ?? null,
+    category: n(form, "category"),
     code: n(form, "code"),
     description: n(form, "description"),
+    revision: n(form, "revision"),
+    renewal_on: /^\d{4}-\d{2}-\d{2}$/.test(renewal) ? renewal : null,
     url: n(form, "url"),
     storage_path: n(form, "storage_path"),
     audience: ["all", "customer", "employee"].includes(s(form, "audience")) ? s(form, "audience") : "all",
-    published_on: n(form, "published_on"),
     sort: num(form.get("sort")) ?? 0,
     active: form.get("active") !== null ? form.get("active") === "on" : true,
   };
   if (!row.title) return { ok: false, message: "Give the document a title." };
-  const { error } = id ? await supabase.from("documents").update(row).eq("id", id) : await supabase.from("documents").insert(row);
-  if (error) return { ok: false, message: error.message };
+  if (row.url && !/^https?:\/\//i.test(row.url)) return { ok: false, message: "The link should start with https://" };
+
+  let before: DocForCopy | null = null;
+  if (id) {
+    const { data } = await supabase.from("documents").select("id, title, doc_type, audience, url, storage_path").eq("id", id).maybeSingle<DocForCopy>();
+    before = data;
+  }
+  const saved = id
+    ? await supabase.from("documents").update(row).eq("id", id).select("id, title, doc_type, audience, url, storage_path").single<DocForCopy>()
+    : await supabase.from("documents").insert(row).select("id, title, doc_type, audience, url, storage_path").single<DocForCopy>();
+  if (saved.error || !saved.data) return { ok: false, message: saved.error?.message ?? "Couldn't save." };
+
+  // "Keep a copy in the app": copy when there's a link and no stored file yet, or the link changed.
+  let note = "Saved.";
+  const wantsCopy = form.get("keep_copy") === "on";
+  const linkChanged = Boolean(before && before.url !== row.url);
+  if (wantsCopy && row.url && (!row.storage_path || linkChanged)) {
+    const copied = await copyFromLink(supabase, { ...saved.data, storage_path: row.storage_path });
+    note = copied.ok ? `Saved. ${copied.message}` : `Saved, but the file wasn't copied: ${copied.message}`;
+    // A new document is already saved at this point, so report it as added (with the warning)
+    // rather than inviting a second click that would create a duplicate.
+    if (!copied.ok && id) {
+      revalidatePath("/admin/docs");
+      revalidatePath("/docs");
+      return { ok: false, message: note };
+    }
+  }
   revalidatePath("/admin/docs");
   revalidatePath("/docs");
-  return { ok: true, message: "Saved." };
+  return { ok: true, message: note };
 }
 
 export async function deleteDoc(form: FormData) {

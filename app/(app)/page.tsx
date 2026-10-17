@@ -41,14 +41,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     ? [
         { key: "dir", icon: "users", title: "Company directory", sub: "Find anyone at AMBIT", href: "/directory" },
         { key: "orders", icon: "cart", title: "Orders", sub: "Everything sent through AMBITION", href: "/orders" },
-        { key: "docs", icon: "docs", title: "Product docs", sub: "TDS · SDS · ESR", href: "/docs" },
-        { key: "tsb", icon: "bulletin", title: "Tech bulletins", sub: "TSBs from AMBIT", href: "/docs?type=TSB" },
+        { key: "docs", icon: "docs", title: "Product docs", sub: "TDS · SDS · ESR · SPFA", href: "/docs" },
+        { key: "tsb", icon: "bulletin", title: "Tech bulletins", sub: "TSBs from AMBIT", href: "/docs?type=tsb" },
         { key: "academy", icon: "academy", title: "AMBIT Academy", sub: "Courses & quizzes", href: "/academy" },
         { key: "branches", icon: "pin", title: "Branches", sub: "Addresses & phones", href: "/branches" },
       ]
     : [
-        { key: "docs", icon: "docs", title: "Product docs", sub: "TDS · SDS · ESR", href: "/docs" },
-        { key: "tsb", icon: "bulletin", title: "Tech bulletins", sub: "TSBs from AMBIT", href: "/docs?type=TSB" },
+        { key: "docs", icon: "docs", title: "Product docs", sub: "TDS · SDS · ESR · SPFA", href: "/docs" },
+        { key: "tsb", icon: "bulletin", title: "Tech bulletins", sub: "TSBs from AMBIT", href: "/docs?type=tsb" },
         { key: "academy", icon: "academy", title: "AMBIT Academy", sub: "Courses & quizzes", href: "/academy" },
         { key: "orders", icon: "cart", title: "My orders", sub: "History & reorder", href: "/orders" },
         { key: "branches", icon: "pin", title: "Branches", sub: "Pickup locations", href: "/branches" },

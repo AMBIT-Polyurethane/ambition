@@ -115,11 +115,15 @@ export type DocumentRow = {
   id: string;
   title: string;
   doc_type: string;
-  product: string | null;
+  product: string | null; // older single-product field; "products" replaces it
+  products?: string[];
+  category?: string | null; // SPFA library shelf
   code: string | null;
   description: string | null;
-  url: string | null;
-  storage_path: string | null;
+  revision?: string | null;
+  renewal_on?: string | null;
+  url: string | null; // where the file came from / lives on the web
+  storage_path: string | null; // copy kept in the app (preferred when opening)
   audience: Audience;
   published_on: string | null;
   sort: number;
