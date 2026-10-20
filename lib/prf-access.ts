@@ -9,11 +9,11 @@ export async function ownedPriceRequest(id: string) {
   const [sub, fields, staffRes, linksRes] = await Promise.all([
     prfSubmission(id),
     prfFields(),
-    supabase.from("profiles").select("id, full_name").in("role", ["employee", "admin"]),
+    supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
   ]);
   if (!sub) notFound();
-  const staff = (staffRes.data ?? []) as { id: string; full_name: string | null }[];
+  const staff = (staffRes.data ?? []) as { id: string; full_name: string | null; email: string }[];
   const links = (linksRes.error ? [] : linksRes.data ?? []) as RepLink[];
   const [item] = toItems([sub], fields, links, staff);
   const admin = profile.role === "admin";

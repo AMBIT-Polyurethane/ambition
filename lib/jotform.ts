@@ -191,16 +191,27 @@ export type PrfItem = {
   ownerId: string | null;
 };
 
-export function toItems(subs: Submission[], f: PrfFields, links: RepLink[], staff: { id: string; full_name: string | null }[]): PrfItem[] {
+export const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(s.trim());
+
+/**
+ * Who owns each request. The SALES REP box may hold an email (matched to the app account's email)
+ * or a name (matched to the account's full name). An admin's manual link always wins.
+ */
+export function toItems(subs: Submission[], f: PrfFields, links: RepLink[], staff: { id: string; full_name: string | null; email?: string | null }[]): PrfItem[] {
   const byName = new Map<string, string>();
+  const byEmail = new Map<string, string>();
   for (const p of staff) {
     const k = normName(p.full_name);
     if (k && !byName.has(k)) byName.set(k, p.id);
+    if (p.email) byEmail.set(p.email.trim().toLowerCase(), p.id);
   }
-  for (const l of links) byName.set(normName(l.rep_name), l.profile_id);
+  const linked = new Map(links.map((l) => [normName(l.rep_name), l.profile_id]));
   return subs.map((s) => {
     const rep = f.rep ? answerText(s.answers[f.rep]) : "";
     const repKey = normName(rep);
+    const owner = !repKey
+      ? null
+      : linked.get(repKey) ?? (looksLikeEmail(rep) ? byEmail.get(rep.trim().toLowerCase()) : undefined) ?? byName.get(repKey) ?? null;
     return {
       id: s.id,
       created_at: s.created_at,
@@ -210,7 +221,7 @@ export function toItems(subs: Submission[], f: PrfFields, links: RepLink[], staf
       customer: f.customer ? answerText(s.answers[f.customer]) : "",
       contact: f.contact ? answerText(s.answers[f.contact]) : "",
       date: f.date ? answerText(s.answers[f.date]) : "",
-      ownerId: repKey ? byName.get(repKey) ?? null : null,
+      ownerId: owner,
     };
   });
 }

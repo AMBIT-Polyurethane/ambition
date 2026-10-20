@@ -75,9 +75,9 @@ export default async function PriceRequestsPage() {
       {admin && unmatched.length ? (
         <details className="card" open>
           <summary>
-            <b>Names that don't match an app account · {unmatched.length}</b>
+            <b>Sales reps not matched to an app account · {unmatched.length}</b>
             <div className="small muted" style={{ marginTop: 4 }}>
-              These reps won't see their requests until you link the name to their account.
+              Reps are matched by the email (or name) picked in the SALES REP box. Anyone listed here can't see their requests yet: either they don't have an app account, or the entry is misspelled. Link a misspelled one to the right person.
             </div>
           </summary>
           <div className="col" style={{ marginTop: 12, gap: 10 }}>
@@ -85,7 +85,10 @@ export default async function PriceRequestsPage() {
               <form key={key} action={linkRepName} className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                 <input type="hidden" name="rep_name" value={key} />
                 <span className="grow" style={{ minWidth: 140 }}>
-                  <b>{u.name}</b> <span className="small muted">· {u.count} request{u.count === 1 ? "" : "s"}</span>
+                  <b style={{ overflowWrap: "anywhere" }}>{u.name}</b> <span className="small muted">· {u.count} request{u.count === 1 ? "" : "s"}</span>
+                  {/@ambitpu\.com$/i.test(u.name.trim()) ? (
+                    <span className="tiny faint" style={{ display: "block", marginTop: 2 }}>No app account with this email yet. It matches on its own once they sign up with it.</span>
+                  ) : null}
                 </span>
                 <select className="select sm" name="profile_id" required defaultValue="" style={{ width: "auto", minWidth: 180 }}>
                   <option value="" disabled>Pick their account…</option>
