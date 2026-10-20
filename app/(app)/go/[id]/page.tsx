@@ -25,6 +25,8 @@ export default async function GoPage({ params }: { params: Promise<{ id: string 
       if (last) u.searchParams.set("name[last]", last);
     }
     if (!u.searchParams.has("email")) u.searchParams.set("email", profile.email);
+    // Price Request Form: pre-pick the rep in SALES REP (its choices are @ambitpu.com emails).
+    if (!u.searchParams.has("salesRep")) u.searchParams.set("salesRep", profile.email.toLowerCase());
   }
 
   return (
