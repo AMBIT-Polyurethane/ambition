@@ -41,6 +41,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     ? [
         { key: "dir", icon: "users", title: "Company directory", sub: "Find anyone at AMBIT", href: "/directory" },
         { key: "orders", icon: "cart", title: "Orders", sub: "Everything sent through AMBITION", href: "/orders" },
+        { key: "prf", icon: "tag", title: "My price requests", sub: "View, edit & resubmit", href: "/price-requests" },
         { key: "docs", icon: "docs", title: "Product docs", sub: "TDS · SDS · ESR · SPFA", href: "/docs" },
         { key: "tsb", icon: "bulletin", title: "Tech bulletins", sub: "TSBs from AMBIT", href: "/docs?type=tsb" },
         { key: "academy", icon: "academy", title: "AMBIT Academy", sub: "Courses & quizzes", href: "/academy" },

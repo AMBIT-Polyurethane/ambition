@@ -90,3 +90,14 @@ export function escapeHtml(s: string | null | undefined): string {
 export function searchSafe(q: string | undefined): string {
   return (q ?? "").replace(/[,()%*\\"':]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 }
+
+/** Jotform timestamps ("2026-10-17 14:05:09", already in the account's time zone) for display. */
+export function jfDate(s: string | null | undefined, withTime = false): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(s ?? "");
+  if (!m) return "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const day = `${months[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+  if (!withTime || !m[4]) return day;
+  const h = Number(m[4]);
+  return `${day}, ${h % 12 || 12}:${m[5]} ${h < 12 ? "AM" : "PM"}`;
+}
