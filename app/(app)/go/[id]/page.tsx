@@ -15,8 +15,15 @@ export default async function GoPage({ params }: { params: Promise<{ id: string 
 
   // Jotform fills fields whose unique name matches a URL parameter, so pass who is signed in.
   const u = new URL(data.url);
+  // Jotform "Full Name" fields take name[first] / name[last]; a plain "name" would land whole in First.
   if (/jotform/i.test(u.hostname)) {
-    if (profile.full_name && !u.searchParams.has("name")) u.searchParams.set("name", profile.full_name);
+    const full = (profile.full_name ?? "").trim();
+    if (full && !u.searchParams.has("name[first]")) {
+      const parts = full.split(/\s+/);
+      const last = parts.length > 1 ? parts.pop()! : "";
+      u.searchParams.set("name[first]", parts.join(" "));
+      if (last) u.searchParams.set("name[last]", last);
+    }
     if (!u.searchParams.has("email")) u.searchParams.set("email", profile.email);
   }
 
