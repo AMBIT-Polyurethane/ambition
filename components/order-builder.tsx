@@ -7,7 +7,9 @@ import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, type Cart } from "@/lib/cart";
 import { money } from "@/lib/format";
 import { placeOrder } from "@/app/(app)/order/actions";
-import type { Branch, Category, Company } from "@/lib/types";
+import { CustomerPicker } from "@/components/customer-picker";
+import { addressOnFile, type OrderCustomer } from "@/lib/customers";
+import type { Branch, Category } from "@/lib/types";
 
 export type CatalogProduct = {
   id: string;
@@ -25,9 +27,14 @@ type Props = {
   products: CatalogProduct[];
   categories: Category[];
   branches: Branch[];
-  companies: Pick<Company, "id" | "name" | "account_no" | "default_branch_id">[] | null;
+  companies: OrderCustomer[] | null;
   isEmployee: boolean;
-  me: { name: string; email: string; company: { name: string; account_no: string | null } | null; defaultBranch: string | null };
+  me: {
+    name: string;
+    email: string;
+    company: { name: string; account_no: string | null; ship_address?: string | null; bill_address?: string | null } | null;
+    defaultBranch: string | null;
+  };
   reorder: Cart | null;
   reorderNo: number | null;
   reorderCompany: string | null;
@@ -81,7 +88,8 @@ export function OrderBuilder(props: Props) {
   const [neededBy, setNeededBy] = useState("");
   const [notes, setNotes] = useState("");
   const [companyId, setCompanyId] = useState(props.reorderCompany ?? "");
-  const [customerName, setCustomerName] = useState("");
+  const [customerList, setCustomerList] = useState<OrderCustomer[]>(companies ?? []);
+  const [autoAddress, setAutoAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -111,12 +119,21 @@ export function OrderBuilder(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const customer = isEmployee ? customerList.find((c) => c.id === companyId) ?? null : null;
+
   // Employees: default the pickup branch to the chosen customer's branch.
   useEffect(() => {
-    if (!companies || !companyId) return;
-    const c = companies.find((x) => x.id === companyId);
-    if (c?.default_branch_id) setBranchId(c.default_branch_id);
-  }, [companyId, companies]);
+    if (customer?.default_branch_id) setBranchId(customer.default_branch_id);
+  }, [customer?.default_branch_id]);
+
+  // Ship-to starts as the address on file (the chosen customer's, or a contractor's own company's).
+  // It stays editable; once someone types their own address, switching customers no longer overwrites it.
+  const fileAddress = isEmployee ? addressOnFile(customer) : addressOnFile(me.company);
+  useEffect(() => {
+    setAddress((cur) => (cur.trim() === "" || cur === autoAddress ? fileAddress : cur));
+    setAutoAddress(fileAddress);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileAddress]);
 
   const setQty = (id: string, n: number) => {
     const next = { ...cart, [id]: Math.max(0, n) };
@@ -152,7 +169,7 @@ export function OrderBuilder(props: Props) {
         neededBy,
         notes,
         companyId: isEmployee ? companyId : "",
-        customerName,
+        customerName: "",
       });
       if (res.ok) {
         writeCart({});
@@ -191,12 +208,7 @@ export function OrderBuilder(props: Props) {
 
   // ------------------------------------------------------------------ review
   if (step === "review") {
-    const forName =
-      !isEmployee
-        ? me.company?.name ?? ""
-        : companyId === "__other"
-          ? customerName || "New customer"
-          : companies?.find((c) => c.id === companyId)?.name ?? "";
+    const forName = !isEmployee ? me.company?.name ?? "" : customer?.name ?? "";
     return (
       <main className="shell">
         <header className="topbar">
@@ -206,21 +218,16 @@ export function OrderBuilder(props: Props) {
           <h1 className="title" style={{ margin: 0 }}>Review order</h1>
         </header>
 
-        {isEmployee && companies ? (
+        {isEmployee ? (
           <section className="section">
-            <label className="field">
-              <span className="label">Ordering for</span>
-              <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-                <option value="">Choose a customer</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}{c.account_no ? ` · ${c.account_no}` : ""}</option>
-                ))}
-                <option value="__other">Customer not listed…</option>
-              </select>
-            </label>
-            {companyId === "__other" ? (
-              <input className="input" placeholder="Customer name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-            ) : null}
+            <div className="eyebrow">Ordering for</div>
+            <CustomerPicker
+              customers={customerList}
+              value={companyId}
+              onChange={setCompanyId}
+              onAdded={(c) => setCustomerList((list) => (list.some((x) => x.id === c.id) ? list : [...list, c].sort((a, b) => a.name.localeCompare(b.name))))}
+              branches={branches}
+            />
           </section>
         ) : (
           <div className="card small">
@@ -295,6 +302,18 @@ export function OrderBuilder(props: Props) {
             <label className="field">
               <span className="label">{delivery === "jobsite" ? "Job site address" : "Ship-to address"}</span>
               <textarea className="textarea" rows={3} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street, city, state, ZIP. Add a site contact if helpful." />
+              {fileAddress ? (
+                <span className="addr-hint tiny faint">
+                  {address === fileAddress ? (
+                    <>Filled in from the shipping address on file. Change it if this order goes somewhere else.</>
+                  ) : (
+                    <>
+                      Different from the address on file.
+                      <button type="button" className="linkbtn tiny" onClick={() => setAddress(fileAddress)}>Use address on file</button>
+                    </>
+                  )}
+                </span>
+              ) : null}
             </label>
           )}
         </section>

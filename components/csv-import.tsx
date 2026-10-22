@@ -29,7 +29,7 @@ const CONFIG = {
     preferredSheets: ["customers"],
     keys: CUSTOMER_KEYS,
     help:
-      "Start from the Excel template: one row per customer company with its AMBIT account number and home branch (OKC, ATX, SMX, JAX or MOB). Matching account numbers are updated.",
+      "Start from the Excel template: one row per customer company with its account number, contact, billing and shipping address and home branch (OKC, ATX, SMX, JAX or MOB). Customers are matched by QuickBooks ID, then account number, then name: matches are updated, the rest are added.",
   },
 } as const;
 

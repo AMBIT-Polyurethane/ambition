@@ -98,12 +98,16 @@ export async function saveCompany(form: FormData) {
     name: s(form, "name"),
     account_no: n(form, "account_no"),
     default_branch_id: n(form, "default_branch_id"),
+    contact_name: n(form, "contact_name"),
     phone: n(form, "phone"),
     email: n(form, "email"),
     city: n(form, "city"),
     state: n(form, "state"),
+    bill_address: n(form, "bill_address"),
+    ship_address: n(form, "ship_address"),
     notes: n(form, "notes"),
     active: id ? form.get("active") === "on" : true,
+    needs_qb_setup: form.get("needs_qb_setup") === "on",
   };
   if (!row.name) return;
   if (id) await supabase.from("companies").update(row).eq("id", id);
@@ -119,32 +123,59 @@ export async function importCompanies(rows: Record<string, string>[]): Promise<I
     if (!t) return null;
     return (branches ?? []).find((b) => b.id === t || b.name.toLowerCase() === t || t.startsWith(b.name.toLowerCase()))?.id ?? null;
   };
-  const { data: existing } = await supabase.from("companies").select("id, name, account_no");
+  const { data: existing } = await supabase.from("companies").select("id, name, account_no, qb_id");
+  const byQb = new Map((existing ?? []).filter((c) => c.qb_id).map((c) => [String(c.qb_id), c.id]));
   const byAcct = new Map((existing ?? []).filter((c) => c.account_no).map((c) => [String(c.account_no).toLowerCase(), c.id]));
   const byName = new Map((existing ?? []).map((c) => [c.name.toLowerCase(), c.id]));
+  const t = (v: string | undefined) => (v ?? "").trim() || null;
 
   let added = 0;
   let updated = 0;
   let skipped = 0;
+  const toInsert: Record<string, string | null>[] = [];
   for (const r of rows) {
-    const name = (r.name || r.company || r.customer || "").trim();
+    const name = (r.name || r.company || r.customer || "").trim().replace(/\s+/g, " ");
     if (!name) { skipped++; continue; }
     if (name.toLowerCase().startsWith("example")) continue; // the template's example row
-    const acct = (r.account_no || r.account || r["account_#"] || "").trim() || null;
-    const row = {
+    const acct = t(r.account_no || r.account || r["account_#"]);
+    const qb = t(r.quickbooks_id || r.qb_id);
+    const row: Record<string, string | null> = {
       name,
       account_no: acct,
       default_branch_id: branchFor(r.branch || r.default_branch || ""),
-      phone: (r.phone || "").trim() || null,
-      email: (r.email || "").trim() || null,
-      city: (r.city || "").trim() || null,
-      state: (r.state || "").trim() || null,
+      contact_name: t(r.contact_name || r.contact),
+      phone: t(r.phone),
+      email: t(r.email),
+      city: t(r.city),
+      state: t(r.state),
+      bill_address: t(r.bill_address || r.billing_address || r.bill_to),
+      ship_address: t(r.ship_address || r.shipping_address || r.ship_to),
     };
-    const id = (acct && byAcct.get(acct.toLowerCase())) || byName.get(name.toLowerCase());
-    const { error } = id ? await supabase.from("companies").update(row).eq("id", id) : await supabase.from("companies").insert(row);
-    if (error) skipped++;
-    else if (id) updated++;
-    else added++;
+    if (qb) { row.qb_id = qb; row.source = "quickbooks"; }
+    if (!row.default_branch_id) delete row.default_branch_id; // keep a branch someone already chose
+    const id = (qb && byQb.get(qb)) || (acct && byAcct.get(acct.toLowerCase())) || byName.get(name.toLowerCase());
+    if (id === "new") { skipped++; continue; } // listed twice in the file
+    if (id) {
+      const { error } = await supabase.from("companies").update(row).eq("id", id);
+      if (error) skipped++;
+      else updated++;
+    } else {
+      toInsert.push({ ...row, source: row.source ?? "admin", default_branch_id: row.default_branch_id ?? null });
+      if (qb) byQb.set(qb, "new");
+      if (acct) byAcct.set(acct.toLowerCase(), "new");
+      byName.set(name.toLowerCase(), "new");
+    }
+  }
+  // New customers go in batches so a long QuickBooks list doesn't time out.
+  for (let i = 0; i < toInsert.length; i += 200) {
+    const chunk = toInsert.slice(i, i + 200);
+    const { error } = await supabase.from("companies").insert(chunk, { defaultToNull: false });
+    if (!error) { added += chunk.length; continue; }
+    for (const one of chunk) {
+      const { error: e1 } = await supabase.from("companies").insert(one);
+      if (e1) skipped++;
+      else added++;
+    }
   }
   revalidatePath("/admin/companies");
   return { ok: true, message: `${added} added, ${updated} updated${skipped ? `, ${skipped} skipped` : ""}.` };

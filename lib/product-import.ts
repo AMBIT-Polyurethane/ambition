@@ -150,6 +150,8 @@ export const PRODUCT_KEYS = [
 ];
 export const CUSTOMER_KEYS = [
   "name", "company", "customer", "account_no", "account", "account_#", "branch", "default_branch", "phone", "email", "city", "state",
+  "contact", "contact_name", "billing_address", "bill_address", "bill_to", "shipping_address", "ship_address", "ship_to",
+  "quickbooks_id", "qb_id", "notes",
 ];
 
 export function pick(rows: Record<string, string>[], keys: string[]): Record<string, string>[] {

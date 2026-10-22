@@ -14,6 +14,13 @@ export type Company = {
   state?: string | null;
   notes?: string | null;
   active?: boolean;
+  contact_name?: string | null;
+  bill_address?: string | null;
+  ship_address?: string | null;
+  qb_id?: string | null;
+  source?: "admin" | "quickbooks" | "app";
+  needs_qb_setup?: boolean;
+  created_by?: string | null;
 };
 
 export type Profile = {

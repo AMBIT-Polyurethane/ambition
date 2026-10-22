@@ -7,6 +7,8 @@ export const MICROSOFT_SIGNIN = process.env.NEXT_PUBLIC_MICROSOFT_SIGNIN === "tr
 
 export const ORDERS_EMAIL = process.env.ORDERS_EMAIL || "orders@ambitpu.com";
 export const ADMIN_NOTIFY_EMAIL = process.env.ADMIN_NOTIFY_EMAIL || "";
+// Who sets up new customers in QuickBooks. Falls back to the admin notice address, then orders@.
+export const ACCOUNTING_EMAIL = process.env.ACCOUNTING_EMAIL || ADMIN_NOTIFY_EMAIL || ORDERS_EMAIL;
 
 export function siteUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL;

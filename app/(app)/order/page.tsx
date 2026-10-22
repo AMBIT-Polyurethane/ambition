@@ -1,5 +1,6 @@
 import { requireActive, isEmployee } from "@/lib/session";
 import { OrderBuilder, type CatalogProduct } from "@/components/order-builder";
+import type { OrderCustomer } from "@/lib/customers";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
 export const metadata = { title: "Order" };
@@ -9,12 +10,14 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
   const { supabase, profile } = await requireActive();
   const emp = isEmployee(profile);
 
-  const [{ data: products }, { data: categories }, { data: branches }, companiesRes, reorderRes] = await Promise.all([
+  const [{ data: products }, { data: categories }, { data: branches }, companiesRes, myCompanyRes, reorderRes] = await Promise.all([
     supabase.from("products").select("*").eq("active", true).order("sort").order("name"),
     supabase.from("categories").select("*").order("sort"),
     supabase.from("branches").select("*").eq("active", true).order("sort"),
-    emp
-      ? supabase.from("companies").select("id, name, account_no, default_branch_id").eq("active", true).order("name")
+    // Staff pick from every customer. Contractors never receive the list (the database won't send it either).
+    emp ? supabase.from("companies").select("*").eq("active", true).order("name") : Promise.resolve({ data: null }),
+    !emp && profile.company_id
+      ? supabase.from("companies").select("*").eq("id", profile.company_id).maybeSingle()
       : Promise.resolve({ data: null }),
     sp.reorder
       ? supabase.from("orders").select("order_no, company_id, order_items(product_id, qty)").eq("id", sp.reorder).maybeSingle()
@@ -45,12 +48,19 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       products={catalog}
       categories={cats.filter((c) => catalog.some((p) => p.category_id === c.id))}
       branches={(branches ?? []) as Branch[]}
-      companies={(companiesRes.data ?? null) as Company[] | null}
+      companies={emp ? ((companiesRes.data ?? []) as Company[]).map(toOrderCustomer) : null}
       isEmployee={emp}
       me={{
         name: profile.full_name ?? profile.email,
         email: profile.email,
-        company: profile.company ? { name: profile.company.name, account_no: profile.company.account_no } : null,
+        company: profile.company
+          ? {
+              name: profile.company.name,
+              account_no: profile.company.account_no,
+              ship_address: (myCompanyRes.data as Company | null)?.ship_address ?? null,
+              bill_address: (myCompanyRes.data as Company | null)?.bill_address ?? null,
+            }
+          : null,
         defaultBranch: profile.company?.default_branch_id ?? profile.branch_id ?? null,
       }}
       reorder={reorder}
@@ -58,4 +68,21 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       reorderCompany={reorderData?.company_id ?? null}
     />
   );
+}
+
+function toOrderCustomer(c: Company): OrderCustomer {
+  return {
+    id: c.id,
+    name: c.name,
+    account_no: c.account_no,
+    default_branch_id: c.default_branch_id,
+    contact_name: c.contact_name ?? null,
+    phone: c.phone ?? null,
+    email: c.email ?? null,
+    city: c.city ?? null,
+    state: c.state ?? null,
+    bill_address: c.bill_address ?? null,
+    ship_address: c.ship_address ?? null,
+    needs_qb_setup: c.needs_qb_setup ?? false,
+  };
 }
