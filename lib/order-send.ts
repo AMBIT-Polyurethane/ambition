@@ -2,11 +2,11 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canEmailCustomers, sendEmail, type SendResult } from "@/lib/email";
-import { buildApprovalRequestEmail, buildChangeRequestEmail, buildOrderEmail } from "@/lib/order-email";
+import { buildApprovalRequestEmail, buildChangeRequestEmail, buildDeskEmail, buildOrderEmail, buildScheduledEmail, type DeskNotice } from "@/lib/order-email";
 import { loadOrderDoc } from "@/lib/order-doc/load";
 import { pdfFileName, renderOrderPdf } from "@/lib/order-doc/pdf";
 import type { OrderDoc } from "@/lib/order-doc/types";
-import { ORDERS_EMAIL } from "@/lib/env";
+import { ACCOUNTING_EMAIL, ORDERS_EMAIL } from "@/lib/env";
 import { currentOrigin } from "@/lib/origin";
 
 /**
@@ -96,4 +96,45 @@ export async function sendChangeRequestNotice(doc: OrderDoc): Promise<SendResult
     replyTo: doc.order.approval_email ?? undefined,
     ...mail,
   });
+}
+
+/** Emails of AMBIT staff (not admins) whose boxes include this permission. */
+async function staffWith(supabase: SupabaseClient, perm: string): Promise<string[]> {
+  const { data } = await supabase.from("profiles").select("email").eq("role", "employee").eq("status", "active").contains("perms", [perm]);
+  return ((data ?? []) as { email: string }[]).map((r) => r.email).filter(Boolean);
+}
+
+/** Order desk heads-ups: credit check needed (accounting), on hold (rep + order desk), ready to schedule (order desk). */
+export async function sendDeskNotice(supabase: SupabaseClient, orderId: string, kind: DeskNotice): Promise<SendResult> {
+  const doc = await loadOrderDoc(supabase, orderId);
+  if (!doc) return { status: "failed", error: "Order not found" };
+  const o = doc.order;
+  let to: string[] = [];
+  if (kind === "credit_needed") to = await staffWith(supabase, "credit_check");
+  else to = await staffWith(supabase, "order_desk");
+  if (kind === "credit_hold" && o.placed_by_role !== "customer" && o.placed_by_email) to.push(o.placed_by_email);
+  if (to.length === 0) to = [kind === "credit_needed" ? ACCOUNTING_EMAIL : ORDERS_EMAIL];
+  const origin = await currentOrigin();
+  return sendEmail({ to, ...buildDeskEmail(kind, doc, `${origin}/orders/${orderId}`) });
+}
+
+/** To the customer: approved and scheduled (PDF attached). The rep gets a copy. */
+export async function sendScheduledNotice(supabase: SupabaseClient, orderId: string): Promise<SendResult> {
+  const doc = await loadOrderDoc(supabase, orderId);
+  if (!doc) return { status: "failed", error: "Order not found" };
+  const o = doc.order;
+  const customer = o.placed_by_role === "customer" ? o.placed_by_email : o.approval_email ?? doc.company?.email ?? null;
+  if (!customer) {
+    await supabase.rpc("order_mark_notified", { p_order: orderId, p_status: "failed", p_error: "No customer email on file" });
+    return { status: "failed", error: "No customer email on file" };
+  }
+  const result = await sendEmail({
+    to: [customer],
+    cc: o.placed_by_role !== "customer" && o.placed_by_email ? [o.placed_by_email] : [],
+    replyTo: o.placed_by_role !== "customer" ? o.placed_by_email ?? ORDERS_EMAIL : ORDERS_EMAIL,
+    attachments: await pdfAttachment(doc),
+    ...buildScheduledEmail(doc),
+  });
+  await supabase.rpc("order_mark_notified", { p_order: orderId, p_status: result.status, p_error: result.error ?? null });
+  return result;
 }

@@ -3,6 +3,7 @@ import { ExternalLink } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import type { LinkRow } from "@/lib/types";
+import { can, type Perm } from "@/lib/access";
 
 export const metadata = { title: "Form" };
 
@@ -12,6 +13,7 @@ export default async function GoPage({ params }: { params: Promise<{ id: string 
   const { supabase, profile } = await requireActive();
   const { data } = await supabase.from("links").select("*").eq("id", id).maybeSingle<LinkRow>();
   if (!data?.url || !/^https?:\/\//.test(data.url)) notFound();
+  if (profile.role !== "customer" && data.perm && !can(profile, data.perm as Perm)) notFound();
 
   // Jotform fills fields whose unique name matches a URL parameter, so pass who is signed in.
   const u = new URL(data.url);

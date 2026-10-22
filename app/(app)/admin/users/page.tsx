@@ -4,6 +4,8 @@ import { dateShort, searchSafe } from "@/lib/format";
 import { Empty, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { saveUser } from "@/app/(app)/admin/actions";
+import { AccessPicker } from "@/components/access-picker";
+import { needsRole, roleLabel } from "@/lib/access";
 import type { Branch, Company, Profile } from "@/lib/types";
 
 export const metadata = { title: "Accounts" };
@@ -12,6 +14,7 @@ const TABS = [
   ["pending", "Waiting"],
   ["customer", "Contractors"],
   ["employee", "AMBIT staff"],
+  ["norole", "Needs a role"],
   ["disabled", "Turned off"],
 ] as const;
 
@@ -25,6 +28,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   if (tab === "pending") query = query.eq("status", "pending");
   else if (tab === "disabled") query = query.eq("status", "disabled");
   else if (tab === "customer") query = query.eq("status", "active").eq("role", "customer");
+  else if (tab === "norole") query = query.eq("status", "active").eq("role", "employee").is("job_role", null);
   else query = query.eq("status", "active").in("role", ["employee", "admin"]);
   if (q) query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%,requested_company.ilike.%${q}%`);
 
@@ -87,16 +91,19 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   </div>
                   <span className="tiny faint">Joined {dateShort(u.created_at)}</span>
                 </div>
+                {u.role !== "customer" && u.status === "active" ? (
+                  <div className="small">
+                    {roleLabel(u.job_role) ? <span className="pill grey">{roleLabel(u.job_role)}</span> : needsRole(u) ? <span className="pill warn">Needs a role</span> : null}
+                  </div>
+                ) : null}
+                <AccessPicker
+                  role={roleDefault}
+                  jobRole={u.job_role ?? null}
+                  perms={u.perms ?? []}
+                  ambit={ambit}
+                  isMe={isMe}
+                />
                 <div className="grid3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-                  <label className="field">
-                    <span className="label">Role</span>
-                    <select className="select sm" name="role" defaultValue={roleDefault} disabled={isMe}>
-                      <option value="customer">Contractor</option>
-                      <option value="employee" disabled={!ambit}>AMBIT employee{ambit ? "" : " (needs @ambitpu.com)"}</option>
-                      <option value="admin" disabled={!ambit}>Admin{ambit ? "" : " (needs @ambitpu.com)"}</option>
-                    </select>
-                    {isMe ? <input type="hidden" name="role" value={u.role} /> : null}
-                  </label>
                   <label className="field">
                     <span className="label">Access</span>
                     <select className="select sm" name="status" defaultValue={u.status === "pending" ? "active" : u.status} disabled={isMe}>

@@ -36,6 +36,9 @@ const s = StyleSheet.create({
   stamp: { borderWidth: 1.2, borderRadius: 3, paddingVertical: 2.5, paddingHorizontal: 7, fontFamily: "Helvetica-Bold", fontSize: 7, letterSpacing: 0.7 },
   from: { flexDirection: "row", justifyContent: "space-between", marginTop: 11, paddingBottom: 5, borderBottomWidth: 2, borderBottomColor: INK, fontSize: 7.4, lineHeight: 1.35, color: GRAY },
   b: { fontFamily: "Helvetica-Bold", color: INK },
+  notInvoice: { flexDirection: "row", alignItems: "center", marginTop: 9, borderWidth: 1.2, borderColor: RED, borderRadius: 3, paddingVertical: 5, paddingHorizontal: 9 },
+  notInvoiceT: { fontFamily: "Helvetica-Bold", fontSize: 10.5, letterSpacing: 1.1, color: RED },
+  notInvoiceS: { flex: 1, marginLeft: 12, fontSize: 7.4, lineHeight: 1.35, color: GRAY },
   parties: { flexDirection: "row", marginTop: 11, fontSize: 8.6, lineHeight: 1.35 },
   lbl: { fontFamily: "Helvetica-Bold", fontSize: 6.6, letterSpacing: 1, color: GRAY, paddingBottom: 2.5, marginBottom: 3.5, borderBottomWidth: 0.7, borderBottomColor: RULE },
   name: { fontFamily: "Helvetica-Bold", fontSize: 9.6 },
@@ -108,22 +111,28 @@ function Rec({ rows }: { rows: [string, string][] }) {
   );
 }
 
-function OfficeBox({ pickup }: { pickup: boolean }) {
-  const Line = ({ label }: { label: string }) => (
+function OfficeBox({ pickup, order: o }: { pickup: boolean; order: OrderDoc["order"] }) {
+  // Lines the app already knows (PO #, credit release, scheduled date) come filled in; the rest are for pen.
+  const Line = ({ label, value }: { label: string; value?: string | null }) => (
     <View style={s.line}>
       <Text style={s.lineL}>{label}</Text>
-      <View style={s.lineRule} />
+      <View style={s.lineRule}>
+        {value ? <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 7.6, lineHeight: 1, marginTop: -1.5, marginLeft: 2 }}>{value}</Text> : null}
+      </View>
     </View>
   );
-  const Two = ({ a, b }: { a: string; b: string }) => (
+  const Two = ({ a, b, av, bv }: { a: string; b: string; av?: string | null; bv?: string | null }) => (
     <View style={{ flexDirection: "row" }}>
-      <View style={{ flex: 1.4, marginRight: 10 }}><Line label={a} /></View>
-      <View style={{ flex: 1 }}><Line label={b} /></View>
+      <View style={{ flex: 1.4, marginRight: 10 }}><Line label={a} value={av} /></View>
+      <View style={{ flex: 1 }}><Line label={b} value={bv} /></View>
     </View>
   );
+  const credit = o.credit_status === "approved" ? `Yes${o.credit_at ? `, ${dateShort(o.credit_at).replace(/, \d{4}$/, "")}` : ""}` : o.credit_status === "hold" ? "ON HOLD" : null;
   return (
     <View style={[s.box, { flex: 1, marginLeft: 14 }]}>
       <View style={s.h3}><Text style={s.h3t}>FOR AMBIT USE</Text></View>
+      <Two a="AMBIT PO #" b="Credit OK" av={o.ambit_po} bv={credit} />
+      <Two a={pickup ? "Pickup date" : "Delivery date"} b="By" av={o.scheduled_for ? dateShort(o.scheduled_for) : null} bv={o.scheduled_by_name} />
       <Two a="Picked by" b="Date" />
       <Two a="Checked by" b="Date" />
       <Line label="Lot numbers" />
@@ -318,6 +327,13 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
           ) : null}
         </View>
 
+        <View style={s.notInvoice}>
+          <Text style={s.notInvoiceT}>THIS IS NOT AN INVOICE</Text>
+          <Text style={s.notInvoiceS}>
+            This is an order form only. AMBIT&apos;s accounting staff will send the invoice after the order is approved.
+          </Text>
+        </View>
+
         <View style={s.parties}>
           <View style={{ flex: 1.15, marginRight: 16 }}>
             <Label>Customer</Label>
@@ -412,7 +428,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
 
         <View style={s.boxes} wrap={false}>
           <ApprovalBox doc={doc} approveUrl={approveUrl} qr={qr} />
-          {waiting ? null : <OfficeBox pickup={pickup} />}
+          {waiting ? null : <OfficeBox pickup={pickup} order={o} />}
         </View>
 
         <View style={s.foot} fixed>

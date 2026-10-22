@@ -88,6 +88,24 @@ record an approval taken by phone. Needs `supabase/migrations/0010_order_approva
 Approval turns on by itself once email can reach customers: Resend with a verified domain and `EMAIL_FROM`
 set, or Microsoft 365 sending. Set `CUSTOMER_APPROVAL=off` to turn it off, or `on` to force it.
 
+### Staff roles
+
+Admin → Accounts → AMBIT staff: pick a job role (Admin, CRM, Sales rep, Tech, Warehouse manager, Accounting)
+and the boxes for what that person sees. Picking a role ticks its boxes; change any box after. Home-screen
+form links can be limited to a box in Admin → Links. Needs `supabase/migrations/0011_roles_and_order_desk.sql`.
+
+### Order desk
+
+Orders move: customer approval → CRM enters the AMBIT PO # → Accounting releases it (or puts it on credit
+hold) → CRM sets the delivery or pickup date and the customer is emailed → marked delivered / picked up.
+Each step shows on the order page for whoever's job it is, and in Order desk (home screen) with counts.
+
+### Price request approvals
+
+Admins: Home → Price approvals. Waiting requests first; each opens as a clean form with requested vs approved
+prices. Saving writes the approved prices into the Jotform submission and emails the rep, so
+`JOTFORM_API_KEY` must be a **Full Access** key (Jotform → Settings → API).
+
 ### Appearance
 
 Everyone can pick Dark, Light or Auto (follows the device) in Profile → Appearance. It's remembered per device.

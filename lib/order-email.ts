@@ -148,6 +148,7 @@ export function buildApprovalRequestEmail(doc: OrderDoc, approveUrl: string) {
 <p style="margin:0 0 22px;">${button(approveUrl, "REVIEW AND APPROVE")}</p>
 ${detailTable(rows)}
 ${itemsTable(doc, false)}
+<p style="font-size:13px;margin:16px 0 0;line-height:1.5;"><b style="color:#E33527;letter-spacing:1px;">THIS IS NOT AN INVOICE.</b> <span style="color:#52525b;">This is an order form only. AMBIT's accounting staff will send the invoice after the order is approved.</span></p>
 <p style="font-size:13px;color:#52525b;margin:16px 0 0;line-height:1.5;">Something not right? Open the link and tap <b>Request changes</b>, or contact ${h(rep)}${contact ? ` at ${h(contact)}` : ""}. The link works until ${h(until)}. The order is attached as a PDF if you'd like to print it.</p>`;
 
   const text = [
@@ -163,6 +164,7 @@ ${itemsTable(doc, false)}
     "Items:",
     ...doc.items.map((i) => `- ${i.name}  x ${qtyText(Number(i.qty), i.unit)}${i.line_total !== null ? `  ${money(i.line_total)}` : i.customer_priced ? "  Account pricing" : ""}`),
     "",
+    "THIS IS NOT AN INVOICE. This is an order form only. AMBIT's accounting staff will send the invoice after the order is approved.",
     `Something not right? Open the link and tap Request changes, or contact ${rep}${contact ? ` at ${contact}` : ""}. The link works until ${until}.`,
   ].join("\n");
 
@@ -183,4 +185,74 @@ export function buildChangeRequestEmail(doc: OrderDoc, link: string) {
 <p style="margin:0;">${button(link, "OPEN THE ORDER")}</p>`;
   const text = [`CHANGES REQUESTED ${no} · ${o.company_name}`, "", o.approval_note ?? "", "", link].join("\n");
   return { subject, html: wrapEmail("Changes requested", inner), text };
+}
+
+export type DeskNotice = "credit_needed" | "credit_hold" | "ready_to_schedule";
+
+/** Order desk heads-ups for AMBIT staff: the order is now in their queue. */
+export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string) {
+  const o = doc.order;
+  const no = orderNo(o.order_no);
+  const who = o.account_no ? `${o.company_name} (${o.account_no})` : o.company_name;
+  const head = {
+    credit_needed: { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered AMBIT PO # ${o.ambit_po ?? ""}. Check for credit holds, then release the order or put it on hold.` },
+    credit_hold: { eyebrow: "ON CREDIT HOLD", subject: `On credit hold · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} put this order on hold: ${o.credit_note ?? ""}` },
+    ready_to_schedule: { eyebrow: "READY TO SCHEDULE", subject: `Ready to schedule · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} released this order. Set the ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date and the customer is emailed.` },
+  }[kind];
+  const rows: [string, string][] = [
+    ["Order", no],
+    ["Customer", who],
+    ["AMBIT PO #", o.ambit_po ?? "-"],
+    ["Customer PO", o.po_number ?? "-"],
+    ["Delivery", whereText(doc)],
+    ["Needed by", o.needed_by ? dateShort(o.needed_by) : "-"],
+    ["Subtotal", `${money(o.est_subtotal)}${o.has_customer_pricing ? " + account-priced items" : ""}`],
+  ];
+  const inner = `
+<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">${head.eyebrow}</div>
+<div style="font-size:26px;font-weight:800;margin:4px 0 12px;">${h(no)} · ${h(o.company_name)}</div>
+<p style="font-size:15px;margin:0 0 16px;line-height:1.5;">${h(head.line)}</p>
+${detailTable(rows)}
+<p style="margin:20px 0 0;">${button(link, "OPEN THE ORDER")}</p>`;
+  const text = [head.eyebrow + " " + no, head.line, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", link].join("\n");
+  return { subject: head.subject, html: wrapEmail("Order desk", inner), text };
+}
+
+/** To the customer: approved and scheduled, with the date. */
+export function buildScheduledEmail(doc: OrderDoc) {
+  const o = doc.order;
+  const no = orderNo(o.order_no);
+  const pickup = o.delivery_method === "pickup";
+  const when = o.scheduled_for ? new Date(o.scheduled_for + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "";
+  const branch = doc.branch ? `AMBIT ${doc.branch.name} branch${doc.branch.address ? `, ${doc.branch.address}` : ""}` : "your AMBIT branch";
+  const headline = pickup ? `Ready for pickup ${when}` : `Scheduled for delivery ${when}`;
+  const subject = `Your AMBIT order ${no} is approved and scheduled · ${o.scheduled_for ? dateShort(o.scheduled_for) : ""}`;
+  const hello = doc.company?.contact_name ? `Hi ${firstName(doc.company.contact_name)},` : "Hello,";
+  const rep = o.placed_by_role !== "customer" ? o.placed_by_name : null;
+  const rows: [string, string][] = [
+    ["Order", no],
+    [pickup ? "Pickup" : "Delivery", pickup ? `${when}\n${branch}` : `${when}\n${o.ship_address ?? ""}`],
+    ["Your PO", o.po_number ?? "-"],
+  ];
+  if (o.schedule_note) rows.push(["Note from AMBIT", o.schedule_note]);
+  const inner = `
+<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#15803d;">APPROVED AND SCHEDULED</div>
+<div style="font-size:24px;font-weight:800;margin:4px 0 14px;">${h(headline)}</div>
+<p style="font-size:15px;margin:0 0 10px;">${h(hello)}</p>
+<p style="font-size:15px;margin:0 0 16px;line-height:1.5;">Your order ${h(no)} for ${h(o.company_name)} is approved and scheduled. Details are below and the order is attached as a PDF.</p>
+${detailTable(rows)}
+${itemsTable(doc, false)}
+<p style="font-size:13px;margin:16px 0 0;line-height:1.5;"><b style="color:#E33527;letter-spacing:1px;">THIS IS NOT AN INVOICE.</b> <span style="color:#52525b;">AMBIT's accounting staff will send the invoice.</span></p>
+<p style="font-size:13px;color:#52525b;margin:10px 0 0;line-height:1.5;">Questions or a change of plans? Reply to this email${rep ? ` or contact ${h(rep)}` : ""}, or call AMBIT at (817) 677-1200.</p>`;
+  const text = [
+    `APPROVED AND SCHEDULED: ${headline}`,
+    "",
+    hello,
+    `Your order ${no} for ${o.company_name} is approved and scheduled.`,
+    "",
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    "",
+    "THIS IS NOT AN INVOICE. AMBIT's accounting staff will send the invoice.",
+  ].join("\n");
+  return { subject, html: wrapEmail("Order scheduled", inner), text };
 }

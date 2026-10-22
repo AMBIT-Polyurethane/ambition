@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/ui";
 import type { LinkRow, Order, OrderItem } from "@/lib/types";
 import { BrandImg } from "@/components/brand";
 import { approvalsEnabled } from "@/lib/order-send";
+import { can, roleLabel, seesOrders, type Perm } from "@/lib/access";
 
 type Tile = { key: string; icon: string; title: string; sub: string; href: string | null; external?: boolean };
 
@@ -16,6 +17,18 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const { supabase, profile } = await requireActive();
   const emp = isEmployee(profile);
   const audiences = emp ? ["all", "employee"] : ["all", "customer"];
+
+  const desk = emp && can(profile, "order_desk");
+  const credit = emp && can(profile, "credit_check");
+  const count = (q: PromiseLike<{ count: number | null }>) => Promise.resolve(q).then((r) => r.count ?? 0, () => 0);
+  const [noRole, needPo, toSchedule, needCredit] = await Promise.all([
+    profile.role === "admin"
+      ? count(supabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "active").eq("role", "employee").is("job_role", null))
+      : 0,
+    desk ? count(supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", "needs_po")) : 0,
+    desk ? count(supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", "schedule")) : 0,
+    credit ? count(supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", "credit")) : 0,
+  ]);
 
   const [{ data: linkRows }, lastOrderRes, pendingRes, newOrdersRes] = await Promise.all([
     supabase.from("links").select("*").eq("active", true).in("audience", audiences).order("sort").order("title"),
@@ -31,7 +44,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   ]);
 
   const links = (linkRows ?? []) as LinkRow[];
-  const forms = links.filter((l) => l.section === "forms");
+  // Staff only see the forms their job uses (Admin > Accounts); contractors see what's marked for them.
+  const forms = links.filter((l) => l.section === "forms" && (!emp || !l.perm || can(profile, l.perm as Perm)));
   const extraTiles: Tile[] = links
     .filter((l) => l.section === "resources")
     .map((l) => {
@@ -39,11 +53,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       return { key: l.id, icon: l.icon, title: l.title, sub: l.subtitle ?? "", href: h?.href ?? null, external: h?.external };
     });
 
+  const staffTiles: (Tile | false)[] = [
+    (desk || credit) && { key: "desk", icon: "clipboard", title: "Order desk", sub: "POs, credit checks, scheduling", href: "/orders/desk" },
+    can(profile, "prf_approve") && { key: "prfok", icon: "tag", title: "Price approvals", sub: "Approve price requests", href: "/price-requests/approvals" },
+    { key: "dir", icon: "users", title: "Company directory", sub: "Find anyone at AMBIT", href: "/directory" },
+    seesOrders(profile) && { key: "orders", icon: "cart", title: "Orders", sub: "Everything sent through AMBITION", href: "/orders" },
+    can(profile, "price_requests") && { key: "prf", icon: "tag", title: "My price requests", sub: "View, edit & resubmit", href: "/price-requests" },
+    can(profile, "inventory") && { key: "inv", icon: "box", title: "Inventory", sub: "Counts and stock updates", href: null },
+  ];
   const builtIn: Tile[] = emp
     ? [
-        { key: "dir", icon: "users", title: "Company directory", sub: "Find anyone at AMBIT", href: "/directory" },
-        { key: "orders", icon: "cart", title: "Orders", sub: "Everything sent through AMBITION", href: "/orders" },
-        { key: "prf", icon: "tag", title: "My price requests", sub: "View, edit & resubmit", href: "/price-requests" },
+        ...(staffTiles.filter(Boolean) as Tile[]),
         { key: "docs", icon: "docs", title: "Product docs", sub: "TDS · SDS · ESR · SPFA", href: "/docs" },
         { key: "tsb", icon: "bulletin", title: "Tech bulletins", sub: "TSBs from AMBIT", href: "/docs?type=tsb" },
         { key: "academy", icon: "academy", title: "AMBIT Academy", sub: "Courses & quizzes", href: "/academy" },
@@ -67,7 +87,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <header className="row between" style={{ paddingTop: 8 }}>
         <span><BrandImg art="logo" alt="AMBIT Polyurethane" style={{ height: 28, width: "auto" }} /></span>
         <div className="row" style={{ gap: 10 }}>
-          {emp ? (
+          {emp && seesOrders(profile) ? (
             <Link href="/orders?status=new" className="iconbtn" aria-label={`${newOrders} new orders`} style={{ position: "relative" }}>
               <Bell size={20} />
               {newOrders > 0 ? (
@@ -84,7 +104,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {sp.password === "updated" ? <div className="alert ok">Your password was updated.</div> : null}
 
       <div className="col tight">
-        <span className="pill" style={{ alignSelf: "flex-start" }}>{emp ? (profile.role === "admin" ? "AMBIT team · Admin" : "AMBIT team") : "Contractor"}</span>
+        <span className="pill" style={{ alignSelf: "flex-start" }}>
+          {emp ? (profile.role === "admin" ? "AMBIT team · Admin" : `AMBIT team${roleLabel(profile.job_role) ? ` · ${roleLabel(profile.job_role)}` : ""}`) : "Contractor"}
+        </span>
         <div className="muted small" style={{ marginTop: 4 }}>{greeting()},</div>
         <div className="h1">{firstName(profile.full_name, profile.email)}</div>
         {!emp && profile.company ? <div className="muted small">{profile.company.name}{profile.company.account_no ? ` · ${profile.company.account_no}` : ""}</div> : null}
@@ -98,6 +120,31 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Link>
       ) : null}
 
+      {noRole > 0 ? (
+        <Link href="/admin/users?tab=norole" className="alert warn" style={{ alignItems: "center" }}>
+          <UserCheck size={18} />
+          <span className="grow"><b>{noRole}</b> staff {noRole === 1 ? "account needs" : "accounts need"} a job role</span>
+          <ChevronRight size={18} />
+        </Link>
+      ) : null}
+
+      {needPo + toSchedule + needCredit > 0 ? (
+        <Link href="/orders/desk" className="card row" style={{ gap: 12, color: "var(--text)" }}>
+          <div className="grow col tight">
+            <span className="eyebrow">Order desk</span>
+            <span className="small">
+              {[
+                needPo ? `${needPo} need${needPo === 1 ? "s" : ""} a PO #` : "",
+                needCredit ? `${needCredit} waiting on a credit check` : "",
+                toSchedule ? `${toSchedule} to schedule` : "",
+              ].filter(Boolean).join(" · ")}
+            </span>
+          </div>
+          <ChevronRight size={18} className="faint" />
+        </Link>
+      ) : null}
+
+      {!emp || can(profile, "ordering") ? (
       <Link href="/order" className="hero">
         <div className="ring" aria-hidden="true" />
         <div className="col tight grow" style={{ position: "relative" }}>
@@ -111,6 +158,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </div>
         <span className="go"><ArrowRight size={22} /></span>
       </Link>
+      ) : null}
 
       {lastOrder ? (
         <section className="section">

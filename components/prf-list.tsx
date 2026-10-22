@@ -78,7 +78,13 @@ export function PrfList({ items, mineIds, admin, owners }: { items: PrfItem[]; m
                     .join(" · ")}
                 </div>
               </div>
-              {i.updated_at ? <span className="pill grey">Edited</span> : null}
+              {i.status === "approved" ? (
+                <span className="pill ok">Approved</span>
+              ) : i.status === "pending" ? (
+                <span className="pill warn">Waiting</span>
+              ) : i.updated_at ? (
+                <span className="pill grey">Edited</span>
+              ) : null}
               <ChevronRight size={18} className="chev" />
             </Link>
           ))}

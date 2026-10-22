@@ -109,6 +109,11 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
         </p>
       </section>
 
+      <div className="card small" style={{ borderColor: "var(--red)" }}>
+        <b style={{ color: "var(--red-text)", letterSpacing: "0.08em" }}>THIS IS NOT AN INVOICE</b>
+        <div className="muted" style={{ marginTop: 4 }}>This is an order form only. AMBIT&apos;s accounting staff will send the invoice after the order is approved.</div>
+      </div>
+
       <a href={`/approve/${token}/pdf`} target="_blank" rel="noopener" className="btn dark block"><FileDown size={16} /> Download the order (PDF)</a>
 
       {doc.state === "pending" ? <ApproveForm token={token} defaultName={doc.company?.contact_name ?? ""} rep={rep} /> : null}

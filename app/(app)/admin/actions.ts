@@ -9,6 +9,7 @@ import { escapeHtml as h, firstName } from "@/lib/format";
 import type { DocumentRow, Profile } from "@/lib/types";
 import { DOC_TYPES, fileKind, parseProducts, storageKeyFor } from "@/lib/docs";
 import { CUSTOMER_PRICED_CATEGORIES, normalizeProductRows } from "@/lib/product-import";
+import { PERM_KEYS } from "@/lib/access";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const n = (f: FormData, k: string) => (s(f, k) === "" ? null : s(f, k));
@@ -65,6 +66,16 @@ export async function saveUser(form: FormData) {
     p_branch: branchId,
   });
   if (error) redirect(back("error=" + encodeURIComponent(error.message)));
+
+  // Staff: job role and what they see. (Skipped quietly if the roles update hasn't been run yet.)
+  if (staff) {
+    const jobRole = role === "admin" ? "admin" : n(form, "job_role");
+    const perms = role === "admin" ? PERM_KEYS : form.getAll("perms").map(String).filter((k) => (PERM_KEYS as string[]).includes(k));
+    const { error: accessError } = await supabase.rpc("admin_set_access", { p_user: userId, p_job_role: jobRole, p_perms: perms });
+    if (accessError && !/admin_set_access|could not find the function|schema cache/i.test(accessError.message)) {
+      redirect(back("error=" + encodeURIComponent(accessError.message)));
+    }
+  }
 
   if (before.status !== "active" && status === "active") {
     const origin = await currentOrigin();
@@ -306,10 +317,17 @@ export async function saveLink(form: FormData) {
     open_in_app: form.get("open_in_app") === "on",
     sort: num(form.get("sort")) ?? 0,
     active: id ? form.get("active") === "on" : true,
+    perm: (PERM_KEYS as string[]).includes(s(form, "perm")) ? s(form, "perm") : null,
   };
   if (!row.title) return;
-  if (id) await supabase.from("links").update(row).eq("id", id);
-  else await supabase.from("links").insert(row);
+  const write = (r: Partial<typeof row>) => (id ? supabase.from("links").update(r).eq("id", id) : supabase.from("links").insert(r));
+  const { error } = await write(row);
+  if (error && /perm/i.test(error.message)) {
+    // The roles update (0011) hasn't been run yet: save everything else.
+    const { perm: _skip, ...rest } = row;
+    void _skip;
+    await write(rest);
+  }
   revalidatePath("/admin/links");
   revalidatePath("/");
 }

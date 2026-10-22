@@ -14,7 +14,7 @@ const TABS = [
   { href: "/profile", label: "Profile", icon: User, match: (p: string) => p.startsWith("/profile") || p.startsWith("/admin") },
 ];
 
-export function TabBar() {
+export function TabBar({ showOrder = true }: { showOrder?: boolean }) {
   const path = usePathname() || "/";
   const [count, setCount] = useState(0);
 
@@ -26,8 +26,8 @@ export function TabBar() {
 
   return (
     <div className="tabbar">
-      <nav aria-label="Main">
-        {TABS.map((t) => {
+      <nav aria-label="Main" style={{ gridTemplateColumns: `repeat(${showOrder ? 5 : 4}, 1fr)` }}>
+        {TABS.filter((t) => showOrder || t.href !== "/order").map((t) => {
           const on = t.match(path);
           const I = t.icon;
           return (

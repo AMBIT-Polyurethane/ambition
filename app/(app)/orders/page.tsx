@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
+import { can, seesOrders } from "@/lib/access";
+import { STAGES, stageOf } from "@/lib/order-desk";
 import { dateShort, money, orderNo, searchSafe } from "@/lib/format";
 import { ApprovalPill, Empty, StatusPill, TopBar } from "@/components/ui";
 import type { Order } from "@/lib/types";
@@ -20,6 +23,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const { supabase, profile } = await requireActive();
   const emp = isEmployee(profile);
+  if (!seesOrders(profile)) redirect("/");
   const filter = sp.status ?? "all";
   const q = searchSafe(sp.q);
 
@@ -40,7 +44,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="shell">
-      <TopBar title={emp ? "Orders" : "My orders"} back="/" />
+      <TopBar
+        title={emp ? "Orders" : "My orders"}
+        back="/"
+        right={emp && (can(profile, "order_desk") || can(profile, "credit_check")) ? <Link href="/orders/desk" className="btn sm dark">Order desk</Link> : null}
+      />
       {emp ? (
         <>
           <form className="search" action="/orders">
@@ -66,7 +74,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <div className="grow">
                 <div className="row between" style={{ gap: 8 }}>
                   <span className="t">{orderNo(o.order_no)}</span>
-                  <span className="row" style={{ gap: 6 }}><ApprovalPill order={o} /><StatusPill status={o.status} /></span>
+                  <span className="row" style={{ gap: 6 }}>
+                    {emp && stageOf(o) ? (
+                      <span className={STAGES[stageOf(o)!].pill}>{STAGES[stageOf(o)!].short}</span>
+                    ) : (
+                      <>
+                        <ApprovalPill order={o} />
+                        <StatusPill status={o.status} />
+                      </>
+                    )}
+                  </span>
                 </div>
                 <div className="s ellipsis">
                   {emp ? `${o.company_name}${o.account_no ? ` · ${o.account_no}` : ""}` : o.placed_by_name}

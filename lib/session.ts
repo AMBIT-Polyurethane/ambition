@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
+import { can, type Perm } from "@/lib/access";
 
 export const getSession = cache(async () => {
   const supabase = await createClient();
@@ -37,5 +38,12 @@ export async function requireEmployee() {
 export async function requireAdmin() {
   const s = await requireActive();
   if (s.profile.role !== "admin") redirect("/");
+  return s;
+}
+
+/** Staff page that needs one of these permissions (admins always pass). */
+export async function requirePerm(...perms: Perm[]) {
+  const s = await requireActive();
+  if (!perms.some((p) => can(s.profile, p))) redirect("/");
   return s;
 }

@@ -43,8 +43,36 @@ async function api<T>(path: string, revalidate: number | false): Promise<T> {
   return body.content as T;
 }
 
+/** Changes answers on a submission. Needs a Jotform key with Full Access (a read-only key is refused). */
+export async function updateSubmission(id: string, values: Record<string, string>): Promise<void> {
+  const key = process.env.JOTFORM_API_KEY?.trim();
+  if (!key) throw new JotformError("The Jotform key isn't set up yet.");
+  if (!/^\d{6,25}$/.test(id)) throw new JotformError("That price request doesn't exist.");
+  const body = new URLSearchParams();
+  for (const [qid, v] of Object.entries(values)) if (/^\d+$/.test(qid)) body.set(`submission[${qid}]`, v);
+  let res: Response;
+  try {
+    res = await fetch(`${JOTFORM_API_URL}/submission/${id}`, {
+      method: "POST",
+      headers: { APIKEY: key, Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new JotformError("Jotform didn't answer. Try again in a minute.");
+  }
+  const json = (await res.json().catch(() => null)) as { responseCode?: number; message?: string } | null;
+  if (res.status === 401 || res.status === 403 || json?.responseCode === 401 || json?.responseCode === 403) {
+    throw new JotformError(
+      "Jotform refused the change: the app's Jotform key can only read. Make a Full Access key in Jotform (Settings → API) and put it in Vercel as JOTFORM_API_KEY.",
+    );
+  }
+  if (!res.ok || !json || (json.responseCode && json.responseCode !== 200)) throw new JotformError(`Jotform said: ${json?.message || res.status}`);
+}
+
 // ------------------------------------------------------------------ fields
-export type PrfFields = { rep?: string; customer?: string; contact?: string; date?: string };
+export type PrfFields = { rep?: string; customer?: string; contact?: string; date?: string; repEmail?: string };
 
 const find = (qs: Question[], ...tests: ((q: Question) => boolean)[]) => {
   for (const t of tests) {
@@ -63,7 +91,60 @@ export async function prfFields(): Promise<PrfFields> {
     customer: find(qs, (q) => /legal business name/i.test(label(q)), (q) => /(business|company) name/i.test(label(q))),
     contact: find(qs, (q) => /customer name/i.test(label(q)), (q) => q.type === "control_fullname"),
     date: find(qs, (q) => q.type === "control_datetime" && /^date\b/i.test(label(q)), (q) => q.type === "control_datetime"),
+    repEmail: find(qs, (q) => /sales\s*person\s*email/i.test(label(q)), (q) => /rep.*email/i.test(label(q))),
   };
+}
+
+// ------------------------------------------------------------------ pricing
+/** One product on the form: the rep's requested price box and the manager's approved price box. */
+export type PricePair = { product: string; section: string; reqQid: string; apprQid: string | null };
+
+const strip = (t: string) => t.replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+const priceKey = (t: string) => strip(t).replace(/\(approved price\)/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/**
+ * Reads the form's layout: textboxes under "Price Request Section" are what the rep asks for; the
+ * "(Approved Price)" boxes under "Approved Prices (Manager Use Only)" are the answers. Matched by product name.
+ */
+export async function prfPricing(): Promise<PricePair[]> {
+  const content = await api<Record<string, Question>>(`/form/${PRF_FORM_ID}/questions`, 3600);
+  const qs = Object.values(content).sort((a, b) => Number(a.order) - Number(b.order));
+  const requested: { key: string; product: string; section: string; qid: string }[] = [];
+  const approved: { key: string; section: string; qid: string }[] = [];
+  let zone: "before" | "request" | "approved" = "before";
+  let section = "";
+  for (const q of qs) {
+    const label = strip(q.text ?? "");
+    if (q.type === "control_head") {
+      if (/approved prices/i.test(label)) zone = "approved";
+      else if (/price request section/i.test(label)) zone = "request";
+      else if (zone !== "before") section = label;
+      continue;
+    }
+    if (!/^control_(textbox|number|spinner)$/.test(q.type)) continue;
+    if (zone === "approved" || /\(approved price\)/i.test(label)) approved.push({ key: priceKey(label), section, qid: q.qid });
+    else if (zone === "request") requested.push({ key: priceKey(label), product: label, section, qid: q.qid });
+  }
+  const used = new Set<string>();
+  return requested.map((r, i) => {
+    const hit = approved.find((a) => !used.has(a.qid) && a.key === r.key) ?? (approved[i] && !used.has(approved[i].qid) && approved.length === requested.length ? approved[i] : undefined);
+    if (hit) used.add(hit.qid);
+    return { product: r.product, section: r.section, reqQid: r.qid, apprQid: hit?.qid ?? null };
+  });
+}
+
+export type PriceRow = PricePair & { requested: string; approved: string };
+
+export const priceRows = (s: Submission, pairs: PricePair[]): PriceRow[] =>
+  pairs.map((p) => ({ ...p, requested: answerText(s.answers[p.reqQid]), approved: p.apprQid ? answerText(s.answers[p.apprQid]) : "" }));
+
+export type PrfStatus = "pending" | "approved" | "no_prices";
+
+/** Approved when a manager filled any approved price (here or in Jotform); pending when prices were asked for. */
+export function prfStatus(s: Submission, pairs: PricePair[], reviewed: boolean): PrfStatus {
+  const rows = priceRows(s, pairs);
+  if (reviewed || rows.some((r) => r.approved)) return "approved";
+  return rows.some((r) => r.requested) ? "pending" : "no_prices";
 }
 
 /** Every live (not deleted) PRF submission, newest first. */
@@ -147,9 +228,12 @@ export function answerText(a: Answer | undefined): string {
 const LAYOUT = new Set(["control_text", "control_button", "control_pagebreak", "control_divider", "control_image", "control_collapse", "control_captcha", "control_clear", "control_widget_empty"]);
 
 /** Labeled answers in form order; section headings come through as { heading }. */
-export function answerRows(s: Submission): ({ heading: string } | { label: string; value: string })[] {
+export function answerRows(s: Submission, skip?: Set<string>): ({ heading: string } | { label: string; value: string })[] {
   const rows: ({ heading: string } | { label: string; value: string })[] = [];
-  const items = Object.values(s.answers ?? {}).sort((a, b) => Number(a.order) - Number(b.order));
+  const items = Object.entries(s.answers ?? {})
+    .filter(([qid]) => !skip?.has(qid))
+    .map(([, a]) => a)
+    .sort((a, b) => Number(a.order) - Number(b.order));
   let firstHead = true;
   for (const a of items) {
     if (a.type === "control_head") {
@@ -189,6 +273,8 @@ export type PrfItem = {
   contact: string;
   date: string;
   ownerId: string | null;
+  status?: PrfStatus;
+  priced?: number; // products with a requested price
 };
 
 export const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(s.trim());
@@ -197,7 +283,13 @@ export const looksLikeEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.tes
  * Who owns each request. The SALES REP box may hold an email (matched to the app account's email)
  * or a name (matched to the account's full name). An admin's manual link always wins.
  */
-export function toItems(subs: Submission[], f: PrfFields, links: RepLink[], staff: { id: string; full_name: string | null; email?: string | null }[]): PrfItem[] {
+export function toItems(
+  subs: Submission[],
+  f: PrfFields,
+  links: RepLink[],
+  staff: { id: string; full_name: string | null; email?: string | null }[],
+  pricing?: { pairs: PricePair[]; reviewed: Set<string> },
+): PrfItem[] {
   const byName = new Map<string, string>();
   const byEmail = new Map<string, string>();
   for (const p of staff) {
@@ -222,6 +314,12 @@ export function toItems(subs: Submission[], f: PrfFields, links: RepLink[], staf
       contact: f.contact ? answerText(s.answers[f.contact]) : "",
       date: f.date ? answerText(s.answers[f.date]) : "",
       ownerId: owner,
+      ...(pricing
+        ? {
+            status: prfStatus(s, pricing.pairs, pricing.reviewed.has(s.id)),
+            priced: priceRows(s, pricing.pairs).filter((r) => r.requested).length,
+          }
+        : {}),
     };
   });
 }

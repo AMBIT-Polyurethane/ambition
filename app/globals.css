@@ -337,7 +337,7 @@ a.tile:hover { background: var(--s2); color: var(--text); border-color: var(--li
 .select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, #8a8a93 50%), linear-gradient(135deg, #8a8a93 50%, transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
 .input:focus, .select:focus, .textarea:focus { border-color: var(--red); outline: none; }
 .check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text2); cursor: pointer; }
-.check input { width: 20px; height: 20px; accent-color: var(--red); }
+.check input { width: 20px; height: 20px; flex: none; accent-color: var(--red); }
 
 .btn {
   height: 54px; padding: 0 22px;
@@ -474,3 +474,28 @@ button.thumb-btn { padding: 0; border: 0; background: none; cursor: zoom-in; bor
 .approve-page { min-height: 100dvh; background: var(--bg); color: var(--text); }
 body:has(.approve-page) { background: #f4f4f6; }
 details > summary.linkbtn { display: inline-block; }
+
+/* Admin > Accounts: what each staff member sees */
+.access-boxes { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px 16px; }
+.access-boxes legend { padding: 0 6px; }
+.access-boxes .tiny { grid-column: 1 / -1; }
+.access-boxes:disabled { opacity: 0.7; }
+
+/* Order desk steps (order page) */
+.desk-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.desk-steps li { display: flex; gap: 12px; padding: 8px 0 12px; position: relative; }
+.desk-steps li:not(:last-child)::before { content: ""; position: absolute; left: 10px; top: 30px; bottom: -2px; width: 2px; background: var(--line); }
+.desk-steps .dot { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 2px solid var(--line); background: var(--s1); display: grid; place-items: center; color: #fff; margin-top: 1px; }
+.desk-steps li.done .dot { background: var(--ok); border-color: var(--ok); }
+.desk-steps li.now .dot { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+.desk-steps li:not(.done):not(.now) b { color: var(--text3); }
+
+/* Price request: requested vs approved */
+.kv.wide { grid-template-columns: minmax(110px, 42%) 1fr; }
+.price-table .price-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px 104px; gap: 10px; align-items: center; padding: 10px 14px; }
+.price-table .price-row.head { font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); padding: 9px 14px; background: var(--bg); }
+.price-table .price-row.head span:nth-child(n + 2) { text-align: right; }
+.price-table .name { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.price-table .req { text-align: right; color: var(--text2); font-size: 14px; }
+.price-table .appr { text-align: right; font-weight: 800; }
+.price-table .input.sm { text-align: right; min-height: 38px; }

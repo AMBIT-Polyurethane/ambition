@@ -7,6 +7,9 @@ import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { customerDecision, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
 import { docState } from "@/lib/order-doc/types";
+import { OrderDeskCard } from "@/components/order-desk-card";
+import { can } from "@/lib/access";
+import { STAGES, customerProgress, stageOf } from "@/lib/order-desk";
 import type { Branch, Company, Order, OrderItem } from "@/lib/types";
 
 export const metadata = { title: "Order" };
@@ -71,7 +74,15 @@ export default async function OrderDetailPage({
         <TopBar
           title={orderNo(order.order_no)}
           back="/orders"
-          right={waiting ? <ApprovalPill order={order} /> : <StatusPill status={order.status} />}
+          right={
+            emp && stageOf(order) ? (
+              <span className={STAGES[stageOf(order)!].pill}>{STAGES[stageOf(order)!].short}</span>
+            ) : waiting ? (
+              <ApprovalPill order={order} />
+            ) : (
+              <StatusPill status={order.status} />
+            )
+          }
         />
       )}
 
@@ -118,6 +129,11 @@ export default async function OrderDetailPage({
           {order.po_number ? (<><dt>PO number</dt><dd>{order.po_number}</dd></>) : null}
           {order.needed_by ? (<><dt>Needed by</dt><dd>{dateShort(order.needed_by)}</dd></>) : null}
           {order.notes ? (<><dt>Notes</dt><dd>{order.notes}</dd></>) : null}
+          {!emp && customerProgress(order) ? (<><dt>Status</dt><dd>{customerProgress(order)}</dd></>) : null}
+          {order.scheduled_for && stageOf(order) !== "cancelled" ? (
+            <><dt>{order.delivery_method === "pickup" ? "Pickup" : "Delivery"}</dt><dd>{dateShort(order.scheduled_for)}{order.schedule_note ? `\n${order.schedule_note}` : ""}</dd></>
+          ) : null}
+          {emp && order.ambit_po ? (<><dt>AMBIT PO #</dt><dd>{order.ambit_po}</dd></>) : null}
           {state === "approved" ? (
             <>
               <dt>Approved</dt>
@@ -135,6 +151,8 @@ export default async function OrderDetailPage({
           ) : null}
         </dl>
       </section>
+
+      {emp ? <OrderDeskCard order={order} desk={can(profile, "order_desk")} credit={can(profile, "credit_check")} warehouse={can(profile, "inventory")} /> : null}
 
       <section className="section">
         <div className="eyebrow">{lines.length} {lines.length === 1 ? "item" : "items"}</div>
@@ -239,6 +257,7 @@ export default async function OrderDetailPage({
             </div>
           ) : null}
 
+          {profile.role === "admin" || can(profile, "order_desk") ? (
           <form action={setOrderStatus} className="row" style={{ gap: 10 }}>
             <input type="hidden" name="id" value={order.id} />
             <select name="status" className="select" defaultValue={order.status} style={{ flex: 1 }} aria-label="Order status">
@@ -249,6 +268,7 @@ export default async function OrderDetailPage({
             </select>
             <Submit className="btn sm" pendingText="Saving…">Update</Submit>
           </form>
+          ) : null}
 
           {waiting ? (
             <div className="alert info small">Goes to orders@ambitpu.com once the customer approves.</div>

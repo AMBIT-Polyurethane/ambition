@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession, isEmployee } from "@/lib/session";
-import { sendApprovalRequest, sendChangeRequestNotice, sendOrderEmail } from "@/lib/order-send";
+import { sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendScheduledNotice } from "@/lib/order-send";
 import { loadOrderDoc } from "@/lib/order-doc/load";
 import type { Order } from "@/lib/types";
 
@@ -77,4 +77,71 @@ export async function customerDecision(form: FormData) {
   const doc = await loadOrderDoc(s.supabase, id);
   if (doc) await sendChangeRequestNotice(doc);
   back(id, "msg", "Thanks. Your AMBIT rep will send an updated order.");
+}
+
+// ------------------------------------------------------------------ order desk
+// The database checks who may do each step (Admin > Accounts boxes); these just call it and send the emails.
+
+/** CRM: AMBIT's PO number. The order moves on to the credit check. */
+export async function setOrderPo(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const po = String(form.get("po") ?? "").trim();
+  const { data: before } = await s.supabase.from("orders").select("credit_status").eq("id", id).maybeSingle<{ credit_status: string | null }>();
+  const { error } = await s.supabase.rpc("order_set_po", { p_order: id, p_po: po });
+  if (error) back(id, "err", error.message);
+  if (!before?.credit_status) await sendDeskNotice(s.supabase, id, "credit_needed");
+  back(id, "msg", before?.credit_status ? `PO # changed to ${po}.` : `PO # ${po} saved. Accounting has been asked for the credit check.`);
+}
+
+/** Accounting: release the order, or put it on hold (with a reason). */
+export async function creditDecision(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const approve = String(form.get("decision") ?? "") === "approve";
+  const note = String(form.get("note") ?? "").trim();
+  const { error } = await s.supabase.rpc("order_credit_decision", { p_order: id, p_approve: approve, p_note: note || null });
+  if (error) back(id, "err", error.message);
+  await sendDeskNotice(s.supabase, id, approve ? "ready_to_schedule" : "credit_hold");
+  back(id, "msg", approve ? "Released. The order desk can schedule it now." : "Put on credit hold. The rep and the order desk were told.");
+}
+
+/** CRM: delivery or pickup date. The customer is emailed that it's approved and scheduled. */
+export async function scheduleOrder(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const date = String(form.get("date") ?? "");
+  const note = String(form.get("note") ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) back(id, "err", "Pick the delivery or pickup date.");
+  const { error } = await s.supabase.rpc("order_schedule", { p_order: id, p_date: date, p_note: note || null });
+  if (error) back(id, "err", error.message);
+  const sent = await sendScheduledNotice(s.supabase, id);
+  back(
+    id,
+    sent.status === "sent" ? "msg" : "err",
+    sent.status === "sent"
+      ? "Scheduled, and the customer was emailed."
+      : `Scheduled, but the customer email didn't go out (${sent.error ?? sent.status}). Use Resend customer email.`,
+  );
+}
+
+export async function resendScheduledEmail(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const sent = await sendScheduledNotice(s.supabase, id);
+  back(id, sent.status === "sent" ? "msg" : "err", sent.status === "sent" ? "Customer emailed again." : `The email didn't go out (${sent.error ?? sent.status}).`);
+}
+
+/** CRM or warehouse: delivered / picked up. */
+export async function completeOrder(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const { error } = await s.supabase.rpc("order_complete", { p_order: id });
+  if (error) back(id, "err", error.message);
+  back(id, "msg", "Marked complete.");
 }

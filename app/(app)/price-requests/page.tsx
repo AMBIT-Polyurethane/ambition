@@ -1,17 +1,19 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { requireEmployee } from "@/lib/session";
+import { requirePerm } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { PrfList } from "@/components/prf-list";
-import { JotformError, PRF_FORM_ID, formUrl, jotformReady, prfFields, prfSubmissions, toItems, type RepLink } from "@/lib/jotform";
+import { JotformError, PRF_FORM_ID, formUrl, jotformReady, prfFields, prfPricing, prfSubmissions, toItems, type RepLink } from "@/lib/jotform";
+import { can } from "@/lib/access";
 import { linkRepName, unlinkRepName } from "./actions";
 
 export const metadata = { title: "My price requests" };
 export const dynamic = "force-dynamic";
 
 export default async function PriceRequestsPage() {
-  const { supabase, profile } = await requireEmployee();
+  const { supabase, profile } = await requirePerm("price_requests", "prf_approve");
   const admin = profile.role === "admin";
+  const approver = can(profile, "prf_approve");
 
   const { data: prfLink } = await supabase.from("links").select("id").ilike("url", `%${PRF_FORM_ID}%`).limit(1).maybeSingle();
   const newHref = prfLink ? `/go/${prfLink.id}` : formUrl();
@@ -39,15 +41,17 @@ export default async function PriceRequestsPage() {
 
   let error = "";
   let items: ReturnType<typeof toItems> = [];
-  const [{ data: staffRows }, linksRes] = await Promise.all([
+  const [{ data: staffRows }, linksRes, reviewsRes] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, role, status").in("role", ["employee", "admin"]).order("full_name"),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
+    supabase.from("prf_reviews").select("submission_id"),
   ]);
+  const reviewed = new Set(((reviewsRes.error ? [] : reviewsRes.data ?? []) as { submission_id: string }[]).map((r) => r.submission_id));
   const staff = (staffRows ?? []) as { id: string; full_name: string | null; email: string; role: string; status: string }[];
   const links = (linksRes.error ? [] : linksRes.data ?? []) as RepLink[];
   try {
-    const [fields, subs] = await Promise.all([prfFields(), prfSubmissions()]);
-    items = toItems(subs, fields, links, staff);
+    const [fields, subs, pairs] = await Promise.all([prfFields(), prfSubmissions(), prfPricing().catch(() => null)]);
+    items = toItems(subs, fields, links, staff, pairs ? { pairs, reviewed } : undefined);
     if (!fields.rep) error = "Couldn't find the SALES REP box on the Price Request Form, so requests can't be matched to reps.";
   } catch (e) {
     error = e instanceof JotformError ? e.message : "Couldn't load price requests from Jotform.";
@@ -68,7 +72,16 @@ export default async function PriceRequestsPage() {
 
   return (
     <main className="shell">
-      <TopBar title="My price requests" back="/" right={newBtn} />
+      <TopBar
+        title="My price requests"
+        back="/"
+        right={
+          <div className="row" style={{ gap: 8 }}>
+            {approver ? <Link className="btn dark sm" href="/price-requests/approvals">Approvals</Link> : null}
+            {newBtn}
+          </div>
+        }
+      />
 
       {error ? <div className="alert err">{error}</div> : null}
 

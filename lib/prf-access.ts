@@ -1,9 +1,10 @@
 import "server-only";
 import { notFound } from "next/navigation";
 import { requireEmployee } from "@/lib/session";
+import { can } from "@/lib/access";
 import { prfFields, prfSubmission, toItems, type RepLink } from "@/lib/jotform";
 
-/** Loads one price request and makes sure the signed-in rep owns it (admins can open any). */
+/** Loads one price request: its rep can open it, and so can anyone who approves prices (admins). */
 export async function ownedPriceRequest(id: string) {
   const { supabase, profile } = await requireEmployee();
   const [sub, fields, staffRes, linksRes] = await Promise.all([
@@ -16,8 +17,8 @@ export async function ownedPriceRequest(id: string) {
   const staff = (staffRes.data ?? []) as { id: string; full_name: string | null; email: string }[];
   const links = (linksRes.error ? [] : linksRes.data ?? []) as RepLink[];
   const [item] = toItems([sub], fields, links, staff);
-  const admin = profile.role === "admin";
-  if (!admin && item.ownerId !== profile.id) notFound();
-  const ownerName = staff.find((s) => s.id === item.ownerId)?.full_name ?? "";
-  return { sub, item, admin, ownerName, mine: item.ownerId === profile.id };
+  const approver = can(profile, "prf_approve");
+  if (!approver && item.ownerId !== profile.id) notFound();
+  const owner = staff.find((s) => s.id === item.ownerId) ?? null;
+  return { supabase, profile, sub, item, fields, admin: approver, approver, ownerName: owner?.full_name ?? "", ownerEmail: owner?.email ?? "", mine: item.ownerId === profile.id };
 }

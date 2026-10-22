@@ -38,6 +38,9 @@ export type Profile = {
   created_at: string;
   approved_at: string | null;
   company?: Pick<Company, "id" | "name" | "account_no" | "default_branch_id"> | null;
+  // Staff roles (migration 0011; missing until it's run)
+  job_role?: string | null;
+  perms?: string[] | null;
 };
 
 export type Branch = {
@@ -102,7 +105,25 @@ export type Order = {
   approved_by_name?: string | null;
   approval_note?: string | null;
   approval_ref?: string | null;
+  // Order desk (migration 0011)
+  stage?: OrderStage;
+  ambit_po?: string | null;
+  po_by_name?: string | null;
+  po_at?: string | null;
+  credit_status?: "pending" | "approved" | "hold" | null;
+  credit_by_name?: string | null;
+  credit_at?: string | null;
+  credit_note?: string | null;
+  scheduled_for?: string | null;
+  schedule_note?: string | null;
+  scheduled_by_name?: string | null;
+  scheduled_at?: string | null;
+  notify_status?: string | null;
+  notify_error?: string | null;
+  completed_at?: string | null;
 };
+
+export type OrderStage = "customer" | "needs_po" | "credit" | "hold" | "schedule" | "scheduled" | "completed" | "cancelled";
 
 export type ApprovalStatus = "not_required" | "pending" | "approved" | "changes_requested";
 
@@ -130,6 +151,7 @@ export type LinkRow = {
   open_in_app: boolean;
   sort: number;
   active: boolean;
+  perm?: string | null; // staff need this permission to see it (0011)
 };
 
 export type DocumentRow = {

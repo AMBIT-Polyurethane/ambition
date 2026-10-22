@@ -4,6 +4,7 @@ import { Submit } from "@/components/forms";
 import { Icon, ICON_NAMES } from "@/components/icons";
 import { deleteLink, saveLink } from "@/app/(app)/admin/actions";
 import type { LinkRow } from "@/lib/types";
+import { PERMS } from "@/lib/access";
 
 export const metadata = { title: "Links & forms" };
 
@@ -32,6 +33,13 @@ function LinkFields({ l }: { l?: LinkRow }) {
         <span className="label">Icon</span>
         <select className="select sm" name="icon" defaultValue={l?.icon ?? "link"}>
           {ICON_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">AMBIT staff who see it</span>
+        <select className="select sm" name="perm" defaultValue={l?.perm ?? ""}>
+          <option value="">Everyone on the team</option>
+          {PERMS.map((p) => <option key={p.key} value={p.key}>Only with: {p.label}</option>)}
         </select>
       </label>
       <label className="field"><span className="label">Sort</span><input className="input sm" name="sort" type="number" defaultValue={l?.sort ?? 0} /></label>

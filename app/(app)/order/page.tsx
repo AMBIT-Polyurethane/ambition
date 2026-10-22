@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
+import { can } from "@/lib/access";
 import { OrderBuilder, type CatalogProduct } from "@/components/order-builder";
 import { approvalsEnabled } from "@/lib/order-send";
 import type { OrderCustomer } from "@/lib/customers";
@@ -10,6 +12,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const { supabase, profile } = await requireActive();
   const emp = isEmployee(profile);
+  if (emp && !can(profile, "ordering")) redirect("/");
 
   const [{ data: products }, { data: categories }, { data: branches }, companiesRes, myCompanyRes, reorderRes] = await Promise.all([
     supabase.from("products").select("*").eq("active", true).order("sort").order("name"),
