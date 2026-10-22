@@ -499,3 +499,9 @@ details > summary.linkbtn { display: inline-block; }
 .price-table .req { text-align: right; color: var(--text2); font-size: 14px; }
 .price-table .appr { text-align: right; font-weight: 800; }
 .price-table .input.sm { text-align: right; min-height: 38px; }
+
+/* Opening animation (components/splash.tsx) */
+#ambit-splash { position: fixed; inset: 0; z-index: 2147483000; background: #333 center / cover no-repeat; opacity: 1; transition: opacity 0.45s ease; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#ambit-splash video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
+#ambit-splash.out { opacity: 0; pointer-events: none; }
+html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { overflow: hidden; }

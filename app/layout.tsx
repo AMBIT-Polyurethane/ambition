@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { getTheme } from "@/lib/theme-server";
 import { THEME_COLOR } from "@/lib/theme";
+import { Splash } from "@/components/splash";
 import "./globals.css";
 
 // Archivo (SIL Open Font License), self-hosted so the build never depends on Google Fonts.
@@ -48,7 +49,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const theme = await getTheme();
   return (
     <html lang="en" className={archivo.variable} data-theme={theme}>
-      <body>{children}</body>
+      <body>
+        <Splash />
+        {children}
+      </body>
     </html>
   );
 }
