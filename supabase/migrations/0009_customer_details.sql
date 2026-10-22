@@ -14,7 +14,8 @@ alter table public.companies add column if not exists ship_address   text;
 alter table public.companies add column if not exists qb_id          text;
 alter table public.companies add column if not exists source         text not null default 'admin';
 alter table public.companies add column if not exists needs_qb_setup boolean not null default false;
-alter table public.companies add column if not exists created_by     uuid references public.profiles(id) on delete set null;
+alter table public.companies add column if not exists created_by     uuid;  -- who added it (no foreign key: a second profiles<->companies link breaks the app's joins)
+alter table public.companies drop constraint if exists companies_created_by_fkey;
 
 do $$ begin
   alter table public.companies add constraint companies_source_check check (source in ('admin', 'quickbooks', 'app'));

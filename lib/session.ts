@@ -11,7 +11,7 @@ export const getSession = cache(async () => {
   if (!user) return null;
   const { data: profile } = await supabase
     .from("profiles")
-    .select("*, company:companies(id, name, account_no, default_branch_id)")
+    .select("*, company:companies!company_id(id, name, account_no, default_branch_id)")
     .eq("id", user.id)
     .maybeSingle<Profile>();
   return { supabase, user, profile };
