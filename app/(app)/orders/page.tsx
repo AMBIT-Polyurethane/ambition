@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { dateShort, money, orderNo, searchSafe } from "@/lib/format";
-import { Empty, StatusPill, TopBar } from "@/components/ui";
+import { ApprovalPill, Empty, StatusPill, TopBar } from "@/components/ui";
 import type { Order } from "@/lib/types";
 
 export const metadata = { title: "Orders" };
@@ -10,6 +10,7 @@ export const metadata = { title: "Orders" };
 const FILTERS = [
   ["all", "All"],
   ["new", "New"],
+  ["approval", "Needs approval"],
   ["processing", "Processing"],
   ["completed", "Completed"],
   ["mine", "Mine"],
@@ -24,11 +25,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   let query = supabase
     .from("orders")
-    .select("id, order_no, company_name, account_no, placed_by_name, status, created_at, est_subtotal, has_customer_pricing, po_number")
+    .select("*") // includes the approval columns when the database has them
     .order("created_at", { ascending: false })
     .limit(200);
   if (["new", "processing", "completed", "cancelled"].includes(filter)) query = query.eq("status", filter);
   if (filter === "mine") query = query.eq("placed_by", profile.id);
+  if (filter === "approval") query = query.in("approval_status", ["pending", "changes_requested"]).neq("status", "cancelled");
   if (q) {
     const n = Number(q.replace(/\D/g, ""));
     query = n ? query.or(`order_no.eq.${n},po_number.ilike.%${q}%`) : query.or(`company_name.ilike.%${q}%,po_number.ilike.%${q}%`);
@@ -64,7 +66,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <div className="grow">
                 <div className="row between" style={{ gap: 8 }}>
                   <span className="t">{orderNo(o.order_no)}</span>
-                  <StatusPill status={o.status} />
+                  <span className="row" style={{ gap: 6 }}><ApprovalPill order={o} /><StatusPill status={o.status} /></span>
                 </div>
                 <div className="s ellipsis">
                   {emp ? `${o.company_name}${o.account_no ? ` · ${o.account_no}` : ""}` : o.placed_by_name}

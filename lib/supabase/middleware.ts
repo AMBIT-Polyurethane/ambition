@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/env";
 
-const PUBLIC_PATHS = ["/signin", "/request-access", "/forgot", "/auth", "/setup"];
+// /approve: customers approve orders from an emailed link without an account.
+const PUBLIC_PATHS = ["/signin", "/request-access", "/forgot", "/auth", "/setup", "/approve"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

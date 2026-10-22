@@ -1,5 +1,7 @@
 import "server-only";
 
+export type EmailAttachment = { filename: string; content: Buffer; contentType?: string };
+
 export type EmailMessage = {
   to: string[];
   cc?: string[];
@@ -7,6 +9,7 @@ export type EmailMessage = {
   subject: string;
   html: string;
   text: string;
+  attachments?: EmailAttachment[];
 };
 
 export type SendResult = { status: "sent" | "failed" | "not_configured"; error?: string };
@@ -41,6 +44,9 @@ async function sendWithResend(msg: EmailMessage): Promise<SendResult> {
       subject: msg.subject,
       html: msg.html,
       text: msg.text,
+      attachments: msg.attachments?.length
+        ? msg.attachments.map((a) => ({ filename: a.filename, content: a.content.toString("base64") }))
+        : undefined,
     }),
   });
   if (res.ok) return { status: "sent" };
@@ -77,12 +83,27 @@ async function sendWithGraph(msg: EmailMessage): Promise<SendResult> {
         toRecipients: msg.to.map(addr),
         ccRecipients: (msg.cc ?? []).map(addr),
         replyTo: msg.replyTo ? [addr(msg.replyTo)] : [],
+        attachments: (msg.attachments ?? []).map((a) => ({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: a.filename,
+          contentType: a.contentType ?? "application/octet-stream",
+          contentBytes: a.content.toString("base64"),
+        })),
       },
       saveToSentItems: true,
     }),
   });
   if (res.status === 202 || res.ok) return { status: "sent" };
   return { status: "failed", error: `Microsoft ${res.status}: ${(await res.text()).slice(0, 300)}` };
+}
+
+/**
+ * True when email can reach people outside AMBIT: a verified sending domain in Resend (EMAIL_FROM set)
+ * or Microsoft 365 sending. Resend's test sender (onboarding@resend.dev) only reaches the account owner.
+ */
+export function canEmailCustomers(): boolean {
+  if (process.env.RESEND_API_KEY) return Boolean(process.env.EMAIL_FROM && !/resend\.dev/i.test(process.env.EMAIL_FROM));
+  return Boolean(process.env.MS_TENANT_ID && process.env.MS_CLIENT_ID && process.env.MS_CLIENT_SECRET && process.env.MS_SENDER_MAILBOX);
 }
 
 export function emailConfigured(): boolean {

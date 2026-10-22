@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSession, isEmployee } from "@/lib/session";
-import { sendOrderEmail } from "@/lib/order-send";
+import { approvalsEnabled, sendApprovalRequest, sendOrderEmail } from "@/lib/order-send";
 import { sendEmail, wrapEmail } from "@/lib/email";
 import { ACCOUNTING_EMAIL } from "@/lib/env";
 import { currentOrigin } from "@/lib/origin";
@@ -124,9 +124,15 @@ export type PlaceOrderInput = {
   notes: string;
   companyId: string; // employees only; "__other" = not in list
   customerName: string;
+  approvalEmail?: string; // employees only: where the customer's approval link goes
 };
 
-export type PlaceOrderResult = { ok: true; id: string } | { ok: false; error: string };
+/** sent = went to orders@ (or saved, if email is off); approval = emailed to the customer to approve first. */
+export type PlaceOrderResult =
+  | { ok: true; id: string; mode: "sent" | "approval"; warning?: string }
+  | { ok: false; error: string };
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -145,11 +151,16 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     return { ok: false, error: "Type the customer's name." };
   }
   const neededBy = /^\d{4}-\d{2}-\d{2}$/.test(input.neededBy) ? input.neededBy : null;
+  const needsApproval = emp && approvalsEnabled();
+  const approvalEmail = String(input.approvalEmail ?? "").trim().slice(0, 200);
+  if (needsApproval && !EMAIL_RE.test(approvalEmail)) {
+    return { ok: false, error: "Enter the customer's email so they can approve the order." };
+  }
 
   const { data: id, error } = await s.supabase.rpc("place_order", {
     p_items: items,
     p_delivery_method: input.delivery,
-    p_branch_id: input.delivery === "pickup" ? input.branchId || null : null,
+    p_branch_id: input.delivery !== "dropship" ? input.branchId || null : null, // job sites ship from a branch too
     p_ship_address: input.delivery === "pickup" ? null : input.address,
     p_po_number: input.po || null,
     p_needed_by: neededBy,
@@ -159,8 +170,25 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   });
   if (error || !id) return { ok: false, error: error?.message ?? "Something went wrong. Please try again." };
 
-  await sendOrderEmail(s.supabase, id as string);
+  const orderId = id as string;
   revalidatePath("/");
   revalidatePath("/orders");
-  return { ok: true, id: id as string };
+
+  if (needsApproval) {
+    const sent = await sendApprovalRequest(s.supabase, orderId, approvalEmail);
+    if (sent.setupMissing) {
+      // The database update for approvals hasn't been run yet: fall back to the old way.
+      await sendOrderEmail(s.supabase, orderId);
+      return { ok: true, id: orderId, mode: "sent" };
+    }
+    return {
+      ok: true,
+      id: orderId,
+      mode: "approval",
+      warning: sent.status === "sent" ? undefined : `The approval email didn't go out (${sent.error ?? sent.status}). Use Resend on the order page.`,
+    };
+  }
+
+  await sendOrderEmail(s.supabase, orderId);
+  return { ok: true, id: orderId, mode: "sent" };
 }

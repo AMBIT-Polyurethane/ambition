@@ -78,6 +78,20 @@ Pick one:
 
 With neither set, orders are still saved and show under Orders with "Email sending isn't set up yet".
 
+### Customer approval
+
+Orders AMBIT staff place for a customer are emailed to the customer first, with a secure link (valid 7 days)
+to approve or request changes. The order and its printable PDF go to orders@ambitpu.com only after approval.
+Contractors ordering for themselves approve in the app ("Approve order"). Staff can resend the link or
+record an approval taken by phone. Needs `supabase/migrations/0010_order_approval.sql`.
+
+Approval turns on by itself once email can reach customers: Resend with a verified domain and `EMAIL_FROM`
+set, or Microsoft 365 sending. Set `CUSTOMER_APPROVAL=off` to turn it off, or `on` to force it.
+
+### Appearance
+
+Everyone can pick Dark, Light or Auto (follows the device) in Profile → Appearance. It's remembered per device.
+
 ## Local development
 
 ```bash

@@ -180,14 +180,14 @@ export function CsvImport({ kind }: { kind: Kind }) {
         <>
           {stats ? (
             <div className="small muted">
-              <b style={{ color: "#fff" }}>{stats.count} products</b> in {stats.cats} categories{sheetName ? ` (from the “${sheetName}” sheet)` : ""}
+              <b style={{ color: "var(--text)" }}>{stats.count} products</b> in {stats.cats} categories{sheetName ? ` (from the “${sheetName}” sheet)` : ""}
               {stats.cp ? ` · ${stats.cp} at customer pricing` : ""}
               {stats.noPrice ? ` · ${stats.noPrice} without a list price` : ""}
               {stats.guessed ? ` · ${stats.guessed} ${stats.guessed === 1 ? "unit" : "units"} guessed from the description` : ""}
               {stats.hidden ? ` · ${stats.hidden} marked inactive` : ""}
             </div>
           ) : (
-            <div className="small muted"><b style={{ color: "#fff" }}>{rows.length} customers</b> found{sheetName ? ` (from the “${sheetName}” sheet)` : ""}</div>
+            <div className="small muted"><b style={{ color: "var(--text)" }}>{rows.length} customers</b> found{sheetName ? ` (from the “${sheetName}” sheet)` : ""}</div>
           )}
 
           <div className="scroll-x">

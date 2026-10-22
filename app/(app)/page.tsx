@@ -6,6 +6,8 @@ import { linkHref } from "@/lib/links";
 import { Icon } from "@/components/icons";
 import { StatusPill } from "@/components/ui";
 import type { LinkRow, Order, OrderItem } from "@/lib/types";
+import { BrandImg } from "@/components/brand";
+import { approvalsEnabled } from "@/lib/order-send";
 
 type Tile = { key: string; icon: string; title: string; sub: string; href: string | null; external?: boolean };
 
@@ -63,7 +65,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   return (
     <main className="shell">
       <header className="row between" style={{ paddingTop: 8 }}>
-        <img src="/brand/logo-white.png" alt="AMBIT Polyurethane" style={{ height: 28, width: "auto" }} />
+        <span><BrandImg art="logo" alt="AMBIT Polyurethane" style={{ height: 28, width: "auto" }} /></span>
         <div className="row" style={{ gap: 10 }}>
           {emp ? (
             <Link href="/orders?status=new" className="iconbtn" aria-label={`${newOrders} new orders`} style={{ position: "relative" }}>
@@ -101,7 +103,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <div className="col tight grow" style={{ position: "relative" }}>
           <span className="eyebrow" style={{ color: "rgba(255,255,255,0.85)" }}>{emp ? "For a customer" : "Order request"}</span>
           <span className="h1" style={{ fontSize: 24 }}>{emp ? "Order for a customer" : "Place an order"}</span>
-          <span className="small" style={{ opacity: 0.92 }}>Pick items, choose pickup or delivery, and it goes straight to AMBIT.</span>
+          <span className="small" style={{ opacity: 0.92 }}>
+            {emp && approvalsEnabled()
+              ? "Pick items and delivery. The customer approves by email, then it goes to AMBIT orders."
+              : "Pick items, choose pickup or delivery, and it goes straight to AMBIT."}
+          </span>
         </div>
         <span className="go"><ArrowRight size={22} /></span>
       </Link>
@@ -111,7 +117,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <div className="eyebrow">Your last order</div>
           <div className="card col" style={{ gap: 10 }}>
             <div className="row between">
-              <Link href={`/orders/${lastOrder.id}`} style={{ color: "#fff", fontWeight: 800 }}>{orderNo(lastOrder.order_no)}</Link>
+              <Link href={`/orders/${lastOrder.id}`} style={{ color: "var(--text)", fontWeight: 800 }}>{orderNo(lastOrder.order_no)}</Link>
               <StatusPill status={lastOrder.status} />
             </div>
             <div className="small muted ellipsis">

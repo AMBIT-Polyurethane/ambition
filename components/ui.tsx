@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Icon } from "@/components/icons";
+import { docState } from "@/lib/order-doc/types";
+import type { Order } from "@/lib/types";
 
 export function TopBar({ title, back, right }: { title: string; back?: string; right?: React.ReactNode }) {
   return (
@@ -20,7 +22,7 @@ export function Empty({ icon = "box", title, children }: { icon?: string; title:
   return (
     <div className="empty">
       <div className="ic"><Icon name={icon} size={26} /></div>
-      <div style={{ fontWeight: 800, color: "#fff" }}>{title}</div>
+      <div style={{ fontWeight: 800, color: "var(--text)" }}>{title}</div>
       {children ? <div className="small">{children}</div> : null}
     </div>
   );
@@ -51,4 +53,13 @@ export function StatusPill({ status }: { status: string }) {
   const cls = status === "completed" ? "pill ok" : status === "cancelled" ? "pill grey" : status === "processing" ? "pill warn" : "pill";
   const label = { new: "New", processing: "Processing", completed: "Completed", cancelled: "Cancelled" }[status] ?? status;
   return <span className={cls}>{label}</span>;
+}
+
+/** Shown next to the order status while the customer still has to approve. */
+export function ApprovalPill({ order }: { order: Pick<Order, "status" | "approval_status" | "approval_expires_at"> }) {
+  const st = docState(order);
+  if (st === "pending") return <span className="pill warn">Needs approval</span>;
+  if (st === "expired") return <span className="pill warn">Approval expired</span>;
+  if (st === "changes_requested") return <span className="pill">Changes asked</span>;
+  return null;
 }

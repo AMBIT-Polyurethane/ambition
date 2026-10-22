@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { Icon } from "@/components/icons";
 import type { Course } from "@/lib/types";
+import { BrandImg } from "@/components/brand";
 
 export const metadata = { title: "AMBIT Academy" };
 
@@ -15,7 +16,7 @@ export default async function AcademyPage() {
   return (
     <main className="shell">
       <div className="col" style={{ alignItems: "center", gap: 10, paddingTop: 10 }}>
-        <img src="/brand/academy-mark.png" alt="" style={{ width: 150, height: "auto" }} />
+        <BrandImg art="academy-mark" style={{ width: 150, height: "auto" }} />
         <div className="wordmark" style={{ fontSize: 22 }}>AMBIT <span>ACADEMY</span></div>
         <p className="muted small center" style={{ margin: 0, maxWidth: 340 }}>
           Short building-science courses with quizzes and certificates, for AMBIT staff and contractor crews.

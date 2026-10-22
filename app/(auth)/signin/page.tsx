@@ -6,6 +6,7 @@ import { Submit } from "@/components/forms";
 import { MICROSOFT_SIGNIN } from "@/lib/env";
 import { getSession } from "@/lib/session";
 import { safeNext } from "@/lib/origin";
+import { BrandImg } from "@/components/brand";
 
 export const metadata = { title: "Sign in" };
 
@@ -30,7 +31,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
     <main className="auth">
       <div className="swoosh" aria-hidden="true" />
       <div className="col" style={{ alignItems: "center", gap: 14, marginTop: 36, position: "relative" }}>
-        <img src="/brand/atom-mark.png" alt="" width={104} height={104} />
+        <BrandImg art="atom-mark" width={104} height={104} />
         <div className="wordmark" style={{ fontSize: 34 }}>AMBIT<span>ION</span></div>
         <p className="muted center small" style={{ maxWidth: 280, margin: 0 }}>
           Ordering, product docs and training from AMBIT Polyurethane.
@@ -68,7 +69,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
       </div>
 
       <div style={{ marginTop: "auto", paddingTop: 36, display: "flex", justifyContent: "center", position: "relative" }}>
-        <img src="/brand/logo-white.png" alt="AMBIT Polyurethane" style={{ height: 26, width: "auto", opacity: 0.9 }} />
+        <BrandImg art="logo" alt="AMBIT Polyurethane" style={{ height: 26, width: "auto", opacity: 0.9 }} />
       </div>
     </main>
   );

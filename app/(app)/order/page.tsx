@@ -1,5 +1,6 @@
 import { requireActive, isEmployee } from "@/lib/session";
 import { OrderBuilder, type CatalogProduct } from "@/components/order-builder";
+import { approvalsEnabled } from "@/lib/order-send";
 import type { OrderCustomer } from "@/lib/customers";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
@@ -50,6 +51,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       branches={(branches ?? []) as Branch[]}
       companies={emp ? ((companiesRes.data ?? []) as Company[]).map(toOrderCustomer) : null}
       isEmployee={emp}
+      approvals={emp && approvalsEnabled()}
       me={{
         name: profile.full_name ?? profile.email,
         email: profile.email,

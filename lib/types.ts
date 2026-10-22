@@ -90,7 +90,21 @@ export type Order = {
   email_status: string;
   email_error: string | null;
   created_at: string;
+  // Customer approval (added in migration 0010; missing on databases that haven't run it yet)
+  approval_status?: ApprovalStatus;
+  approval_method?: "email_link" | "in_app" | "staff_recorded" | null;
+  approval_email?: string | null;
+  approval_sent_at?: string | null;
+  approval_expires_at?: string | null;
+  approval_email_status?: string | null;
+  approval_email_error?: string | null;
+  approved_at?: string | null;
+  approved_by_name?: string | null;
+  approval_note?: string | null;
+  approval_ref?: string | null;
 };
+
+export type ApprovalStatus = "not_required" | "pending" | "approved" | "changes_requested";
 
 export type OrderItem = {
   id: number;

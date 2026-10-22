@@ -29,6 +29,8 @@ type Props = {
   branches: Branch[];
   companies: OrderCustomer[] | null;
   isEmployee: boolean;
+  /** Staff orders go to the customer to approve before AMBIT orders gets them. */
+  approvals: boolean;
   me: {
     name: string;
     email: string;
@@ -69,7 +71,7 @@ function Stepper({ qty, onChange, label }: { qty: number; onChange: (n: number) 
 }
 
 export function OrderBuilder(props: Props) {
-  const { products, categories, branches, companies, isEmployee, me } = props;
+  const { products, categories, branches, companies, isEmployee, approvals, me } = props;
   const router = useRouter();
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
@@ -90,6 +92,8 @@ export function OrderBuilder(props: Props) {
   const [companyId, setCompanyId] = useState(props.reorderCompany ?? "");
   const [customerList, setCustomerList] = useState<OrderCustomer[]>(companies ?? []);
   const [autoAddress, setAutoAddress] = useState("");
+  const [approvalEmail, setApprovalEmail] = useState("");
+  const [autoEmail, setAutoEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -125,6 +129,14 @@ export function OrderBuilder(props: Props) {
   useEffect(() => {
     if (customer?.default_branch_id) setBranchId(customer.default_branch_id);
   }, [customer?.default_branch_id]);
+
+  // The approval email starts as the customer's email on file (editable, same rule as the address).
+  const fileEmail = (customer?.email ?? "").trim();
+  useEffect(() => {
+    setApprovalEmail((cur) => (cur.trim() === "" || cur === autoEmail ? fileEmail : cur));
+    setAutoEmail(fileEmail);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileEmail]);
 
   // Ship-to starts as the address on file (the chosen customer's, or a contractor's own company's).
   // It stays editable; once someone types their own address, switching customers no longer overwrites it.
@@ -170,10 +182,11 @@ export function OrderBuilder(props: Props) {
         notes,
         companyId: isEmployee ? companyId : "",
         customerName: "",
+        approvalEmail: isEmployee && approvals ? approvalEmail : "",
       });
       if (res.ok) {
         writeCart({});
-        router.push(`/orders/${res.id}?sent=1`);
+        router.push(`/orders/${res.id}?sent=${res.mode === "approval" ? "approval" : "1"}${res.warning ? "&warn=1" : ""}`);
       } else {
         setError(res.error);
       }
@@ -290,15 +303,19 @@ export function OrderBuilder(props: Props) {
               </button>
             ))}
           </div>
-          {delivery === "pickup" ? (
-            <div className="chips" role="radiogroup" aria-label="Pickup branch" style={{ flexWrap: "wrap" }}>
-              {branches.map((b) => (
-                <button key={b.id} type="button" role="radio" aria-checked={branchId === b.id} className={`chip${branchId === b.id ? " on" : ""}`} onClick={() => setBranchId(b.id)}>
-                  {b.name}, {b.state}
-                </button>
-              ))}
+          {delivery !== "dropship" ? (
+            <div className="col tight">
+              {delivery === "jobsite" ? <span className="label">Ships from</span> : null}
+              <div className="chips" role="radiogroup" aria-label={delivery === "pickup" ? "Pickup branch" : "Ships from branch"} style={{ flexWrap: "wrap" }}>
+                {branches.map((b) => (
+                  <button key={b.id} type="button" role="radio" aria-checked={branchId === b.id} className={`chip${branchId === b.id ? " on" : ""}`} onClick={() => setBranchId(b.id)}>
+                    {b.name}, {b.state}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
+          ) : null}
+          {delivery === "pickup" ? null : (
             <label className="field">
               <span className="label">{delivery === "jobsite" ? "Job site address" : "Ship-to address"}</span>
               <textarea className="textarea" rows={3} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street, city, state, ZIP. Add a site contact if helpful." />
@@ -335,16 +352,42 @@ export function OrderBuilder(props: Props) {
           </label>
         </section>
 
+        {isEmployee && approvals ? (
+          <section className="section">
+            <div className="eyebrow">Customer approval</div>
+            <label className="field">
+              <span className="label">Send the approval email to</span>
+              <input
+                className="input"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                value={approvalEmail}
+                onChange={(e) => setApprovalEmail(e.target.value)}
+                placeholder="customer@company.com"
+              />
+            </label>
+            <p className="tiny faint" style={{ margin: 0 }}>
+              {customer && !fileEmail ? "No email on file for this customer. Type the person who should approve it. " : ""}
+              They get the order with an Approve button. It goes to orders@ambitpu.com once they approve.
+            </p>
+          </section>
+        ) : null}
+
         {error ? (
           <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{error}</span></div>
         ) : null}
 
         <div className="col" style={{ gap: 8 }}>
           <button type="button" className="btn block" disabled={pending || lineCount === 0} onClick={submit}>
-            {pending ? "Sending…" : "Send order to AMBIT"}
+            {pending ? "Sending…" : !isEmployee ? "Approve order" : approvals ? "Send to customer for approval" : "Send order to AMBIT"}
           </button>
           <p className="tiny faint center" style={{ margin: 0 }}>
-            Goes to orders@ambitpu.com{forName ? ` for ${forName}` : ""}. A copy goes to {me.email}.
+            {!isEmployee
+              ? `Approving confirms the items, quantities and delivery details. It goes to orders@ambitpu.com and a copy goes to ${me.email}.`
+              : approvals
+                ? `${forName ? `${forName} gets` : "The customer gets"} an email to approve. You get a copy at ${me.email}.`
+                : `Goes to orders@ambitpu.com${forName ? ` for ${forName}` : ""}. A copy goes to ${me.email}.`}
           </p>
         </div>
         {lightbox}

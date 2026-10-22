@@ -1,4 +1,4 @@
-/* AMBITION - dark AMBIT theme */
+/* AMBITION - AMBIT theme: dark by default, light mode in Profile > Appearance */
 :root {
   --bg: #0a0a0b;
   --s1: #141416;
@@ -19,7 +19,81 @@
   --radius: 14px;
   --tabbar: 76px;
   --font: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --line-hover: #3a3a40;
+  --placeholder: #6e6e78;
+  --err-text: #ffb4ad;
+  --ok-text: #a6f0b2;
+  --warn-text: #f7d58a;
+  --tabbar-bg: rgba(10, 10, 11, 0.94);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --search-cancel: invert(1);
   color-scheme: dark;
+}
+
+/* Light mode (Profile > Appearance). "Match my device" follows the phone or computer setting. */
+:root[data-theme="light"],
+.theme-light {
+  --bg: #f4f4f6;
+  --s1: #ffffff;
+  --s2: #efeff2;
+  --s3: #e4e4e8;
+  --line: #dedee3;
+  --line-hover: #c8c8cf;
+  --text: #0a0a0b;
+  --text2: #4f4f57;
+  --text3: #6f6f78;
+  --placeholder: #9a9aa3;
+  --red-hot: #c92a1d;
+  --red-soft: rgba(227, 53, 39, 0.1);
+  --red-text: #c4281b;
+  --ok: #15803d;
+  --ok-soft: rgba(21, 128, 61, 0.1);
+  --warn: #b45309;
+  --warn-soft: rgba(180, 83, 9, 0.1);
+  --err-text: #9f1d12;
+  --ok-text: #166534;
+  --warn-text: #92400e;
+  --tabbar-bg: rgba(255, 255, 255, 0.94);
+  --shadow: 0 10px 28px rgba(10, 10, 11, 0.18);
+  --search-cancel: none;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --bg: #f4f4f6;
+    --s1: #ffffff;
+    --s2: #efeff2;
+    --s3: #e4e4e8;
+    --line: #dedee3;
+    --line-hover: #c8c8cf;
+    --text: #0a0a0b;
+    --text2: #4f4f57;
+    --text3: #6f6f78;
+    --placeholder: #9a9aa3;
+    --red-hot: #c92a1d;
+    --red-soft: rgba(227, 53, 39, 0.1);
+    --red-text: #c4281b;
+    --ok: #15803d;
+    --ok-soft: rgba(21, 128, 61, 0.1);
+    --warn: #b45309;
+    --warn-soft: rgba(180, 83, 9, 0.1);
+    --err-text: #9f1d12;
+    --ok-text: #166534;
+    --warn-text: #92400e;
+    --tabbar-bg: rgba(255, 255, 255, 0.94);
+    --shadow: 0 10px 28px rgba(10, 10, 11, 0.18);
+    --search-cancel: none;
+    color-scheme: light;
+  }
+}
+
+/* Logos: white-ink artwork on dark, dark-ink artwork on light. */
+.on-light { display: none !important; }
+:root[data-theme="light"] .on-dark { display: none !important; }
+:root[data-theme="light"] .on-light { display: inline-block !important; }
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .on-dark { display: none !important; }
+  :root[data-theme="system"] .on-light { display: inline-block !important; }
 }
 
 * { box-sizing: border-box; }
@@ -38,7 +112,7 @@ a:hover { color: var(--red-hot); }
 button, input, select, textarea { font-family: inherit; font-size: 16px; color: inherit; }
 img { max-width: 100%; }
 :focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
-::placeholder { color: #6e6e78; }
+::placeholder { color: var(--placeholder); }
 
 /* ---------- Page shells ---------- */
 .shell {
@@ -166,7 +240,7 @@ button.item { width: 100%; background: none; border: 0; text-align: left; cursor
   color: var(--text);
   position: relative;
 }
-a.tile:hover { background: var(--s2); color: var(--text); border-color: #3a3a40; }
+a.tile:hover { background: var(--s2); color: var(--text); border-color: var(--line-hover); }
 .tile .ic { width: 40px; height: 40px; border-radius: 11px; background: var(--red-soft); color: var(--red-text); display: grid; place-items: center; }
 .tile .t { font-size: 15px; font-weight: 700; line-height: 1.2; }
 .tile .s { font-size: 12px; color: var(--text2); }
@@ -277,12 +351,12 @@ a.tile:hover { background: var(--s2); color: var(--text); border-color: #3a3a40;
 .btn:hover { background: #ea3b2c; color: #fff; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.block { width: 100%; }
-.btn.ghost { background: transparent; border: 1.5px solid #fff; color: var(--red-text); }
-.btn.ghost:hover { background: rgba(255, 255, 255, 0.06); }
+.btn.ghost { background: transparent; border: 1.5px solid var(--text); color: var(--red-text); }
+.btn.ghost:hover { background: var(--s2); }
 .btn.dark { background: var(--s2); border: 1px solid var(--line); color: var(--text); }
 .btn.dark:hover { background: var(--s3); }
 .btn.sm { height: 40px; padding: 0 14px; font-size: 12px; border-radius: 10px; letter-spacing: 0.1em; }
-.btn.ms { background: #fff; color: #18181b; letter-spacing: 0.02em; text-transform: none; font-weight: 700; }
+.btn.ms { background: #fff; color: #18181b; letter-spacing: 0.02em; text-transform: none; font-weight: 700; border: 1px solid var(--line); }
 .btn.ms:hover { background: #ececee; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--red-text); font-weight: 700; cursor: pointer; font-size: 14px; }
 
@@ -291,15 +365,15 @@ a.tile:hover { background: var(--s2); color: var(--text); border-color: #3a3a40;
 .seg button.on { background: var(--red); color: #fff; }
 
 .alert { border-radius: 12px; padding: 12px 14px; font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
-.alert.err { background: var(--red-soft); color: #ffb4ad; border: 1px solid rgba(227, 53, 39, 0.4); }
-.alert.ok { background: var(--ok-soft); color: #a6f0b2; border: 1px solid rgba(63, 185, 80, 0.35); }
+.alert.err { background: var(--red-soft); color: var(--err-text); border: 1px solid rgba(227, 53, 39, 0.4); }
+.alert.ok { background: var(--ok-soft); color: var(--ok-text); border: 1px solid rgba(63, 185, 80, 0.35); }
 .alert.info { background: var(--s1); color: var(--text2); border: 1px solid var(--line); }
-.alert.warn { background: var(--warn-soft); color: #f7d58a; border: 1px solid rgba(227, 160, 8, 0.35); }
+.alert.warn { background: var(--warn-soft); color: var(--warn-text); border: 1px solid rgba(227, 160, 8, 0.35); }
 
 /* ---------- Tab bar ---------- */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  background: rgba(10, 10, 11, 0.94);
+  background: var(--tabbar-bg);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-top: 1px solid var(--line);
@@ -307,7 +381,7 @@ a.tile:hover { background: var(--s2); color: var(--text); border-color: #3a3a40;
 }
 .tabbar nav { max-width: 560px; margin: 0 auto; height: var(--tabbar); display: grid; grid-template-columns: repeat(5, 1fr); }
 .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--text3); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; position: relative; }
-.tabbar a.on { color: #fff; }
+.tabbar a.on { color: var(--text); }
 .tabbar a.on::before { content: ""; position: absolute; top: 0; width: 28px; height: 3px; border-radius: 0 0 3px 3px; background: var(--red); }
 .tabbar .badge { position: absolute; top: 10px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font-size: 11px; font-weight: 800; display: grid; place-items: center; }
 
@@ -340,7 +414,7 @@ a.tile:hover { background: var(--s2); color: var(--text); border-color: #3a3a40;
   padding: 0 20px;
 }
 .cartbar .inner { max-width: 520px; margin: 0 auto; }
-.cartbar .btn { width: 100%; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); justify-content: space-between; }
+.cartbar .btn { width: 100%; box-shadow: var(--shadow); justify-content: space-between; }
 .cartbar .count { background: rgba(255, 255, 255, 0.22); border-radius: 8px; padding: 4px 9px; font-size: 13px; letter-spacing: 0.02em; }
 
 /* ---------- Tables (admin) ---------- */
@@ -386,9 +460,17 @@ button.thumb-btn { padding: 0; border: 0; background: none; cursor: zoom-in; bor
 /* Customer picker (order screen, AMBIT staff) */
 .cust-search { position: relative; }
 .cust-search-ic { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
-.cust-search input[type="search"]::-webkit-search-cancel-button { filter: invert(1); opacity: 0.6; }
+.cust-search input[type="search"]::-webkit-search-cancel-button { filter: var(--search-cancel); opacity: 0.6; }
 .cust-list { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
 .cust-opt { min-height: 54px; }
 .cust-opt.on { background: var(--s2); }
 .cust-card .pill { display: inline-flex; }
 .addr-hint { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+
+/* Appearance picker (Profile) */
+.seg.theme button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+
+/* Customer approval page (/approve/...): always light, like the printed order */
+.approve-page { min-height: 100dvh; background: var(--bg); color: var(--text); }
+body:has(.approve-page) { background: #f4f4f6; }
+details > summary.linkbtn { display: inline-block; }

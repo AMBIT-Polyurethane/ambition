@@ -1,5 +1,6 @@
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/env";
 import { redirect } from "next/navigation";
+import { BrandImg } from "@/components/brand";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ export default function SetupPage() {
   return (
     <main className="auth">
       <div className="col" style={{ gap: 16, marginTop: 40 }}>
-        <img src="/brand/atom-mark.png" alt="" width={88} height={88} />
+        <BrandImg art="atom-mark" width={88} height={88} />
         <h1 className="h1">
           <span className="wordmark">AMBIT<span>ION</span></span> is almost ready
         </h1>

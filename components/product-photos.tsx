@@ -111,7 +111,7 @@ export function BulkPhotoUpload({ skus }: { skus: string[] }) {
       </label>
       {matched.length || unmatched.length ? (
         <div className="small muted">
-          <b style={{ color: "#fff" }}>{matched.length}</b> matched to a SKU
+          <b style={{ color: "var(--text)" }}>{matched.length}</b> matched to a SKU
           {unmatched.length ? <> · {unmatched.length} not matched ({unmatched.slice(0, 4).join(", ")}{unmatched.length > 4 ? "…" : ""})</> : null}
         </div>
       ) : null}

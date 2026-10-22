@@ -3,6 +3,8 @@ import { requireActive, isEmployee } from "@/lib/session";
 import { initials } from "@/lib/format";
 import { ListLink, TopBar } from "@/components/ui";
 import { ProfileForm } from "@/components/profile-form";
+import { ThemePicker } from "@/components/theme-picker";
+import { getTheme } from "@/lib/theme-server";
 
 export const metadata = { title: "Profile" };
 
@@ -11,6 +13,7 @@ export default async function ProfilePage() {
   const emp = isEmployee(profile);
   const { data: branches } = await supabase.from("branches").select("id, name, state").eq("active", true).order("sort");
   const usesPassword = (user.identities ?? []).some((i) => i.provider === "email");
+  const theme = await getTheme();
 
   return (
     <main className="shell">
@@ -36,6 +39,8 @@ export default async function ProfilePage() {
 
       <ProfileForm profile={profile} branches={branches ?? []} employee={emp} />
 
+      <ThemePicker current={theme} />
+
       <div className="list">
         <ListLink href="/orders" icon="cart" title={emp ? "Orders" : "My orders"} sub="History and reorder" />
         {emp ? <ListLink href="/directory" icon="users" title="Company directory" /> : null}
@@ -44,7 +49,7 @@ export default async function ProfilePage() {
       </div>
 
       <div className="card small muted">
-        <b style={{ color: "#fff" }}>Put AMBITION on your home screen.</b> iPhone: open this site in Safari, tap Share, then
+        <b style={{ color: "var(--text)" }}>Put AMBITION on your home screen.</b> iPhone: open this site in Safari, tap Share, then
         &ldquo;Add to Home Screen&rdquo;. Android: tap the ⋮ menu in Chrome, then &ldquo;Install app&rdquo;.
       </div>
 
