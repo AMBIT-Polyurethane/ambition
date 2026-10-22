@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, CircleAlert, Minus, Plus, Search, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleAlert, MapPin, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
-import { readCart, writeCart, type Cart } from "@/lib/cart";
+import { readCart, writeCart, readOrderBranch, writeOrderBranch, type Cart } from "@/lib/cart";
 import { money } from "@/lib/format";
 import { placeOrder } from "@/app/(app)/order/actions";
 import { CustomerPicker } from "@/components/customer-picker";
@@ -77,14 +77,16 @@ export function OrderBuilder(props: Props) {
 
   const [cart, setCart] = useState<Cart>({});
   const [loaded, setLoaded] = useState(false);
-  const [step, setStep] = useState<"catalog" | "review">("catalog");
+  // Staff start by picking the AMBIT location; contractors order from their own region's location.
+  const [step, setStep] = useState<"location" | "catalog" | "review">(isEmployee ? "location" : "catalog");
   const [cat, setCat] = useState("all");
   const [q, setQ] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [zoom, setZoom] = useState<CatalogProduct | null>(null);
 
   const [delivery, setDelivery] = useState<"pickup" | "jobsite" | "dropship">("pickup");
-  const [branchId, setBranchId] = useState(me.defaultBranch ?? branches[0]?.id ?? "");
+  const [branchId, setBranchId] = useState(isEmployee ? "" : me.defaultBranch ?? branches[0]?.id ?? "");
+  const [lastBranch, setLastBranch] = useState<string | null>(null);
   const [address, setAddress] = useState("");
   const [po, setPo] = useState("");
   const [neededBy, setNeededBy] = useState("");
@@ -119,16 +121,25 @@ export function OrderBuilder(props: Props) {
       for (const [id, n] of Object.entries(saved)) if (byId.has(id) && n > 0) valid[id] = n;
       setCart(valid);
     }
+    if (isEmployee) {
+      const last = readOrderBranch();
+      if (last && branches.some((b) => b.id === last)) setLastBranch(last);
+    }
     setLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const customer = isEmployee ? customerList.find((c) => c.id === companyId) ?? null : null;
 
-  // Employees: default the pickup branch to the chosen customer's branch.
-  useEffect(() => {
-    if (customer?.default_branch_id) setBranchId(customer.default_branch_id);
-  }, [customer?.default_branch_id]);
+  const branch = branches.find((b) => b.id === branchId) ?? null;
+  const branchLabel = (b: Branch | null | undefined) => (b ? `${b.name}, ${b.state}` : "");
+  const pickLocation = (id: string) => {
+    setBranchId(id);
+    setLastBranch(id);
+    writeOrderBranch(id);
+    setStep("catalog");
+    window.scrollTo(0, 0);
+  };
 
   // The approval email starts as the customer's email on file (editable, same rule as the address).
   const fileEmail = (customer?.email ?? "").trim();
@@ -219,6 +230,46 @@ export function OrderBuilder(props: Props) {
     </div>
   ) : null;
 
+  // ---------------------------------------------------------------- location
+  if (step === "location") {
+    return (
+      <main className="shell">
+        <header className="topbar">
+          <h1 className="title" style={{ margin: 0 }}>Order for a customer</h1>
+        </header>
+        <section className="section">
+          <div className="h2">Which location?</div>
+          <p className="muted small" style={{ margin: 0 }}>Pick the AMBIT location this order will be picked up from or shipped from.</p>
+          {branches.length === 0 ? (
+            <div className="card muted small">No locations are set up yet. An admin can add them in the database.</div>
+          ) : (
+            <div className="list" aria-label="AMBIT locations">
+              {branches.map((b) => {
+                const current = b.id === branchId;
+                const last = !branchId && b.id === lastBranch;
+                return (
+                  <button key={b.id} type="button" className={`item loc-pick${current ? " on" : ""}`} onClick={() => pickLocation(b.id)}>
+                    <div className="ic"><MapPin size={20} /></div>
+                    <div className="grow col tight" style={{ minWidth: 0 }}>
+                      <span className="t">{b.name}, {b.state}</span>
+                      {b.address ? <span className="s loc-addr">{b.address}</span> : null}
+                    </div>
+                    {current ? <span className="pill ok">Picked</span> : last ? <span className="pill grey">Last used</span> : null}
+                    <ChevronRight size={18} className="chev" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {loaded && lineCount > 0 && !branchId ? (
+            <p className="tiny faint" style={{ margin: 0 }}>Your unfinished order ({lineCount} {lineCount === 1 ? "item" : "items"}) is still saved. Pick a location to keep going.</p>
+          ) : null}
+        </section>
+        {lightbox}
+      </main>
+    );
+  }
+
   // ------------------------------------------------------------------ review
   if (step === "review") {
     const forName = !isEmployee ? me.company?.name ?? "" : customer?.name ?? "";
@@ -240,6 +291,7 @@ export function OrderBuilder(props: Props) {
               onChange={setCompanyId}
               onAdded={(c) => setCustomerList((list) => (list.some((x) => x.id === c.id) ? list : [...list, c].sort((a, b) => a.name.localeCompare(b.name))))}
               branches={branches}
+              defaultBranch={branchId}
             />
           </section>
         ) : (
@@ -303,7 +355,26 @@ export function OrderBuilder(props: Props) {
               </button>
             ))}
           </div>
-          {delivery !== "dropship" ? (
+          {isEmployee ? (
+            delivery === "dropship" ? (
+              <p className="tiny faint" style={{ margin: 0 }}>Drop ship goes straight from the supplier, not from an AMBIT location.</p>
+            ) : (
+              <div className="loc-line">
+                <MapPin size={18} />
+                <div className="grow col tight" style={{ minWidth: 0 }}>
+                  <span className="tiny faint">{delivery === "pickup" ? "Picked up at" : "Ships from"}</span>
+                  <b>{branch ? branchLabel(branch) : "No location picked"}</b>
+                  {customer?.default_branch_id && customer.default_branch_id !== branchId && branches.some((b) => b.id === customer.default_branch_id) ? (
+                    <span className="tiny faint">
+                      {customer.name} usually orders from {branchLabel(branches.find((b) => b.id === customer.default_branch_id))}.{" "}
+                      <button type="button" className="linkbtn tiny" onClick={() => customer.default_branch_id && setBranchId(customer.default_branch_id)}>Use that location</button>
+                    </span>
+                  ) : null}
+                </div>
+                <button type="button" className="linkbtn small" onClick={() => { setStep("location"); window.scrollTo(0, 0); }}>Change</button>
+              </div>
+            )
+          ) : delivery !== "dropship" ? (
             <div className="col tight">
               {delivery === "jobsite" ? <span className="label">Ships from</span> : null}
               <div className="chips" role="radiogroup" aria-label={delivery === "pickup" ? "Pickup branch" : "Ships from branch"} style={{ flexWrap: "wrap" }}>
@@ -402,6 +473,13 @@ export function OrderBuilder(props: Props) {
         <div className="topbar">
           <h1 className="title" style={{ margin: 0 }}>{isEmployee ? "Order for a customer" : "Place an order"}</h1>
         </div>
+        {isEmployee ? (
+          <button type="button" className="loc-bar" onClick={() => { setStep("location"); window.scrollTo(0, 0); }} aria-label={`Location: ${branchLabel(branch)}. Change location`}>
+            <MapPin size={15} />
+            <span className="grow">From <b>{branch ? branchLabel(branch) : "no location"}</b></span>
+            <span className="linkbtn small">Change</span>
+          </button>
+        ) : null}
         <div className="search">
           <Search size={18} />
           <input className="input" type="search" placeholder="Search products or SKU" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search products" />

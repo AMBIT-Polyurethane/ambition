@@ -12,10 +12,12 @@ type Props = {
   onChange: (id: string) => void;
   onAdded: (c: OrderCustomer) => void;
   branches: Branch[];
+  /** Home branch filled in when adding a new customer (the location the order is from). */
+  defaultBranch?: string;
 };
 
 /** AMBIT staff: type part of a customer's name, account # or city to find them. */
-export function CustomerPicker({ customers, value, onChange, onAdded, branches }: Props) {
+export function CustomerPicker({ customers, value, onChange, onAdded, branches, defaultBranch }: Props) {
   const selected = customers.find((c) => c.id === value) ?? null;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -58,6 +60,7 @@ export function CustomerPicker({ customers, value, onChange, onAdded, branches }
       <NewCustomerForm
         startName={query}
         branches={branches}
+        defaultBranch={defaultBranch}
         onCancel={() => setAdding(false)}
         onSaved={(c, message) => {
           onAdded(c);
@@ -171,11 +174,13 @@ export function CustomerPicker({ customers, value, onChange, onAdded, branches }
 function NewCustomerForm({
   startName,
   branches,
+  defaultBranch,
   onCancel,
   onSaved,
 }: {
   startName: string;
   branches: Branch[];
+  defaultBranch?: string;
   onCancel: () => void;
   onSaved: (c: OrderCustomer, message: string) => void;
 }) {
@@ -186,7 +191,7 @@ function NewCustomerForm({
   const [bill, setBill] = useState("");
   const [same, setSame] = useState(true);
   const [ship, setShip] = useState("");
-  const [branchId, setBranchId] = useState("");
+  const [branchId, setBranchId] = useState(defaultBranch ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 

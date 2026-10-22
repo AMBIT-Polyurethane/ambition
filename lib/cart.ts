@@ -39,3 +39,22 @@ export function onCartChange(fn: () => void): () => void {
     window.removeEventListener("storage", handler);
   };
 }
+
+// The AMBIT location a staff member last ordered from, so it's marked on the "Which location?" screen.
+const BRANCH_KEY = "ambition-order-branch";
+
+export function readOrderBranch(): string | null {
+  try {
+    return window.localStorage.getItem(BRANCH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function writeOrderBranch(id: string) {
+  try {
+    window.localStorage.setItem(BRANCH_KEY, id);
+  } catch {
+    // storage blocked: nothing to remember
+  }
+}

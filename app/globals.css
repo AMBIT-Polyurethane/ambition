@@ -505,3 +505,12 @@ details > summary.linkbtn { display: inline-block; }
 #ambit-splash video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
 #ambit-splash.out { opacity: 0; pointer-events: none; }
 html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { overflow: hidden; }
+
+/* Order for a customer: "Which location?" step */
+.loc-pick { min-height: 68px; }
+.loc-pick.on { background: var(--s2); }
+.loc-pick .loc-addr { white-space: pre-line; overflow-wrap: anywhere; }
+.loc-bar { display: flex; align-items: center; gap: 8px; width: 100%; margin: 2px 0 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--s1); color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.loc-bar svg { color: var(--red-text); flex: none; }
+.loc-line { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--s1); }
+.loc-line > svg { color: var(--red-text); flex: none; margin-top: 2px; }

@@ -150,6 +150,9 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   if (emp && input.companyId === "__other" && !input.customerName.trim()) {
     return { ok: false, error: "Type the customer's name." };
   }
+  if (emp && input.delivery !== "dropship" && !input.branchId) {
+    return { ok: false, error: "Pick the AMBIT location this order is picked up or shipped from." };
+  }
   const neededBy = /^\d{4}-\d{2}-\d{2}$/.test(input.neededBy) ? input.neededBy : null;
   const needsApproval = emp && approvalsEnabled();
   const approvalEmail = String(input.approvalEmail ?? "").trim().slice(0, 200);
