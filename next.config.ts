@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   // pdfkit (inside react-pdf) loads its built-in fonts by a path Vercel's file tracing can't see, so ship them with
   // every server route (PDF downloads, and emails that attach a PDF).
   outputFileTracingIncludes: {
-    "/**": ["./node_modules/pdfkit/js/standard-fonts/*.cjs", "./node_modules/pdfkit/js/data/**"],
+    "/**": ["./node_modules/pdfkit/js/standard-fonts/**", "./node_modules/pdfkit/js/data/**"],
   },
   // The opening animation files rarely change; let phones keep them for a week.
   async headers() {
