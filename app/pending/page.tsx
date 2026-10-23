@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Clock, Lock } from "lucide-react";
 import { getSession } from "@/lib/session";
 import { firstName } from "@/lib/format";
+import { DeleteAccount } from "@/components/delete-account";
 
 export const metadata = { title: "Account pending" };
 
@@ -35,6 +36,7 @@ export default async function PendingPage() {
         <form action="/auth/signout" method="post">
           <button className="btn dark block" type="submit">Sign out</button>
         </form>
+        <DeleteAccount email={s.user.email ?? s.profile?.email ?? ""} />
       </div>
     </main>
   );

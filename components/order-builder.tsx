@@ -9,6 +9,7 @@ import { money } from "@/lib/format";
 import { placeOrder } from "@/app/(app)/order/actions";
 import { CustomerPicker } from "@/components/customer-picker";
 import { addressOnFile, type OrderCustomer } from "@/lib/customers";
+import { bagsFor, parseSqft, sqftText } from "@/lib/sqft";
 import type { Branch, Category } from "@/lib/types";
 
 export type CatalogProduct = {
@@ -21,6 +22,7 @@ export type CatalogProduct = {
   image_url: string | null;
   list_price: number | null;
   cp: boolean; // "Based on customer pricing"
+  sqft: number | null; // batts: square feet per bag (order by bags or by square feet)
 };
 
 type Props = {
@@ -66,6 +68,48 @@ function Stepper({ qty, onChange, label }: { qty: number; onChange: (n: number) 
       <button type="button" aria-label={`One more ${label}`} onClick={() => onChange(qty + 1)}>
         <Plus size={16} />
       </button>
+    </div>
+  );
+}
+
+/**
+ * Batts: type the square feet the job needs and the bag count fills in (always rounded up to whole bags).
+ * Changing the bags with the + / - buttons clears the square feet so the two never disagree.
+ */
+function SqftBox({ p, qty, onQty }: { p: CatalogProduct; qty: number; onQty: (n: number) => void }) {
+  const per = p.sqft ?? 0;
+  const [val, setVal] = useState("");
+  const entered = parseSqft(val);
+  const bags = bagsFor(entered, per);
+  useEffect(() => {
+    if (val && bags !== qty) setVal("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qty]);
+  return (
+    <div className="sqft">
+      <label className="sqft-in">
+        <input
+          inputMode="decimal"
+          placeholder="Sq ft"
+          value={val}
+          aria-label={`Square feet of ${p.name}`}
+          onChange={(e) => {
+            setVal(e.target.value);
+            const n = parseSqft(e.target.value);
+            if (n > 0) onQty(bagsFor(n, per));
+          }}
+        />
+        <span>sq ft</span>
+      </label>
+      <span className="sqft-out">
+        {entered > 0 ? (
+          <>
+            = <b>{bags} {bags === 1 ? "bag" : "bags"}</b> <span className="faint">({sqftText(bags * per)} sq ft)</span>
+          </>
+        ) : (
+          <span className="faint">or order by square feet · {sqftText(per)} per bag</span>
+        )}
+      </span>
     </div>
   );
 }
@@ -325,6 +369,8 @@ export function OrderBuilder(props: Props) {
                     ) : (
                       <div className="price faint">Price confirmed on invoice</div>
                     )}
+                    {p.sqft ? <div className="tiny muted" style={{ marginTop: 2 }}>Covers {sqftText(qty * p.sqft)} sq ft</div> : null}
+                    {p.sqft ? <SqftBox p={p} qty={qty} onQty={(n) => setQty(p.id, n)} /> : null}
                   </div>
                   <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
                 </div>
@@ -509,6 +555,7 @@ export function OrderBuilder(props: Props) {
                   <div className="name">{p.name}</div>
                   <div className="desc">{p.description ? p.description : p.sku}</div>
                   <PriceLine p={p} />
+                  {p.sqft ? <SqftBox p={p} qty={qty} onQty={(n) => setQty(p.id, n)} /> : null}
                 </div>
                 {qty > 0 ? (
                   <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />

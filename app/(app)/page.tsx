@@ -56,6 +56,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const staffTiles: (Tile | false)[] = [
     (desk || credit) && { key: "desk", icon: "clipboard", title: "Order desk", sub: "POs, credit checks, scheduling", href: "/orders/desk" },
     can(profile, "prf_approve") && { key: "prfok", icon: "tag", title: "Price approvals", sub: "Approve price requests", href: "/price-requests/approvals" },
+    profile.role === "admin" && { key: "forms", icon: "form", title: "Forms hub", sub: "Credit apps, account setups & all forms", href: "/admin/forms" },
     { key: "dir", icon: "users", title: "Company directory", sub: "Find anyone at AMBIT", href: "/directory" },
     seesOrders(profile) && { key: "orders", icon: "cart", title: "Orders", sub: "Everything sent through AMBITION", href: "/orders" },
     can(profile, "price_requests") && { key: "prf", icon: "tag", title: "My price requests", sub: "View, edit & resubmit", href: "/price-requests" },

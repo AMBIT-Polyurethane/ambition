@@ -94,6 +94,23 @@ Admin → Accounts → AMBIT staff: pick a job role (Admin, CRM, Sales rep, Tech
 and the boxes for what that person sees. Picking a role ticks its boxes; change any box after. Home-screen
 form links can be limited to a box in Admin → Links. Needs `supabase/migrations/0011_roles_and_order_desk.sql`.
 
+### Forms hub (admins)
+
+Admin → Forms hub lists every form in the Jotform account. Credit applications and customer account setup
+forms (found by "credit" or "account setup" in the form name) wait for an admin to approve or decline, with a
+credit limit, terms and a note. Any submission, and any price request, downloads as a printed PDF.
+Needs `supabase/migrations/0012_delete_account_sqft_form_reviews.sql`.
+
+### Batts by square foot
+
+Fiberglass batts take a bag count or a square footage; square feet round up to whole bags. Square feet per
+bag is read from the batt name ("... 240.25 S/F ...") and can be changed in Admin → Products.
+
+### Delete my account
+
+Profile → Delete my account removes the person's login and profile. Orders they placed stay on file.
+The last active admin can't delete themselves.
+
 ### Order desk
 
 Orders move: customer approval → CRM enters the AMBIT PO # → Accounting releases it (or puts it on credit

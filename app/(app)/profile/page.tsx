@@ -4,6 +4,7 @@ import { initials } from "@/lib/format";
 import { ListLink, TopBar } from "@/components/ui";
 import { ProfileForm } from "@/components/profile-form";
 import { ThemePicker } from "@/components/theme-picker";
+import { DeleteAccount } from "@/components/delete-account";
 import { getTheme } from "@/lib/theme-server";
 
 export const metadata = { title: "Profile" };
@@ -56,6 +57,8 @@ export default async function ProfilePage() {
       <form action="/auth/signout" method="post">
         <button className="btn dark block" type="submit"><LogOut size={18} /> Sign out</button>
       </form>
+
+      <DeleteAccount email={profile.email} />
     </main>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CircleAlert, CircleCheck, PencilLine } from "lucide-react";
+import { CircleAlert, CircleCheck, Download, PencilLine } from "lucide-react";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { dateTime, jfDate } from "@/lib/format";
@@ -74,11 +74,16 @@ export default async function PriceRequestPage({
             {review.email_status && review.email_status !== "sent" ? " · rep wasn't emailed" : ""}
           </div>
         ) : null}
-        {mine ? (
-          <Link className="btn dark sm" href={`/price-requests/${id}/edit`} style={{ marginTop: 8, alignSelf: "flex-start" }}>
-            <PencilLine size={15} /> Edit &amp; resubmit
-          </Link>
-        ) : null}
+        <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
+          <a className="btn sm" href={`/price-requests/${id}/pdf`} target="_blank" rel="noopener noreferrer">
+            <Download size={15} /> Download PDF
+          </a>
+          {mine ? (
+            <Link className="btn dark sm" href={`/price-requests/${id}/edit`}>
+              <PencilLine size={15} /> Edit &amp; resubmit
+            </Link>
+          ) : null}
+        </div>
       </section>
 
       {/* Pricing: what the rep asked for, and what was approved */}

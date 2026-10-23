@@ -14,7 +14,7 @@ export type DocCompany = {
 
 /** Everything the printed order, the emails and the approval page need. */
 export type OrderDoc = {
-  order: Omit<Order, "placed_by"> & { placed_by?: string };
+  order: Omit<Order, "placed_by"> & { placed_by?: string | null };
   items: DocItem[];
   branch: Branch | null;
   company: DocCompany | null;

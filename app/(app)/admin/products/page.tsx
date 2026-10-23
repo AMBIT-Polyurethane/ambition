@@ -32,6 +32,10 @@ function ProductFields({ p, cats }: { p?: Product; cats: Category[] }) {
           <option value="no">No - show list price</option>
         </select>
       </label>
+      <label className="field">
+        <span className="label">Sq ft per bag</span>
+        <input className="input sm" name="sqft_per_unit" inputMode="decimal" defaultValue={p?.sqft_per_unit ?? ""} placeholder="Batts only" />
+      </label>
       <label className="field"><span className="label">Sort</span><input className="input sm" name="sort" type="number" defaultValue={p?.sort ?? 0} /></label>
     </div>
   );

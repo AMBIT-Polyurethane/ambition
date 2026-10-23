@@ -66,6 +66,8 @@ export type Product = {
   list_price: number | null;
   customer_priced: boolean | null;
   image_url: string | null;
+  /** Fiberglass batts: square feet one bag covers (lets people order by square feet). */
+  sqft_per_unit?: number | null;
   active: boolean;
   sort: number;
 };
@@ -73,7 +75,7 @@ export type Product = {
 export type Order = {
   id: string;
   order_no: number;
-  placed_by: string;
+  placed_by: string | null;
   company_id: string | null;
   company_name: string;
   account_no: string | null;

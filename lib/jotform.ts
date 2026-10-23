@@ -22,7 +22,7 @@ export type Submission = {
   answers: Record<string, Answer>;
 };
 
-async function api<T>(path: string, revalidate: number | false): Promise<T> {
+export async function api<T>(path: string, revalidate: number | false): Promise<T> {
   const key = process.env.JOTFORM_API_KEY?.trim();
   if (!key) throw new JotformError("The Jotform key isn't set up yet.");
   let res: Response;
@@ -175,7 +175,7 @@ export const editUrl = (id: string) => `${JOTFORM_SITE}/edit/${id}`;
 export const formUrl = () => `${JOTFORM_SITE}/${PRF_FORM_ID}`;
 
 // ------------------------------------------------------------------ answers
-const decode = (s: string) =>
+export const decode = (s: string) =>
   s
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|tr)>/gi, "\n")
@@ -225,7 +225,7 @@ export function answerText(a: Answer | undefined): string {
   return flatten(a.answer);
 }
 
-const LAYOUT = new Set(["control_text", "control_button", "control_pagebreak", "control_divider", "control_image", "control_collapse", "control_captcha", "control_clear", "control_widget_empty"]);
+export const LAYOUT = new Set(["control_text", "control_button", "control_pagebreak", "control_divider", "control_image", "control_collapse", "control_captcha", "control_clear", "control_widget_empty"]);
 
 /** Labeled answers in form order; section headings come through as { heading }. */
 export function answerRows(s: Submission, skip?: Set<string>): ({ heading: string } | { label: string; value: string })[] {

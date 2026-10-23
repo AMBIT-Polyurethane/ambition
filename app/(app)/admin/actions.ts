@@ -10,6 +10,7 @@ import type { DocumentRow, Profile } from "@/lib/types";
 import { DOC_TYPES, fileKind, parseProducts, storageKeyFor } from "@/lib/docs";
 import { CUSTOMER_PRICED_CATEGORIES, normalizeProductRows } from "@/lib/product-import";
 import { PERM_KEYS } from "@/lib/access";
+import { sqftFromName } from "@/lib/sqft";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const n = (f: FormData, k: string) => (s(f, k) === "" ? null : s(f, k));
@@ -219,6 +220,7 @@ export async function saveProduct(form: FormData) {
     customer_priced: cp === "yes" ? true : cp === "no" ? false : null,
     active: id ? form.get("active") === "on" : true,
     sort: num(form.get("sort")) ?? 0,
+    sqft_per_unit: num(form.get("sqft_per_unit")),
   };
   if (!row.sku || !row.name) return;
   if (id) await supabase.from("products").update(row).eq("id", id);
@@ -276,6 +278,18 @@ export async function importProducts(rows: Record<string, string>[], hideMissing
   for (let i = 0; i < payload.length; i += 200) {
     const { error } = await supabase.from("products").upsert(payload.slice(i, i + 200), { onConflict: "sku" });
     if (error) return { ok: false, message: `Import stopped: ${error.message}` };
+  }
+
+  // Batts: fill in square feet per bag from the name ("... 240.25 S/F ...") so they can be ordered by square feet.
+  // Only blanks are filled, so a number an admin typed in stays.
+  const batts = payload
+    .filter((p) => p.category_id === "fiberglass")
+    .map((p) => ({ sku: p.sku, sqft: sqftFromName(p.name) }))
+    .filter((b): b is { sku: string; sqft: number } => b.sqft !== null);
+  for (let i = 0; i < batts.length; i += 10) {
+    await Promise.all(
+      batts.slice(i, i + 10).map((b) => supabase.from("products").update({ sqft_per_unit: b.sqft }).eq("sku", b.sku).is("sqft_per_unit", null)),
+    );
   }
 
   let hidden = 0;

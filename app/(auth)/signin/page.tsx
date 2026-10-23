@@ -39,6 +39,9 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
       </div>
 
       <div className="col" style={{ marginTop: 40, gap: 14, position: "relative" }}>
+        {sp.deleted ? (
+          <div className="alert ok">Your AMBITION account was deleted. Thanks for using AMBITION.</div>
+        ) : null}
         {sp.error === "microsoft" ? (
           <div className="alert err">Microsoft sign-in didn&apos;t finish. Please try again.</div>
         ) : null}

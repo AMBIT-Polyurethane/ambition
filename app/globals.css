@@ -514,3 +514,28 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .loc-bar svg { color: var(--red-text); flex: none; }
 .loc-line { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--s1); }
 .loc-line > svg { color: var(--red-text); flex: none; margin-top: 2px; }
+
+/* Profile: Delete my account */
+.danger-zone { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; background: var(--s1); }
+.danger-zone > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-weight: 700; font-size: 14px; color: var(--red-text); }
+.danger-zone > summary::-webkit-details-marker { display: none; }
+.danger-zone[open] { border-color: var(--red); }
+.btn.danger { background: #b91c1c; color: #fff; }
+.btn.danger:hover { background: #991b1b; }
+.btn.danger:disabled { opacity: 0.45; }
+
+/* Batts: order by square feet */
+.sqft { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; }
+.sqft-in { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.sqft-in:focus-within { border-color: var(--red); }
+.sqft-in input { width: 70px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; font-weight: 700; padding: 0; }
+.sqft-in span { font-size: 12px; color: var(--text3); font-weight: 700; }
+.sqft-out { font-size: 12.5px; color: var(--text2); }
+.sqft-out b { color: var(--text); }
+.pill.red { color: var(--err-text); background: var(--red-soft); }
+
+/* Forms hub */
+.btn.approve { background: #15803d; color: #fff; }
+.btn.approve:hover { background: #166534; }
+.sig-img { display: block; max-width: 240px; max-height: 90px; background: #fff; border-radius: 8px; padding: 6px; border: 1px solid var(--line); }
+.file-link { display: inline-flex; align-items: center; gap: 6px; color: var(--red-text); font-weight: 700; overflow-wrap: anywhere; }

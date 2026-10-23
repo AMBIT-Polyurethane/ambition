@@ -40,6 +40,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
     image_url: p.image_url,
     list_price: p.list_price === null ? null : Number(p.list_price),
     cp: p.customer_priced ?? (p.category_id ? cpByCat.get(p.category_id) ?? false : false),
+    sqft: p.sqft_per_unit != null && Number(p.sqft_per_unit) > 0 ? Number(p.sqft_per_unit) : null,
   }));
 
   const reorderData = reorderRes.data as { order_no: number; company_id: string | null; order_items: { product_id: string | null; qty: number }[] } | null;
