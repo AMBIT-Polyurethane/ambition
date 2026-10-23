@@ -7,7 +7,7 @@ import { jotformReady } from "@/lib/jotform";
 import { KIND_LABEL, formSections, formSubmission, hubForm, jotformEditUrl, reviewable, summarize } from "@/lib/forms";
 import { approveFormReview, clearFormReview, declineFormReview } from "../../actions";
 import { SigImage } from "@/components/sig-image";
-import { TERMS, reviewsFor } from "../../reviews";
+import { TERMS, extraForms, reviewsFor } from "../../reviews";
 
 export const metadata = { title: "Form submission" };
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export default async function FormSubmissionPage({
   const { supabase } = await requireAdmin();
   if (!jotformReady()) notFound();
 
-  const [form, sub] = await Promise.all([hubForm(formId), formSubmission(formId, subId)]);
+  const [form, sub] = await Promise.all([extraForms(supabase).then((x) => hubForm(formId, x)), formSubmission(formId, subId)]);
   if (!form || !sub) notFound();
   const review = reviewable(form.kind);
   const rv = review ? (await reviewsFor(supabase, formId)).get(subId) ?? null : null;

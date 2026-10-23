@@ -6,7 +6,9 @@ import { Icon } from "@/components/icons";
 import { jfDate } from "@/lib/format";
 import { JotformError, jotformReady } from "@/lib/jotform";
 import { KIND_LABEL, formSubmissions, hubForms, reviewable, type HubForm } from "@/lib/forms";
-import { reviewsFor } from "./reviews";
+import { extraForms, reviewsFor } from "./reviews";
+import { addHubForm } from "./actions";
+import { Submit } from "@/components/forms";
 
 export const metadata = { title: "Forms hub" };
 export const dynamic = "force-dynamic";
@@ -14,7 +16,8 @@ export const dynamic = "force-dynamic";
 const ICON: Record<HubForm["kind"], string> = { credit: "card", account: "building", prf: "tag", other: "form" };
 
 /** Admins: every Jotform form in one place. Credit applications and account setups wait here for a decision. */
-export default async function FormsHubPage() {
+export default async function FormsHubPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const { supabase } = await requireAdmin();
 
   if (!jotformReady()) {
@@ -29,7 +32,7 @@ export default async function FormsHubPage() {
   let forms: HubForm[] = [];
   let error = "";
   try {
-    forms = await hubForms();
+    forms = await hubForms(await extraForms(supabase));
   } catch (e) {
     error = e instanceof JotformError ? e.message : "Couldn't load the forms from Jotform.";
   }
@@ -85,6 +88,31 @@ export default async function FormsHubPage() {
         download any submission as a PDF.
       </p>
       {error ? <div className="alert err">{error}</div> : null}
+      {sp.msg ? <div className="alert ok" role="status">{sp.msg}</div> : null}
+      {sp.err ? <div className="alert err" role="alert">{sp.err}</div> : null}
+
+      <details className="card" open={apps.length === 0 || Boolean(sp.err)}>
+        <summary><b>Add a form from Jotform</b> <span className="small muted">· paste its link</span></summary>
+        <form action={addHubForm} className="col" style={{ gap: 10, marginTop: 12 }}>
+          <label className="field">
+            <span className="label">Jotform link or form number</span>
+            <input className="input" name="link" required placeholder="https://ambit-polyurethane.jotform.com/2629..." autoComplete="off" />
+          </label>
+          <label className="field">
+            <span className="label">What kind of form is it?</span>
+            <select className="select" name="kind" defaultValue="credit">
+              <option value="credit">Credit application (approve with limit and terms)</option>
+              <option value="account">Customer account setup (approve with limit and terms)</option>
+              <option value="other">Other form (read and download only)</option>
+            </select>
+          </label>
+          <Submit className="btn block" pendingText="Checking the form…">Add to the hub</Submit>
+          <p className="tiny faint" style={{ margin: 0 }}>
+            In Jotform, open the form and copy the address from the browser bar (or the form&apos;s Publish link). Forms in the app&apos;s own Jotform
+            login and the forms on the home screen show up here by themselves.
+          </p>
+        </form>
+      </details>
 
       <section className="section">
         <div className="eyebrow">Credit &amp; account applications</div>
@@ -92,8 +120,8 @@ export default async function FormsHubPage() {
           <div className="list">{apps.map(row)}</div>
         ) : !error ? (
           <div className="card small muted">
-            No credit application or account setup form was found in Jotform. The app looks for &ldquo;credit&rdquo; or &ldquo;account setup&rdquo; in the
-            form&apos;s name, so renaming the form in Jotform makes it show up here.
+            No credit application or account setup form yet. Paste each form&apos;s Jotform link in &ldquo;Add a form from Jotform&rdquo; above and pick
+            what kind of form it is.
           </div>
         ) : null}
       </section>

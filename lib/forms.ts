@@ -40,31 +40,74 @@ export const KIND_LABEL: Record<FormKind, string> = {
 
 const ORDER: Record<FormKind, number> = { credit: 0, account: 1, prf: 2, other: 3 };
 
-/** Every form in the Jotform account that isn't deleted. Credit and account forms first. */
-export async function hubForms(): Promise<HubForm[]> {
-  const filter = encodeURIComponent(JSON.stringify({ "status:ne": "DELETED" }));
-  const raw = await api<RawForm[]>(`/user/forms?limit=500&filter=${filter}`, 120);
-  return (raw ?? [])
-    .filter((f) => f && f.id && f.status !== "DELETED")
-    .map((f) => {
-      const title = decode(String(f.title ?? "")) || "Untitled form";
-      return {
-        id: String(f.id),
-        title,
-        kind: formKind(String(f.id), title),
-        count: Number(f.count ?? 0) || 0,
-        lastSubmission: f.last_submission ?? null,
-        enabled: f.status === "ENABLED",
-        url: f.url || `${JOTFORM_SITE}/${f.id}`,
-      };
-    })
-    .sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || Number(b.enabled) - Number(a.enabled) || a.title.localeCompare(b.title));
+/** A form the hub should show even if the app's Jotform login doesn't own it, with an optional type an admin picked. */
+export type ExtraForm = { id: string; kind?: FormKind | null };
+
+/** "https://ambit-polyurethane.jotform.com/252896183848172", ".../build/2528...", ".../inbox/2528..." or the bare number. */
+export function formIdFrom(text: string): string | null {
+  const t = String(text ?? "").trim();
+  if (/^\d{10,25}$/.test(t)) return t;
+  const m = t.match(/jotform\.(?:com|us)\/(?:[a-z]+\/)*(\d{10,25})(?:[/?#]|$)/i);
+  return m ? m[1] : null;
 }
 
-export async function hubForm(id: string): Promise<HubForm | null> {
+const toHub = (f: RawForm, kind?: FormKind | null): HubForm => {
+  const title = decode(String(f.title ?? "")) || "Untitled form";
+  return {
+    id: String(f.id),
+    title,
+    kind: String(f.id) === PRF_FORM_ID ? "prf" : kind ?? formKind(String(f.id), title),
+    count: Number(f.count ?? 0) || 0,
+    lastSubmission: f.last_submission ?? null,
+    enabled: f.status === "ENABLED",
+    url: f.url || `${JOTFORM_SITE}/${f.id}`,
+  };
+};
+
+/**
+ * Every form the app can read: the ones the app's Jotform login owns, plus forms listed by id (the price request
+ * form, Jotform links on the home screen, and forms an admin added to the hub). Credit and account forms first.
+ */
+export async function hubForms(extra: ExtraForm[] = []): Promise<HubForm[]> {
+  const kinds = new Map(extra.filter((e) => e.kind).map((e) => [e.id, e.kind as FormKind]));
+  const out = new Map<string, HubForm>();
+  const filter = encodeURIComponent(JSON.stringify({ "status:ne": "DELETED" }));
+  let ownedError: unknown = null;
+  try {
+    const raw = await api<RawForm[]>(`/user/forms?limit=500&filter=${filter}`, 120);
+    for (const f of raw ?? []) if (f && f.id && f.status !== "DELETED") out.set(String(f.id), toHub(f, kinds.get(String(f.id))));
+  } catch (e) {
+    ownedError = e;
+  }
+  const ids = [...new Set([PRF_FORM_ID, ...extra.map((e) => e.id)])].filter((id) => /^\d{6,25}$/.test(id) && !out.has(id));
+  await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const f = await api<RawForm>(`/form/${id}`, 120);
+        if (f && f.id && f.status !== "DELETED") out.set(String(f.id), toHub(f, kinds.get(String(f.id))));
+      } catch {
+        /* a form the key can't open is left out */
+      }
+    }),
+  );
+  if (!out.size && ownedError) throw ownedError;
+  return [...out.values()].sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || Number(b.enabled) - Number(a.enabled) || a.title.localeCompare(b.title));
+}
+
+export async function hubForm(id: string, extra: ExtraForm[] = []): Promise<HubForm | null> {
   if (!/^\d{6,25}$/.test(id)) return null;
-  const all = await hubForms();
+  const all = await hubForms(extra);
   return all.find((f) => f.id === id) ?? null;
+}
+
+/** Reads one form by id (used to check the app's key can open a form before it's added to the hub). */
+export async function formInfo(id: string): Promise<HubForm | null> {
+  try {
+    const f = await api<RawForm>(`/form/${id}`, false);
+    return f && f.id && f.status !== "DELETED" ? toHub(f) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Every live (not deleted) submission of a form, newest first. */

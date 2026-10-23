@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formIdFrom, type ExtraForm, type FormKind } from "@/lib/forms";
 
 export type FormReview = {
   submission_id: string;
@@ -22,3 +23,20 @@ export async function reviewsFor(supabase: SupabaseClient, formId?: string): Pro
 }
 
 export const TERMS = ["Net 10", "Net 15", "Net 30", "Net 45", "Net 60", "Due on receipt", "COD", "Prepay", "Credit card on file"];
+
+/** Forms the hub shows by id: ones an admin added (with the type they picked) and Jotform links on the home screen. */
+export async function extraForms(supabase: SupabaseClient): Promise<ExtraForm[]> {
+  const [added, links] = await Promise.all([
+    supabase.from("hub_forms").select("form_id, kind"),
+    supabase.from("links").select("url").ilike("url", "%jotform%"),
+  ]);
+  const out: ExtraForm[] = [];
+  for (const r of (added.error ? [] : added.data ?? []) as { form_id: string; kind: string | null }[]) {
+    out.push({ id: r.form_id, kind: (["credit", "account", "other"].includes(r.kind ?? "") ? r.kind : null) as FormKind | null });
+  }
+  for (const l of (links.error ? [] : links.data ?? []) as { url: string | null }[]) {
+    const id = formIdFrom(l.url ?? "");
+    if (id && !out.some((o) => o.id === id)) out.push({ id });
+  }
+  return out;
+}

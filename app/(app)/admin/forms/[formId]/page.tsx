@@ -7,7 +7,8 @@ import { Icon } from "@/components/icons";
 import { dateShort, jfDate, money, searchSafe } from "@/lib/format";
 import { JotformError, jotformReady } from "@/lib/jotform";
 import { KIND_LABEL, formSubmissions, hubForm, jotformInboxUrl, reviewable, summarize } from "@/lib/forms";
-import { reviewsFor } from "../reviews";
+import { extraForms, reviewsFor } from "../reviews";
+import { removeHubForm, setHubFormKind } from "../actions";
 
 export const metadata = { title: "Form submissions" };
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export default async function FormSubmissionsPage({
   let error = "";
   let rows: { id: string; created_at: string; title: string; sub: string }[] = [];
   try {
-    form = await hubForm(formId);
+    form = await hubForm(formId, await extraForms(supabase));
     if (!form) notFound();
     if (form.kind === "prf") {
       return (
@@ -87,6 +88,24 @@ export default async function FormSubmissionsPage({
         {form.enabled ? "" : " · turned off in Jotform"}
       </div>
       {error ? <div className="alert err">{error}</div> : null}
+      {sp.msg ? <div className="alert ok" role="status">{sp.msg}</div> : null}
+
+      <details className="card small">
+        <summary><b>Form type</b> <span className="muted">· {form.kind === "other" ? "Other form" : KIND_LABEL[form.kind]}</span></summary>
+        <form action={setHubFormKind} className="row wrap" style={{ gap: 8, marginTop: 10 }}>
+          <input type="hidden" name="form_id" value={formId} />
+          <select className="select sm grow" name="kind" defaultValue={form.kind === "prf" ? "other" : form.kind}>
+            <option value="credit">Credit application (approvals)</option>
+            <option value="account">Customer account setup (approvals)</option>
+            <option value="other">Other form (read and download only)</option>
+          </select>
+          <button className="btn sm" type="submit">Save</button>
+        </form>
+        <form action={removeHubForm} style={{ marginTop: 10 }}>
+          <input type="hidden" name="form_id" value={formId} />
+          <button className="linkbtn tiny" type="submit">Take it off the hub (only works for forms added by link)</button>
+        </form>
+      </details>
 
       {review ? (
         <div className="chips">

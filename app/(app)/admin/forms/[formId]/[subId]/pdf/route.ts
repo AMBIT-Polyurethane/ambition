@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { formSections, formSubmission, hubForm, reviewable, summarize } from "@/lib/forms";
 import { formPdfName, renderFormPdf } from "@/lib/form-doc/pdf";
-import { reviewsFor } from "../../../reviews";
+import { extraForms, reviewsFor } from "../../../reviews";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ formId: 
   if (!s) return NextResponse.redirect(new URL(`/signin?next=${encodeURIComponent(`/admin/forms/${formId}/${subId}/pdf`)}`, req.url));
   if (s.profile?.role !== "admin" || s.profile.status !== "active") return new NextResponse("Admins only", { status: 403 });
 
-  const [form, sub] = await Promise.all([hubForm(formId), formSubmission(formId, subId)]);
+  const [form, sub] = await Promise.all([extraForms(s.supabase).then((x) => hubForm(formId, x)), formSubmission(formId, subId)]);
   if (!form || !sub) return new NextResponse("Not found", { status: 404 });
   const canReview = reviewable(form.kind);
   const review = canReview ? (await reviewsFor(s.supabase, formId)).get(subId) ?? null : null;

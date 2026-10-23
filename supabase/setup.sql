@@ -1625,3 +1625,17 @@ drop policy if exists form_reviews_admin on public.form_reviews;
 create policy form_reviews_admin on public.form_reviews for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
+
+-- ---------------------------------------------------------------- 0013
+create table if not exists public.hub_forms (
+  form_id  text primary key,                          -- Jotform form id
+  kind     text check (kind in ('credit', 'account', 'other')),
+  added_by uuid references public.profiles(id) on delete set null,
+  added_at timestamptz not null default now()
+);
+
+alter table public.hub_forms enable row level security;
+drop policy if exists hub_forms_admin on public.hub_forms;
+create policy hub_forms_admin on public.hub_forms for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+

@@ -99,7 +99,8 @@ form links can be limited to a box in Admin → Links. Needs `supabase/migration
 Admin → Forms hub lists every form in the Jotform account. Credit applications and customer account setup
 forms (found by "credit" or "account setup" in the form name) wait for an admin to approve or decline, with a
 credit limit, terms and a note. Any submission, and any price request, downloads as a printed PDF.
-Needs `supabase/migrations/0012_delete_account_sqft_form_reviews.sql`.
+Forms that belong to a different Jotform login are added by pasting their link in the hub.
+Needs `supabase/migrations/0012_delete_account_sqft_form_reviews.sql` and `0013_hub_forms.sql`.
 
 ### Batts by square foot
 
