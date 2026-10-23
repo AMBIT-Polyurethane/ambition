@@ -21,10 +21,14 @@ export async function GET(req: Request) {
   if (!file) return new NextResponse("Couldn't get that file from Jotform", { status: 502 });
   const name = decodeURIComponent(new URL(u).pathname.split("/").pop() ?? "file").replace(/["\\]/g, "");
   // Pictures and PDFs open in the browser; anything else (could be a web page or script) only downloads.
-  const safe = /^(image\/(png|jpe?g|gif|webp)|application\/pdf)\b/i.test(file.type);
+  // Jotform often labels uploads as plain "octet-stream", so the file's ending decides for those.
+  const byExt: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", pdf: "application/pdf" };
+  const ext = (name.split(".").pop() ?? "").toLowerCase();
+  const type = /octet-stream|^$/i.test(file.type) && byExt[ext] ? byExt[ext] : file.type;
+  const safe = /^(image\/(png|jpe?g|gif|webp)|application\/pdf)\b/i.test(type);
   return new NextResponse(file.body, {
     headers: {
-      "Content-Type": safe ? file.type : "application/octet-stream",
+      "Content-Type": safe ? type : "application/octet-stream",
       "Content-Disposition": `${safe ? "inline" : "attachment"}; filename="${name}"`,
       "Cache-Control": "private, max-age=300",
       "X-Content-Type-Options": "nosniff",

@@ -239,7 +239,8 @@ export function summarize(s: Submission): { title: string; sub: string } {
   const fields = formSections(s).flatMap((x) => x.fields);
   const by = (...tests: RegExp[]) => {
     for (const t of tests) {
-      const f = fields.find((x) => t.test(x.label) && x.value && !x.files && !x.signature);
+      // Skip answers that are really a phone number typed into a name box.
+      const f = fields.find((x) => t.test(x.label) && x.value && !x.files && !x.signature && !/^[\d\s().+-]{7,}$/.test(x.value.trim()));
       if (f) return f.value.split("\n")[0].trim();
     }
     return "";
