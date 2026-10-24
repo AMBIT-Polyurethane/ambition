@@ -9,6 +9,8 @@ import { can, seesOrders } from "@/lib/access";
 import { docProducts } from "@/lib/docs";
 import { arrangeApps, parseLayout } from "@/lib/home-apps";
 import { homeApps } from "@/lib/home-apps-server";
+import { homePromos } from "@/lib/promos";
+import { PromoBanner } from "@/components/promo-banner";
 import type { Course, DocumentRow, Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +57,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const credit = emp && can(profile, "credit_check");
   const count = (q: PromiseLike<{ count: number | null }>) => Promise.resolve(q).then((r) => r.count ?? 0, () => 0);
 
-  const [noRole, needPo, toSchedule, needCredit, pending, newOrders, waitingApps, lastOrderRes, tsbRes, docsRes, coursesRes] = await Promise.all([
+  const [noRole, needPo, toSchedule, needCredit, pending, newOrders, waitingApps, lastOrderRes, tsbRes, docsRes, coursesRes, promos] = await Promise.all([
     admin ? count(supabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "active").eq("role", "employee").is("job_role", null)) : 0,
     desk ? count(supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", "needs_po")) : 0,
     desk ? count(supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", "schedule")) : 0,
@@ -77,6 +79,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     supabase.from("documents").select("id, title, code, published_on, sort").eq("active", true).eq("doc_type", "TSB").order("published_on", { ascending: false, nullsFirst: false }).order("code", { ascending: false }).limit(8),
     supabase.from("documents").select("product, products, doc_type, sort").eq("active", true).order("sort"),
     supabase.from("courses").select("*").order("sort"),
+    homePromos(supabase, profile),
   ]);
 
   const apps = arrangeApps(
@@ -134,6 +137,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <ChevronRight size={18} />
         </Link>
       ) : null}
+
+      <PromoBanner slides={promos} />
 
       {/* Your apps */}
       <section className="section">

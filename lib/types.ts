@@ -70,6 +70,9 @@ export type Product = {
   image_url: string | null;
   /** Fiberglass batts: square feet one bag covers (lets people order by square feet). */
   sqft_per_unit?: number | null;
+  /** On sale: charged this instead of the list price, through sale_ends (blank = until it's removed). */
+  sale_price?: number | null;
+  sale_ends?: string | null;
   active: boolean;
   sort: number;
 };

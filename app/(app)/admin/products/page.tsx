@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/session";
 import { money, searchSafe } from "@/lib/format";
+import { saleOn, todayCentral } from "@/lib/sale";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { CsvImport } from "@/components/csv-import";
@@ -32,6 +33,8 @@ function ProductFields({ p, cats }: { p?: Product; cats: Category[] }) {
           <option value="no">No - show list price</option>
         </select>
       </label>
+      <label className="field"><span className="label">Sale price</span><input className="input sm" name="sale_price" inputMode="decimal" defaultValue={p?.sale_price ?? ""} placeholder="blank = no sale" /></label>
+      <label className="field"><span className="label">Sale ends (last day)</span><input className="input sm" name="sale_ends" type="date" defaultValue={p?.sale_ends ?? ""} /></label>
       <label className="field">
         <span className="label">Sq ft per bag</span>
         <input className="input sm" name="sqft_per_unit" inputMode="decimal" defaultValue={p?.sqft_per_unit ?? ""} placeholder="Batts only" />
@@ -51,6 +54,7 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
   const products = (data ?? []) as Product[];
   const cats = (catData ?? []) as Category[];
   const catName = new Map(cats.map((c) => [c.id, c]));
+  const today = todayCentral();
 
   return (
     <main className="shell wide">
@@ -104,7 +108,14 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
                   <div className="t ellipsis">{p.name}{p.active ? "" : " (hidden)"}</div>
                   <div className="s ellipsis">{p.sku} · {cat?.name ?? "No category"} · {p.unit}</div>
                 </div>
-                <span className="small nowrap">{cp ? <span className="cp-tag" style={{ marginTop: 0 }}>Customer pricing</span> : p.list_price !== null ? money(p.list_price) : <span className="faint">On invoice</span>}</span>
+                <span className="small nowrap">
+                  {saleOn(p.sale_price, p.sale_ends, today) ? (
+                    <span className="col" style={{ alignItems: "flex-end", gap: 2 }}>
+                      <b>{money(Number(p.sale_price))}</b>
+                      <span className="pill red" style={{ fontSize: 10 }}>Sale{p.sale_ends ? ` to ${p.sale_ends.slice(5).replace("-", "/")}` : ""}</span>
+                    </span>
+                  ) : cp ? <span className="cp-tag" style={{ marginTop: 0 }}>Customer pricing</span> : p.list_price !== null ? money(p.list_price) : <span className="faint">On invoice</span>}
+                </span>
               </summary>
               <div style={{ padding: "4px 16px 12px" }}><ProductPhotoField sku={p.sku} url={p.image_url} /></div>
               <form action={saveProduct} className="col" style={{ padding: "0 16px 16px" }}>

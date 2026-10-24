@@ -204,6 +204,7 @@ export async function saveCategory(form: FormData) {
   else await supabase.from("categories").insert({ id: slug(name), ...row });
   revalidatePath("/admin/products");
   revalidatePath("/order");
+  revalidatePath("/");
 }
 
 export async function saveProduct(form: FormData) {
@@ -221,6 +222,8 @@ export async function saveProduct(form: FormData) {
     active: id ? form.get("active") === "on" : true,
     sort: num(form.get("sort")) ?? 0,
     sqft_per_unit: num(form.get("sqft_per_unit")),
+    sale_price: num(form.get("sale_price")),
+    sale_ends: /^\d{4}-\d{2}-\d{2}$/.test(s(form, "sale_ends")) && num(form.get("sale_price")) !== null ? s(form, "sale_ends") : null,
   };
   if (!row.sku || !row.name) return;
   if (id) await supabase.from("products").update(row).eq("id", id);

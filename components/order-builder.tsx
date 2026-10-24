@@ -20,7 +20,9 @@ export type CatalogProduct = {
   category_id: string | null;
   unit: string;
   image_url: string | null;
-  list_price: number | null;
+  list_price: number | null; // the price charged (the sale price while a sale runs)
+  was?: number | null; // on sale: the regular price, crossed out
+  sale?: boolean;
   cp: boolean; // "Based on customer pricing"
   sqft: number | null; // batts: square feet per bag (order by bags or by square feet)
 };
@@ -42,12 +44,20 @@ type Props = {
   reorder: Cart | null;
   reorderNo: number | null;
   reorderCompany: string | null;
+  /** Opens the catalog already searched (the Home banner sends people to one product). */
+  initialSearch?: string;
 };
 
 function PriceLine({ p }: { p: CatalogProduct }) {
   if (p.cp) return <span className="cp-tag">Based on customer pricing</span>;
   if (p.list_price === null) return <div className="price faint">Price confirmed on invoice</div>;
-  return <div className="price">{money(p.list_price)} <span className="faint">/ {p.unit}</span></div>;
+  return (
+    <div className="price">
+      {p.sale ? <span className="sale-tag">Sale</span> : null}
+      {money(p.list_price)} <span className="faint">/ {p.unit}</span>
+      {p.was ? <s className="was">{money(p.was)}</s> : null}
+    </div>
+  );
 }
 
 function Stepper({ qty, onChange, label }: { qty: number; onChange: (n: number) => void; label: string }) {
@@ -124,7 +134,7 @@ export function OrderBuilder(props: Props) {
   // Staff start by picking the AMBIT location; contractors order from their own region's location.
   const [step, setStep] = useState<"location" | "catalog" | "review">(isEmployee ? "location" : "catalog");
   const [cat, setCat] = useState("all");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(props.initialSearch ?? "");
   const [notice, setNotice] = useState<string | null>(null);
   const [zoom, setZoom] = useState<CatalogProduct | null>(null);
 
@@ -365,7 +375,10 @@ export function OrderBuilder(props: Props) {
                     {p.cp ? (
                       <span className="cp-tag">Customer pricing</span>
                     ) : p.list_price !== null ? (
-                      <div className="price">{money(p.list_price * qty)} <span className="faint">({money(p.list_price)} / {p.unit})</span></div>
+                      <div className="price">
+                        {p.sale ? <span className="sale-tag">Sale</span> : null}
+                        {money(p.list_price * qty)} <span className="faint">({money(p.list_price)} / {p.unit})</span>
+                      </div>
                     ) : (
                       <div className="price faint">Price confirmed on invoice</div>
                     )}
@@ -376,7 +389,7 @@ export function OrderBuilder(props: Props) {
                 </div>
               ))}
               <div className="row between" style={{ padding: "14px 16px" }}>
-                <span className="muted small">Estimated list-price subtotal</span>
+                <span className="muted small">Estimated subtotal</span>
                 <b>{money(subtotal)}</b>
               </div>
             </div>

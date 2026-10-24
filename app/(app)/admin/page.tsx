@@ -30,6 +30,7 @@ export default async function AdminPage() {
         <ListLink href="/admin/products" icon="box" title="Products & pricing" sub={`${products.count ?? 0} active products`} />
         <ListLink href="/orders?status=new" icon="cart" title="Orders" sub={`${newOrders.count ?? 0} new`} />
         <ListLink href="/admin/forms" icon="form" title="Forms hub" sub="Credit applications, account setups and every Jotform form" />
+        <ListLink href="/admin/promos" icon="megaphone" title="Home banner" sub="Sale slides and news at the top of Home" />
         <ListLink href="/admin/links" icon="link" title="Home screen links & forms" sub="Jotform links, marketing kit, videos" />
         <ListLink href="/admin/docs" icon="docs" title="Docs & bulletins" sub="TDS, SDS, ESR, TSB uploads" />
         <ListLink href="/admin/academy" icon="academy" title="Academy courses" />

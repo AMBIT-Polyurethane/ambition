@@ -3,6 +3,7 @@ import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
 import { OrderBuilder, type CatalogProduct } from "@/components/order-builder";
 import { approvalsEnabled } from "@/lib/order-send";
+import { saleOn, todayCentral } from "@/lib/sale";
 import type { OrderCustomer } from "@/lib/customers";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
@@ -30,18 +31,26 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
 
   const cats = (categories ?? []) as Category[];
   const cpByCat = new Map(cats.map((c) => [c.id, c.customer_priced]));
-  const catalog: CatalogProduct[] = ((products ?? []) as Product[]).map((p) => ({
-    id: p.id,
-    sku: p.sku,
-    name: p.name,
-    description: p.description,
-    category_id: p.category_id,
-    unit: p.unit,
-    image_url: p.image_url,
-    list_price: p.list_price === null ? null : Number(p.list_price),
-    cp: p.customer_priced ?? (p.category_id ? cpByCat.get(p.category_id) ?? false : false),
-    sqft: p.sqft_per_unit != null && Number(p.sqft_per_unit) > 0 ? Number(p.sqft_per_unit) : null,
-  }));
+  const today = todayCentral();
+  const catalog: CatalogProduct[] = ((products ?? []) as Product[]).map((p) => {
+    const list = p.list_price === null ? null : Number(p.list_price);
+    // A sale price wins over the list price and over "Based on customer pricing" (the database charges it the same way).
+    const sale = saleOn(p.sale_price, p.sale_ends, today);
+    return {
+      id: p.id,
+      sku: p.sku,
+      name: p.name,
+      description: p.description,
+      category_id: p.category_id,
+      unit: p.unit,
+      image_url: p.image_url,
+      list_price: sale ? Number(p.sale_price) : list,
+      was: sale && list !== null && list > Number(p.sale_price) ? list : null,
+      sale,
+      cp: !sale && (p.customer_priced ?? (p.category_id ? cpByCat.get(p.category_id) ?? false : false)),
+      sqft: p.sqft_per_unit != null && Number(p.sqft_per_unit) > 0 ? Number(p.sqft_per_unit) : null,
+    };
+  });
 
   const reorderData = reorderRes.data as { order_no: number; company_id: string | null; order_items: { product_id: string | null; qty: number }[] } | null;
   const reorder = reorderData
@@ -72,6 +81,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       reorder={reorder}
       reorderNo={reorderData?.order_no ?? null}
       reorderCompany={reorderData?.company_id ?? null}
+      initialSearch={sp.q ?? ""}
     />
   );
 }

@@ -101,6 +101,14 @@ Place an Order card with Start order and Reorder (repeats the person's last orde
 recently on this device), tech bulletins, product lines and the Academy. Needs `supabase/migrations/0014_home_apps.sql`
 for saving layouts.
 
+### Home banner and sale prices
+
+A banner at the top of Home slides through promotions on its own (every few seconds; it stops while someone
+touches it). Product slides show the price from the catalog, or the sale price with the regular price crossed
+out, and open that product in Order. Admin → Home banner adds, edits, reorders and hides slides. A sale price
+(Admin → Products, with an optional last day) is shown in Order and charged on new orders; it also replaces
+"Based on customer pricing" while it runs. Needs `supabase/migrations/0015_sales_and_banner.sql`.
+
 ### Forms hub (admins)
 
 Admin → Forms hub lists every form in the Jotform account. Credit applications and customer account setup

@@ -619,3 +619,64 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); transition: transform 0.15s; }
 .switch[aria-checked="true"] { background: #16a34a; }
 .switch[aria-checked="true"]::after { transform: translateX(20px); }
+
+/* ---------- Home banner (scrolling promotions) ---------- */
+.promo-wrap { display: flex; flex-direction: column; gap: 10px; }
+.promo-track { position: relative; display: flex; gap: 12px; overflow-x: auto; margin: 0 -20px; padding: 0 20px; scroll-snap-type: x mandatory; scroll-padding: 0 20px; scrollbar-width: none; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.promo-track::-webkit-scrollbar { display: none; }
+.promo-cell { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
+.promo { position: relative; display: block; height: 196px; border-radius: 24px; overflow: hidden; color: #fff; isolation: isolate; -webkit-tap-highlight-color: transparent; box-shadow: 0 18px 30px -22px rgba(0, 0, 0, 0.6); }
+.promo:hover { color: #fff; }
+.promo::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(50% 75% at 78% 52%, var(--glow) 0%, transparent 70%), radial-gradient(circle at 108% -18%, rgba(255, 255, 255, 0.16) 0 34%, transparent 34.4%), radial-gradient(circle at 108% -18%, rgba(255, 255, 255, 0.08) 0 52%, transparent 52.4%); }
+.promo .txt { position: relative; z-index: 2; box-sizing: border-box; width: 58%; height: 100%; padding: 18px 0 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+.promo .tags { display: flex; gap: 6px; flex-wrap: wrap; min-height: 20px; }
+.promo .tag { font-size: 10px; font-weight: 850; letter-spacing: 0.14em; text-transform: uppercase; line-height: 1; padding: 5px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.2); white-space: nowrap; }
+.promo .tag.sale { background: #fff; color: #d92d20; }
+.promo .pt { font-size: 20px; font-weight: 850; letter-spacing: -0.015em; line-height: 1.08; text-wrap: balance; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.promo .ps { font-size: 12.5px; font-weight: 550; line-height: 1.3; opacity: 0.86; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.promo .pr { margin-top: auto; display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 6px; row-gap: 0; }
+.promo .pr-now { font-size: 34px; font-weight: 900; letter-spacing: -0.03em; line-height: 0.95; white-space: nowrap; }
+.promo .pr-now .cur { font-size: 18px; position: relative; top: -12px; margin-right: 1px; }
+.promo .pr-now .ct { font-size: 17px; position: relative; top: -13px; margin-left: 1px; }
+.promo .pr-unit { font-size: 12.5px; font-weight: 750; opacity: 0.88; }
+.promo .pr-was { font-size: 12.5px; font-weight: 700; opacity: 0.72; flex-basis: 100%; }
+.promo .pr-acct { margin-top: auto; align-self: flex-start; font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.22); }
+.promo .art { position: absolute; z-index: 1; top: 12px; bottom: 12px; right: 10px; width: 42%; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.promo .art img { max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 16px 18px rgba(0, 0, 0, 0.38)); user-select: none; }
+.promo .go { position: absolute; z-index: 3; right: 12px; bottom: 12px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.promo:hover .go { background: rgba(255, 255, 255, 0.32); }
+/* wide products (a bag of insulation) get more room and bleed off the edge a little */
+.promo .art.wide { right: -18px; width: 54%; top: 6px; bottom: 6px; }
+.promo .art.wide img { transform: rotate(-5deg); }
+.promo:has(.art.wide) .txt { width: 50%; }
+/* the distribution centers map */
+.promo.k-locations .txt { width: 50%; }
+.promo .map { position: absolute; z-index: 1; left: 22%; width: 88%; aspect-ratio: 2 / 1; top: 50%; transform: translateY(-34.5%); pointer-events: none; }
+.promo .map img { position: absolute; inset: 0; width: 100%; height: 100%; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 30%), linear-gradient(180deg, transparent 0%, #000 20%); -webkit-mask-composite: source-in; mask-image: linear-gradient(90deg, transparent 0%, #000 30%), linear-gradient(180deg, transparent 0%, #000 20%); mask-composite: intersect; }
+.promo .map .city { position: absolute; font-size: 10px; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
+.promo .map .city.r { transform: translate(10px, -50%); }
+.promo .map .city.b { transform: translate(-50%, 9px); }
+.promo .map .city.bl { transform: translate(-88%, 9px); }
+.promo .map .city.t { transform: translate(-50%, calc(-100% - 9px)); }
+.promo.k-locations .ps { -webkit-line-clamp: 3; }
+.promo .cities { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: auto; font-size: 11px; font-weight: 750; opacity: 0.92; }
+.promo .cities span { display: inline-flex; align-items: center; gap: 3px; }
+.promo-dots { display: flex; justify-content: center; gap: 6px; }
+.promo-dots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 4px; background: var(--text3); opacity: 0.35; cursor: pointer; transition: width 0.25s ease, opacity 0.25s ease; }
+.promo-dots button.on { width: 20px; opacity: 0.9; background: var(--text); }
+@media (min-width: 520px) {
+  .promo { height: 212px; }
+  .promo .pt { font-size: 23px; }
+  .promo .txt { padding: 22px 0 22px 24px; }
+}
+.price .sale-tag { display: inline-block; vertical-align: 1px; margin-right: 6px; font-size: 10px; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: var(--red); border-radius: 5px; padding: 3px 6px; }
+.price .was { margin-left: 6px; font-size: 0.86em; font-weight: 600; color: var(--text3); }
+.iconbtn.sm { width: 34px; height: 34px; }
+.iconbtn:disabled { opacity: 0.35; cursor: default; }
+.promo-preview .promo { box-shadow: none; }
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatches button { width: 36px; height: 36px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25); cursor: pointer; padding: 0; }
+.swatches button.on { border-color: var(--text); box-shadow: inset 0 0 0 3px var(--bg); }
+.card:has(details[open]) > .promo-static { display: none; }
+.promo:not(:has(.art)):not(:has(.map)) .txt { width: 86%; }
+.promo:not(:has(.art)):not(:has(.map)) .ps { -webkit-line-clamp: 3; }
