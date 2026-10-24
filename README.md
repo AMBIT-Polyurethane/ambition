@@ -101,6 +101,15 @@ Place an Order card with Start order and Reorder (repeats the person's last orde
 recently on this device), tech bulletins, product lines and the Academy. Needs `supabase/migrations/0014_home_apps.sql`
 for saving layouts.
 
+### Creating accounts (admins)
+
+Admin → Accounts → Create an account: type the person's email, pick Contractor (and their company) or AMBIT
+employee (job role and what they can use), and the app emails them a private link to create their password.
+The account is set up exactly as picked the moment they do; there's no approval step. A link works once, only
+for that email, for 30 days; "Send again" on the Invited tab makes a new one. Until app email is set up, the
+admin gets buttons to email, text or copy the link themselves. If the person already had a login (for example
+they requested access), it's updated right away instead. Needs `supabase/migrations/0016_invites.sql`.
+
 ### Home banner and sale prices
 
 A banner at the top of Home slides through promotions on its own (every few seconds; it stops while someone

@@ -5,6 +5,9 @@ import { Empty, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { saveUser } from "@/app/(app)/admin/actions";
 import { AccessPicker } from "@/components/access-picker";
+import { ResendInvite } from "@/components/invite-form";
+import { cancelInvite } from "./invite-actions";
+import { UserPlus } from "lucide-react";
 import { needsRole, roleLabel } from "@/lib/access";
 import type { Branch, Company, Profile } from "@/lib/types";
 
@@ -12,6 +15,7 @@ export const metadata = { title: "Accounts" };
 
 const TABS = [
   ["pending", "Waiting"],
+  ["invited", "Invited"],
   ["customer", "Contractors"],
   ["employee", "AMBIT staff"],
   ["norole", "Needs a role"],
@@ -37,12 +41,15 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     supabase.from("companies").select("id, name, account_no").order("name"),
     supabase.from("branches").select("id, name, state").order("sort"),
   ]);
-  const list = (users ?? []) as Profile[];
+  const list = tab === "invited" ? [] : ((users ?? []) as Profile[]);
   const cos = (companies ?? []) as Pick<Company, "id" | "name" | "account_no">[];
 
   return (
     <main className="shell wide">
       <TopBar title="Accounts" back="/admin" />
+      <div>
+        <Link href="/admin/users/new" className="btn sm"><UserPlus size={15} /> Create an account</Link>
+      </div>
       <div className="row wrap" style={{ gap: 10 }}>
         <div className="chips">
           {TABS.map(([id, label]) => (
@@ -61,10 +68,13 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         <div className="alert info small">
           Staff access (internal forms, directory, ordering for customers) is only possible for @ambitpu.com accounts.
           Until Microsoft sign-in is on, only approve AMBIT emails for people you know: anyone can type any email when requesting access.
+          Safer for staff: use Create an account, which emails them a private link.
         </div>
       ) : null}
 
-      {list.length === 0 ? (
+      {tab === "invited" ? (
+        <InvitedList supabase={supabase} />
+      ) : list.length === 0 ? (
         <Empty icon="users" title={tab === "pending" ? "No one is waiting" : "No accounts here"} />
       ) : (
         <div className="col">
@@ -136,5 +146,92 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
         </div>
       )}
     </main>
+  );
+}
+
+type InviteRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: Profile["role"];
+  job_role: string | null;
+  invited_by_name: string | null;
+  created_at: string;
+  sent_at: string | null;
+  email_status: string | null;
+  expires_at: string;
+  accepted_at: string | null;
+  company: { name: string } | null;
+};
+
+/** Accounts an admin created that are waiting for the person to set their password (and the latest ones who did). */
+async function InvitedList({ supabase }: { supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"] }) {
+  const { data, error } = await supabase
+    .from("invites")
+    .select("id, email, full_name, role, job_role, invited_by_name, created_at, sent_at, email_status, expires_at, accepted_at, company:companies(name)")
+    .is("cancelled_at", null)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    return <div className="alert warn small">Account invites aren&apos;t set up in the database yet. Run supabase/migrations/0016_invites.sql in Supabase.</div>;
+  }
+  const rows = (data ?? []) as unknown as InviteRow[];
+  const open = rows.filter((r) => !r.accepted_at);
+  const joined = rows.filter((r) => r.accepted_at).slice(0, 15);
+  const now = Date.now();
+  const what = (r: InviteRow) =>
+    r.role === "customer" ? `Contractor${r.company ? ` · ${r.company.name}` : ""}` : `AMBIT ${roleLabel(r.job_role) ?? (r.role === "admin" ? "Admin" : "employee")}`;
+
+  return (
+    <div className="col" style={{ gap: 18 }}>
+      {open.length === 0 ? (
+        <Empty icon="users" title="No invites waiting">Accounts you create show here until the person sets their password.</Empty>
+      ) : (
+        <div className="col">
+          {open.map((r) => {
+            const expired = new Date(r.expires_at).getTime() < now;
+            return (
+              <section key={r.id} className="card col" style={{ gap: 10 }}>
+                <div className="row between wrap" style={{ gap: 8, alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>{r.full_name ?? r.email}</div>
+                    <div className="small muted">{r.full_name ? r.email : ""}</div>
+                    <div className="small">{what(r)}</div>
+                  </div>
+                  {expired ? <span className="pill grey">Link expired</span> : <span className="pill warn">Hasn&apos;t set up yet</span>}
+                </div>
+                <div className="tiny faint">
+                  Created {dateShort(r.created_at)}{r.invited_by_name ? ` by ${r.invited_by_name}` : ""}
+                  {r.email_status === "sent" ? ` · Emailed ${dateShort(r.sent_at)}` : r.email_status === "not_configured" ? " · Not emailed (app email isn't set up)" : r.email_status === "failed" ? " · Email failed" : ""}
+                  {!expired ? ` · Link works until ${dateShort(r.expires_at)}` : ""}
+                </div>
+                <ResendInvite id={r.id}>
+                  <form action={cancelInvite}>
+                    <input type="hidden" name="id" value={r.id} />
+                    <button type="submit" className="linkbtn small">Cancel invite</button>
+                  </form>
+                </ResendInvite>
+              </section>
+            );
+          })}
+        </div>
+      )}
+      {joined.length ? (
+        <section className="section">
+          <div className="eyebrow">Recently set up</div>
+          <div className="list">
+            {joined.map((r) => (
+              <div key={r.id} className="item" style={{ minHeight: 56 }}>
+                <div className="grow">
+                  <div className="t">{r.full_name ?? r.email}</div>
+                  <div className="s">{what(r)} · joined {dateShort(r.accepted_at)}</div>
+                </div>
+                <span className="pill ok">Active</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }

@@ -123,6 +123,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       </div>
 
       {sp.password === "updated" ? <div className="alert ok">Your password was updated.</div> : null}
+      {sp.welcome ? (
+        <div className="alert ok">You&apos;re all set. Welcome to AMBITION! Tip: on your phone, use Share → &ldquo;Add to Home Screen&rdquo; to open it like an app.</div>
+      ) : null}
       {pending > 0 ? (
         <Link href="/admin/users" className="alert warn" style={{ alignItems: "center" }}>
           <UserCheck size={18} />
