@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check, CircleAlert, CircleCheck, FileDown, MailCheck, RefreshCw } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
+import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, qtyText } from "@/lib/format";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -46,6 +47,7 @@ export default async function OrderDetailPage({
 
   return (
     <main className="shell">
+      <TrackRecent uid={profile.id} kind="order" href={`/orders/${order.id}`} title={emp ? order.company_name : orderNo(order.order_no)} sub={emp ? orderNo(order.order_no) : "Order"} />
       {justSent ? (
         <div className="col" style={{ alignItems: "center", gap: 14, paddingTop: 30, textAlign: "center" }}>
           <div className="done-mark">

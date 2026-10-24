@@ -12,7 +12,7 @@ export default async function DocsPage({ searchParams }: { searchParams: Promise
   return (
     <main className="shell">
       <TopBar title="Product docs & bulletins" />
-      <DocsList docs={(data ?? []) as DocumentRow[]} initial={sp.type ?? "all"} staff={isEmployee(profile)} />
+      <DocsList docs={(data ?? []) as DocumentRow[]} initial={sp.type ?? "all"} initialProduct={sp.product} staff={isEmployee(profile)} uid={profile.id} />
     </main>
   );
 }

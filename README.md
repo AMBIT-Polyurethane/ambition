@@ -94,6 +94,13 @@ Admin → Accounts → AMBIT staff: pick a job role (Admin, CRM, Sales rep, Tech
 and the boxes for what that person sees. Picking a role ticks its boxes; change any box after. Home-screen
 form links can be limited to a box in Admin → Links. Needs `supabase/migrations/0011_roles_and_order_desk.sql`.
 
+### Home screen
+
+"Your apps" grid (colored app icons; each person can reorder or hide apps under Edit, saved to their profile), the
+Place an Order card with Start order and Reorder (repeats the person's last order), Jump back in (things opened
+recently on this device), tech bulletins, product lines and the Academy. Needs `supabase/migrations/0014_home_apps.sql`
+for saving layouts.
+
 ### Forms hub (admins)
 
 Admin → Forms hub lists every form in the Jotform account. Credit applications and customer account setup

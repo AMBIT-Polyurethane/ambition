@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CircleAlert, CircleCheck, Download, PencilLine } from "lucide-react";
 import { TopBar } from "@/components/ui";
+import { TrackRecent } from "@/components/recent";
 import { Submit } from "@/components/forms";
 import { dateTime, jfDate } from "@/lib/format";
 import { answerRows, prfPricing, prfStatus, priceRows, type PricePair } from "@/lib/jotform";
@@ -22,7 +23,7 @@ export default async function PriceRequestPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const { supabase, sub, item, mine, ownerName, approver } = await ownedPriceRequest(id);
+  const { supabase, sub, item, mine, ownerName, approver, profile } = await ownedPriceRequest(id);
 
   let pairs: PricePair[] = [];
   try {
@@ -50,6 +51,7 @@ export default async function PriceRequestPage({
 
   return (
     <main className="shell">
+      <TrackRecent uid={profile.id} kind="prf" href={`/price-requests/${id}`} title={title} sub="Price request" />
       <TopBar title={title} back={approver && !mine ? "/price-requests/approvals" : "/price-requests"} />
 
       {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}

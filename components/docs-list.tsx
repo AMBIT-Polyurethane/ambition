@@ -3,16 +3,37 @@
 import { useMemo, useRef, useState } from "react";
 import { ChevronRight, Search, Share } from "lucide-react";
 import { Icon } from "@/components/icons";
+import { recordRecent } from "@/components/recent";
 import { DOC_GROUPS, LIBRARY_SHELVES, TYPE_ORDER, docProducts, hasFile, productFamilies, renewalState, typeInfo } from "@/lib/docs";
 import type { DocumentRow } from "@/lib/types";
 
 const byTypeThenSort = (a: DocumentRow, b: DocumentRow) =>
   (TYPE_ORDER[a.doc_type] ?? 99) - (TYPE_ORDER[b.doc_type] ?? 99) || a.sort - b.sort || a.title.localeCompare(b.title);
 
-export function DocsList({ docs, initial, staff = false }: { docs: DocumentRow[]; initial: string; staff?: boolean }) {
+export function DocsList({
+  docs,
+  initial,
+  initialProduct,
+  staff = false,
+  uid,
+}: {
+  docs: DocumentRow[];
+  initial: string;
+  initialProduct?: string;
+  staff?: boolean;
+  uid?: string;
+}) {
   const start = initial.toLowerCase();
   const [group, setGroup] = useState(DOC_GROUPS.some((g) => g.id === start) ? start : "all");
-  const [product, setProduct] = useState("all");
+  const [product, setProduct] = useState(initialProduct && docs.some((d) => docProducts(d).includes(initialProduct)) ? initialProduct : "all");
+
+  // Remember opened docs for "Jump back in" on the home screen.
+  const remember = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest("a.doc-open") as HTMLAnchorElement | null;
+    if (!a || !uid) return;
+    const kind = a.dataset.kind === "tsb" ? "tsb" : "doc";
+    recordRecent(uid, { kind, href: a.getAttribute("href") ?? "", title: a.dataset.title ?? "", sub: a.dataset.sub ?? "", code: a.dataset.code || undefined, external: true });
+  };
   const [q, setQ] = useState("");
 
   const families = useMemo(() => productFamilies(docs), [docs]);
@@ -38,7 +59,7 @@ export function DocsList({ docs, initial, staff = false }: { docs: DocumentRow[]
   }, [docs, group, product, needle]);
 
   return (
-    <>
+    <div style={{ display: "contents" }} onClickCapture={remember}>
       <div className="search">
         <Search size={18} />
         <input className="input" type="search" placeholder="Search docs, products, ESR or SPFA #" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search documents" />
@@ -64,7 +85,7 @@ export function DocsList({ docs, initial, staff = false }: { docs: DocumentRow[]
       ) : (
         <DocRows docs={shown} staff={staff} showProducts={product === "all"} />
       )}
-    </>
+    </div>
   );
 }
 
@@ -162,7 +183,16 @@ function DocRow({ d, staff, showProducts }: { d: DocumentRow; staff: boolean; sh
   }
   return (
     <div className="item doc">
-      <a className="doc-open" href={`/docs/open/${d.id}`} target="_blank" rel="noopener noreferrer">
+      <a
+        className="doc-open"
+        href={`/docs/open/${d.id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-kind={d.doc_type === "TSB" ? "tsb" : "doc"}
+        data-title={d.doc_type === "TSB" ? d.title.replace(/^TSB[\s-]*\d+\s*[:\-–·]?\s*/i, "") || d.title : d.title}
+        data-sub={d.doc_type === "TSB" ? "Bulletin" : info.short}
+        data-code={d.doc_type === "TSB" ? (d.code ?? d.title).match(/(\d{1,4})/)?.[1] ?? "" : ""}
+      >
         {body}
         <span className="pill grey">{info.short}</span>
       </a>

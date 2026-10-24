@@ -41,6 +41,8 @@ export type Profile = {
   // Staff roles (migration 0011; missing until it's run)
   job_role?: string | null;
   perms?: string[] | null;
+  /** The person's own home-screen app layout (migration 0014). */
+  home_apps?: unknown;
 };
 
 export type Branch = {

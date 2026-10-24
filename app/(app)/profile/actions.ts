@@ -45,3 +45,17 @@ export async function deleteMyAccount(_prev: FormState, form: FormData): Promise
   await s.supabase.auth.signOut().catch(() => undefined);
   redirect("/signin?deleted=1");
 }
+
+/** Saves the person's home-screen app layout (order and hidden apps). Pass nothing to go back to the default. */
+export async function saveHomeApps(layout: { order: string[]; hidden: string[] } | null): Promise<FormState> {
+  const s = await getSession();
+  if (!s?.profile) return { error: "Please sign in again." };
+  const clean = (x: unknown) => (Array.isArray(x) ? x.filter((k): k is string => typeof k === "string" && k.length < 80).slice(0, 100) : []);
+  const value = layout ? { order: clean(layout.order), hidden: clean(layout.hidden) } : null;
+  const { error } = await s.supabase.from("profiles").update({ home_apps: value }).eq("id", s.profile.id);
+  if (error) {
+    return { error: /home_apps/.test(error.message) ? "Saving your layout isn't switched on yet (the database update hasn't been run)." : error.message };
+  }
+  revalidatePath("/");
+  return { ok: "Saved. Your home screen is updated." };
+}

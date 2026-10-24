@@ -1639,3 +1639,8 @@ drop policy if exists hub_forms_admin on public.hub_forms;
 create policy hub_forms_admin on public.hub_forms for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
+
+-- ---------------------------------------------------------------- 0014
+alter table public.profiles add column if not exists home_apps jsonb;  -- {"order": [...], "hidden": [...]}
+grant update (home_apps) on public.profiles to authenticated;
+

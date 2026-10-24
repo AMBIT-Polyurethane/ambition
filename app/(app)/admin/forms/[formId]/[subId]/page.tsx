@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { CircleAlert, CircleCheck, Download, ExternalLink, FileText } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { TopBar } from "@/components/ui";
+import { TrackRecent } from "@/components/recent";
 import { dateTime, jfDate, money } from "@/lib/format";
 import { jotformReady } from "@/lib/jotform";
 import { KIND_LABEL, formSections, formSubmission, hubForm, jotformEditUrl, reviewable, summarize } from "@/lib/forms";
@@ -23,7 +24,7 @@ export default async function FormSubmissionPage({
 }) {
   const { formId, subId } = await params;
   const sp = await searchParams;
-  const { supabase } = await requireAdmin();
+  const { supabase, profile } = await requireAdmin();
   if (!jotformReady()) notFound();
 
   const [form, sub] = await Promise.all([extraForms(supabase).then((x) => hubForm(formId, x)), formSubmission(formId, subId)]);
@@ -69,6 +70,13 @@ export default async function FormSubmissionPage({
 
   return (
     <main className="shell">
+      <TrackRecent
+        uid={profile.id}
+        kind={review ? "credit" : "form"}
+        href={`/admin/forms/${formId}/${subId}`}
+        title={title}
+        sub={form.kind === "credit" ? "Credit app" : form.kind === "account" ? "Account setup" : form.title}
+      />
       <TopBar title={title} back={`/admin/forms/${formId}`} />
 
       {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
