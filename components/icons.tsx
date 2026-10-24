@@ -1,7 +1,7 @@
 import {
   Award, BookOpen, Boxes, Building2, ClipboardList, Cylinder, FileText, GraduationCap, Hammer, Headset,
   Layers, Link as LinkIcon, MapPin, Megaphone, Newspaper, Package, Phone, Plane, CirclePlay, ShieldCheck,
-  ShoppingCart, Tag, TriangleAlert, Users, Video, Wrench, Calendar, Mail, CreditCard, ClipboardCheck, Truck, Droplet, type LucideIcon,
+  ShoppingCart, Tag, TriangleAlert, Users, Video, Wrench, Calendar, Mail, CreditCard, ClipboardCheck, Truck, Droplet, Receipt, type LucideIcon,
 } from "lucide-react";
 
 export const ICONS: Record<string, LucideIcon> = {
@@ -37,6 +37,7 @@ export const ICONS: Record<string, LucideIcon> = {
   form: ClipboardCheck,
   truck: Truck,
   droplet: Droplet,
+  receipt: Receipt,
 };
 
 export const ICON_NAMES = Object.keys(ICONS);

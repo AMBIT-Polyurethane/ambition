@@ -30,6 +30,7 @@ export const APP_COLOR = {
   rose: "#E11D48",
   steel: "#5B6B82",
   fuchsia: "#C026D3",
+  emerald: "#059669",
 } as const;
 
 /** Colors for apps that come from Admin → Links, picked by the link's icon. */
@@ -65,6 +66,7 @@ const LINK_COLORS: Record<string, string> = {
   form: APP_COLOR.indigo,
   droplet: APP_COLOR.steel,
   truck: APP_COLOR.orange,
+  receipt: APP_COLOR.emerald,
 };
 
 export const linkColor = (icon: string) => LINK_COLORS[icon] ?? APP_COLOR.slate;

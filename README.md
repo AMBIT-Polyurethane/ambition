@@ -101,6 +101,16 @@ Place an Order card with Start order and Reorder (repeats the person's last orde
 recently on this device), tech bulletins, product lines and the Academy. Needs `supabase/migrations/0014_home_apps.sql`
 for saving layouts.
 
+### Expenses (AMBIT staff)
+
+Home → Expenses: "Add a receipt" opens the AMBIT Expense Receipt form in Jotform (filled in with who's signed in):
+date, store, amount, category, what it was for, AMBIT card or personal, and a photo of the receipt. The app
+reads the receipts back from Jotform and shows each month's total, categories and receipts. "Send to Corporate"
+emails the month's report (a PDF with every receipt photo) to Jeremiah, Kim and Kevin (Vercel EXPENSE_REPORT_TO
+changes who) and remembers it was sent; "Download PDF" works any time. Admin → Expense reports shows every
+employee's month. The form's id is EXPENSE_FORM_ID (set in the code; Vercel can override it). Needs
+`supabase/migrations/0017_expense_reports.sql`.
+
 ### Creating accounts (admins)
 
 Admin → Accounts → Create an account: type the person's email, pick Contractor (and their company) or AMBIT

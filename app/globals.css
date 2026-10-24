@@ -790,3 +790,27 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .card:has(details[open]) > .promo-static { display: none; }
 .promo:not(:has(.art)):not(:has(.map)) .txt { width: 86%; }
 .promo:not(:has(.art)):not(:has(.map)) .ps { -webkit-line-clamp: 3; }
+
+/* ---------- Expenses ---------- */
+.exp-hero { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 24px; overflow: hidden; color: #fff; background: radial-gradient(120% 100% at 88% 0%, #34d399 0%, #059669 42%, #053b2c 100%); }
+.exp-hero .kick { font-size: 11px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.9; }
+.exp-hero .big { margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; font-stretch: 112%; text-transform: uppercase; }
+.exp-hero p { margin: 0; font-size: 13.5px; line-height: 1.4; opacity: 0.9; max-width: 400px; }
+.exp-hero .b1 { margin-top: 4px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 9px; font-size: 16px; font-weight: 850; background: #fff; color: #047857; }
+.exp-hero .b1:hover { background: #ecfdf5; color: #065f46; }
+.month-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.month-nav b { font-size: 17px; }
+.exp-sum { display: flex; flex-direction: column; gap: 12px; }
+.exp-total { font-size: 34px; font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
+.exp-split { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text2); }
+.exp-split b { color: var(--text); }
+.exp-split .exp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+.exp-split .exp-dot.card { background: #059669; }
+.exp-split .exp-dot.personal { background: var(--warn); }
+.exp-cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.exp-cat { font-size: 12px; padding: 5px 9px; border-radius: 999px; background: var(--s2); color: var(--text2); }
+.exp-cat b { color: var(--text); margin-left: 3px; }
+.exp-item { min-height: 66px; color: var(--text); }
+.exp-item:hover { color: var(--text); }
+.exp-thumb { width: 46px; height: 46px; flex: none; border-radius: 10px; object-fit: cover; background: var(--s2); display: grid; place-items: center; color: var(--text3); }
+.btn.disabled { opacity: 0.45; pointer-events: none; }
