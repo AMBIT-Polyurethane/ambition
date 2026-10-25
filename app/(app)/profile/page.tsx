@@ -50,7 +50,7 @@ export default async function ProfilePage() {
       </div>
 
       <div className="card small muted">
-        <b style={{ color: "var(--text)" }}>Put AMBITION on your home screen.</b> iPhone: open this site in Safari, tap Share, then
+        <b style={{ color: "var(--text)" }}>Put AMBIT Intelligence on your home screen.</b> iPhone: open this site in Safari, tap Share, then
         &ldquo;Add to Home Screen&rdquo;. Android: tap the ⋮ menu in Chrome, then &ldquo;Install app&rdquo;.
       </div>
 

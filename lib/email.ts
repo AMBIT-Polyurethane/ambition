@@ -29,7 +29,7 @@ function clean(list: (string | null | undefined)[] | undefined): string[] {
 }
 
 async function sendWithResend(msg: EmailMessage): Promise<SendResult> {
-  const from = process.env.EMAIL_FROM || "AMBITION <onboarding@resend.dev>";
+  const from = process.env.EMAIL_FROM || "AMBIT Intelligence <onboarding@resend.dev>";
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -143,6 +143,6 @@ export function wrapEmail(title: string, inner: string): string {
 <span style="float:right;font-size:12px;color:#B4B4BC;line-height:26px;">${title}</span>
 </td></tr>
 <tr><td style="padding:24px;">${inner}</td></tr>
-<tr><td style="padding:14px 24px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#71717a;">Sent by the AMBITION app · AMBIT Polyurethane</td></tr>
+<tr><td style="padding:14px 24px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#71717a;">Sent by the AMBIT Intelligence app · AMBIT Polyurethane</td></tr>
 </table></td></tr></table></body></html>`;
 }

@@ -46,7 +46,7 @@ export default async function AcademyPage() {
             );
           })}
         </div>
-        <p className="tiny faint" style={{ margin: 0 }}>Lessons, quizzes and certificates are being built in the next phase of AMBITION.</p>
+        <p className="tiny faint" style={{ margin: 0 }}>Lessons, quizzes and certificates are being built in the next phase of AMBIT Intelligence.</p>
       </section>
     </main>
   );

@@ -175,7 +175,7 @@ export default async function InventoryAdminPage({ searchParams }: { searchParam
                     {l.message}
                   </span>
                   <span className="when">
-                    {dateTime(l.at)} · {l.by_name ?? "AMBITION"}
+                    {dateTime(l.at)} · {!l.by_name || l.by_name === "AMBITION" ? "AMBIT A.I." : l.by_name}
                     {l.branch_id ? ` · ${l.branch_id.toUpperCase()}` : ""}
                   </span>
                 </div>

@@ -1,4 +1,4 @@
-# AMBITION
+# AMBIT Intelligence (A.I.)
 
 The AMBIT Polyurethane app for AMBIT employees and contractor customers: order requests, product docs and
 bulletins, AMBIT Academy, internal forms, company directory, and an admin area.
@@ -53,7 +53,7 @@ No checkout or payments: AMBIT handles invoices and POs as usual. Locations with
 ## Microsoft sign-in (IT)
 
 In Microsoft Entra admin center → App registrations → New registration:
-- Name: AMBITION · Supported accounts: **this organizational directory only**
+- Name: AMBIT Intelligence · Supported accounts: **this organizational directory only**
 - Redirect URI (Web): `https://<project-ref>.supabase.co/auth/v1/callback`
 - Certificates & secrets → New client secret → copy the **Value**
 - Token configuration → Add optional claim → ID → `email`, `xms_edov`
@@ -70,7 +70,7 @@ departed employee's phone is signed out within a week. Admins can also turn anyo
 Pick one:
 
 - **Resend:** create an account, add the domain `ambitpu.com`, add the DNS records it shows, then set
-  `RESEND_API_KEY` and `EMAIL_FROM` (e.g. `AMBITION <ambition@ambitpu.com>`). The same Resend account can
+  `RESEND_API_KEY` and `EMAIL_FROM` (e.g. `AMBIT Intelligence <orders@ambitpu.com>`). The same Resend account can
   be used as custom SMTP for Supabase (Authentication → Emails → SMTP), which turns on confirmation and
   password-reset emails for contractors.
 - **Microsoft 365 (Graph):** IT adds the application permission `Mail.Send` (admin consent) to the same app
@@ -78,6 +78,25 @@ Pick one:
   `MS_CLIENT_SECRET`, `MS_SENDER_MAILBOX`.
 
 With neither set, orders are still saved and show under Orders with "Email sending isn't set up yet".
+
+### Desktop (Mac and PC)
+
+The same app works in any computer browser at the same address. From 1024px wide the bottom tabs become a menu
+down the left side and pages get wider; phones keep the tabs. Chrome and Edge show "Install on this computer" at the
+bottom of the menu (its own icon and window); on a Mac in Safari use File → Add to Dock. Every feature is built
+once and works on both.
+
+### Takeoff
+
+Home → Takeoff (staff with the Takeoff box; admins always, CRM and Sales reps by default). Start a takeoff, drop in
+the plan PDFs (any size up to the storage limit), and each page becomes a sheet; sheet numbers (A2.1) and the scale
+written on the sheet (1/4" = 1'-0", 1" = 20') are read automatically when the PDF has text. Check or set the scale
+with the Scale tool (click both ends of a known dimension and type its length) or pick it from the list. Items are
+what's measured: Area (with slope for vaulted ceilings and roof decks), Walls / lengths (length × wall height, minus
+openings) or Count, each with a material, thickness and R-value; spray foam shows board feet. Shortcuts: V select,
+H move, S scale, A area, L linear, C count, X cutout, Enter finish, Esc cancel, Backspace undo a point, Shift for
+straight lines, scroll to zoom. The report totals by item, material and sheet, prints to PDF and downloads for Excel.
+Plans are stored in the private "plans" bucket. Needs `supabase/migrations/0019_takeoff.sql`.
 
 ### Live inventory (Oklahoma City first)
 
@@ -98,7 +117,7 @@ changes in the app:
 - **Order screen:** staff see the exact number available at that location; contractors see In stock / Low stock /
   Ships from supplier.
 
-Setup (once): Microsoft Entra app registration "AMBITION" (Web redirect URI
+Setup (once): Microsoft Entra app registration "AMBIT Intelligence" (Web redirect URI
 `https://<app>/api/microsoft/callback`, delegated permissions Files.ReadWrite.All, offline_access, User.Read, a client
 secret), then in Vercel set `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` and `SUPABASE_SECRET_KEY` (Supabase →
 Project Settings → API Keys → Secret keys), redeploy, and in the app Admin → Inventory → Connect Microsoft. Optional:
@@ -201,7 +220,7 @@ npm run dev
 
 ```
 app/(auth)/        sign in, request access, forgot password + server actions
-app/(app)/         signed-in screens (home, order, orders, inventory, docs, academy, directory, profile, admin)
+app/(app)/         signed-in screens (home, order, orders, takeoff, inventory, docs, academy, directory, profile, admin)
 app/api/           inventory sync timer, Microsoft connect / callback
 app/auth/          OAuth/email-link callback and sign out
 components/        UI pieces (order builder, tab bar, CSV import, doc upload)

@@ -11,7 +11,7 @@ export default function SetupPage() {
       <div className="col" style={{ gap: 16, marginTop: 40 }}>
         <BrandImg art="atom-mark" width={88} height={88} />
         <h1 className="h1">
-          <span className="wordmark">AMBIT<span>ION</span></span> is almost ready
+          <span className="wordmark">AMBIT <span>Intelligence</span></span> is almost ready
         </h1>
         <p className="muted">
           The app is running but is not connected to its database yet. In Vercel, open this project&apos;s

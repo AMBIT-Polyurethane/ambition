@@ -58,7 +58,7 @@ export default async function LinksAdminPage() {
       <TopBar title="Home screen links & forms" back="/admin" />
       <p className="muted small" style={{ margin: 0 }}>
         Paste the link to each Jotform form (Publish → Copy link) or other page. Items with no link show as &ldquo;Coming soon&rdquo;.
-        &ldquo;Open inside the app&rdquo; shows the page in AMBITION and fills in the person&apos;s name and email on Jotform fields named <i>name</i> and <i>email</i>.
+        &ldquo;Open inside the app&rdquo; shows the page in AMBIT Intelligence and fills in the person&apos;s name and email on Jotform fields named <i>name</i> and <i>email</i>.
       </p>
       <details className="card">
         <summary><b>+ Add a link</b></summary>

@@ -298,7 +298,7 @@ export function fingerprint(r: PendingRow): string {
 }
 
 export const STOCK_MARK = /\[stock taken/i;
-export const stockMark = (isoDay: string) => `[Stock taken ${isoDay.slice(5, 7)}/${isoDay.slice(8, 10)} by AMBITION]`;
+export const stockMark = (isoDay: string) => `[Stock taken ${isoDay.slice(5, 7)}/${isoDay.slice(8, 10)} by AMBIT A.I.]`;
 
 /** Contiguous runs of columns, skipping the ones that must not be written. */
 export function runs(cols: number[]): number[][] {

@@ -17,11 +17,11 @@ export function DeleteAccount({ email }: { email: string }) {
       </summary>
       <form action={action} className="col" style={{ gap: 12, marginTop: 12 }}>
         <p className="small" style={{ margin: 0 }}>
-          This permanently deletes your AMBITION login (<b>{email}</b>) and your profile: name, phone, title and settings. You&apos;ll be
+          This permanently deletes your AMBIT Intelligence login (<b>{email}</b>) and your profile: name, phone, title and settings. You&apos;ll be
           signed out and can&apos;t undo it.
         </p>
         <p className="small muted" style={{ margin: 0 }}>
-          Orders and requests you already sent stay on file with AMBIT for its business records. To use AMBITION again later, you&apos;d
+          Orders and requests you already sent stay on file with AMBIT for its business records. To use AMBIT Intelligence again later, you&apos;d
           request access again.
         </p>
         <label className="field">

@@ -82,19 +82,19 @@ export async function saveUser(form: FormData) {
     const origin = await currentOrigin();
     await sendEmail({
       to: [before.email],
-      subject: "You're approved for AMBITION",
+      subject: "You're approved for AMBIT Intelligence",
       html: wrapEmail(
         "Welcome",
         `<div style="font-size:22px;font-weight:800;margin-bottom:10px;">You're in, ${h(firstName(before.full_name, before.email))}.</div>
-<p style="font-size:15px;line-height:1.5;margin:0 0 18px;">Your AMBITION account is approved. ${
+<p style="font-size:15px;line-height:1.5;margin:0 0 18px;">Your AMBIT Intelligence account is approved. ${
           staff
             ? "You now have the AMBIT team side of the app: internal forms, the company directory, ordering for customers, docs and AMBIT Academy."
             : "You can now place orders, find product docs and bulletins, and take AMBIT Academy courses."
         }</p>
-<p style="margin:0;"><a href="${h(origin)}" style="display:inline-block;background:#E33527;color:#fff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:12px 18px;border-radius:8px;">OPEN AMBITION</a></p>
+<p style="margin:0;"><a href="${h(origin)}" style="display:inline-block;background:#E33527;color:#fff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:12px 18px;border-radius:8px;">OPEN AMBIT A.I.</a></p>
 <p style="font-size:13px;color:#52525b;margin:18px 0 0;">Tip: on your phone, open the link and choose "Add to Home Screen" to use it like an app.</p>`,
       ),
-      text: `Your AMBITION account is approved. Open ${origin}`,
+      text: `Your AMBIT Intelligence account is approved. Open ${origin}`,
     }).catch(() => null);
   }
   revalidatePath("/admin/users");
@@ -378,7 +378,7 @@ async function copyFromLink(supabase: Db, doc: DocForCopy): Promise<ImportResult
       redirect: "follow",
       cache: "no-store",
       signal: AbortSignal.timeout(25_000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; AMBITION docs copier)", Accept: "application/pdf,image/*,*/*;q=0.8" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; AMBIT Intelligence docs copier)", Accept: "application/pdf,image/*,*/*;q=0.8" },
     });
   } catch {
     return { ok: false, message: "The website didn't answer. Try again in a minute." };

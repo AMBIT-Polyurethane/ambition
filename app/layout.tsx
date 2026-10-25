@@ -18,11 +18,11 @@ const archivo = localFont({
 export async function generateMetadata(): Promise<Metadata> {
   const theme = await getTheme();
   return {
-    title: { default: "AMBITION", template: "%s · AMBITION" },
+    title: { default: "AMBIT Intelligence", template: "%s · AMBIT A.I." },
     description: "Ordering, product docs and training from AMBIT Polyurethane.",
-    applicationName: "AMBITION",
+    applicationName: "AMBIT Intelligence",
     // Dark mode draws under the iPhone status bar; light and auto use the standard bar so its text stays readable.
-    appleWebApp: { capable: true, title: "AMBITION", statusBarStyle: theme === "dark" ? "black-translucent" : "default" },
+    appleWebApp: { capable: true, title: "AMBIT A.I.", statusBarStyle: theme === "dark" ? "black-translucent" : "default" },
     formatDetection: { telephone: false },
   };
 }

@@ -32,7 +32,7 @@ export async function joinCreate(_prev: JoinState, form: FormData): Promise<Join
 
   const { supabase, hash, info } = await lookup(token);
   if (!info) return { error: GONE };
-  if (info.has_account) return { error: "You already have an AMBITION login. Reload this page to sign in." };
+  if (info.has_account) return { error: "You already have an AMBIT Intelligence login. Reload this page to sign in." };
 
   const origin = await currentOrigin();
   const { data, error } = await supabase.auth.signUp({
@@ -44,7 +44,7 @@ export async function joinCreate(_prev: JoinState, form: FormData): Promise<Join
     },
   });
   if (error) {
-    if (/registered|exists/i.test(error.message)) return { error: "You already have an AMBITION login. Reload this page to sign in." };
+    if (/registered|exists/i.test(error.message)) return { error: "You already have an AMBIT Intelligence login. Reload this page to sign in." };
     return { error: error.message };
   }
   if (!data.session) {

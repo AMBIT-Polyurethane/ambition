@@ -6,7 +6,7 @@ import { serviceClient, serviceReady } from "@/lib/supabase/service";
 // their own Microsoft login; the app then keeps a refresh token, stored where only the server
 // can read it, and uses it to reach the workbooks on its own.
 //
-// Vercel settings: MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET (the "AMBITION" app registration
+// Vercel settings: MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET (the "AMBIT Intelligence" app registration
 // in Microsoft Entra), plus SUPABASE_SECRET_KEY.
 
 export const MS_SCOPES = "offline_access User.Read Files.ReadWrite.All";

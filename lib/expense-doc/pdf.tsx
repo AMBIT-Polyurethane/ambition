@@ -125,7 +125,7 @@ export async function renderExpensePdf(d: ExpenseDocInput): Promise<Buffer> {
   const stamp = d.sentAt ? { text: `SENT TO CORPORATE  ·  ${up(day(d.sentAt))}`, color: GREEN } : { text: `${t.count} ${t.count === 1 ? "RECEIPT" : "RECEIPTS"}`, color: GRAY };
 
   return renderToBuffer(
-    <Document title={`Expense report - ${d.name} - ${title}`} author="AMBIT Polyurethane" creator="AMBITION" producer="AMBITION" subject={`Expense report for ${title}`}>
+    <Document title={`Expense report - ${d.name} - ${title}`} author="AMBIT Polyurethane" creator="AMBIT Intelligence" producer="AMBIT Intelligence" subject={`Expense report for ${title}`}>
       <Page size="LETTER" style={s.page}>
         <View style={s.topbar} fixed />
         <Text style={s.cont} fixed render={({ pageNumber }) => (pageNumber > 1 ? cont : "")} />

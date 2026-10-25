@@ -65,7 +65,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
       {orders.length === 0 ? (
         <Empty icon="cart" title="No orders yet">
-          {emp ? "Orders placed in AMBITION show up here." : <Link href="/order">Place your first order</Link>}
+          {emp ? "Orders placed in AMBIT Intelligence show up here." : <Link href="/order">Place your first order</Link>}
         </Empty>
       ) : (
         <div className="list">

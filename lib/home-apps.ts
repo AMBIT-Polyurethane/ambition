@@ -67,6 +67,7 @@ const LINK_COLORS: Record<string, string> = {
   droplet: APP_COLOR.steel,
   truck: APP_COLOR.orange,
   receipt: APP_COLOR.emerald,
+  ruler: APP_COLOR.sky,
 };
 
 export const linkColor = (icon: string) => LINK_COLORS[icon] ?? APP_COLOR.slate;

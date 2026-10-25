@@ -80,12 +80,12 @@ export async function requestAccess(_prev: FormState, form: FormData): Promise<F
     await sendEmail({
       to: [ADMIN_NOTIFY_EMAIL],
       replyTo: email,
-      subject: `AMBITION access request · ${company}`,
+      subject: `AMBIT Intelligence access request · ${company}`,
       html: wrapEmail(
         "Access request",
         `<div style="font-size:22px;font-weight:800;margin-bottom:12px;">New contractor access request</div>
 <table role="presentation" cellpadding="0" cellspacing="0">${rows}</table>
-<p style="margin:20px 0 0;"><a href="${h(origin)}/admin/users" style="display:inline-block;background:#E33527;color:#fff;text-decoration:none;font-weight:700;font-size:13px;padding:12px 18px;border-radius:8px;">REVIEW IN AMBITION</a></p>`,
+<p style="margin:20px 0 0;"><a href="${h(origin)}/admin/users" style="display:inline-block;background:#E33527;color:#fff;text-decoration:none;font-weight:700;font-size:13px;padding:12px 18px;border-radius:8px;">REVIEW IN AMBIT A.I.</a></p>`,
       ),
       text: `New contractor access request\n${full_name}\n${company}\n${account_no}\n${phone}\n${email}\n\n${origin}/admin/users`,
     }).catch(() => null);

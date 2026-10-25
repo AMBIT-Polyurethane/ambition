@@ -6,7 +6,7 @@ import { Submit } from "@/components/forms";
 import { JoinCreateForm, JoinSignInForm } from "@/components/join-forms";
 import { joinFinish } from "../actions";
 
-export const metadata = { title: "Set up your AMBITION login" };
+export const metadata = { title: "Set up your AMBIT Intelligence login" };
 export const dynamic = "force-dynamic";
 
 type Info = { email: string; full_name: string | null; phone: string | null; kind: string; company_name: string | null; invited_by_name: string | null; state: string; has_account: boolean };
@@ -26,7 +26,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
       <div className="swoosh" aria-hidden="true" />
       <div className="col" style={{ alignItems: "center", gap: 12, marginTop: 30, position: "relative" }}>
         <BrandImg art="atom-mark" width={88} height={88} />
-        <div className="wordmark" style={{ fontSize: 30 }}>AMBIT<span>ION</span></div>
+        <div className="wordmark ai-mark" style={{ fontSize: 30 }}><span className="w1">AMBIT</span><span className="w2">INTELLIGENCE</span></div>
       </div>
 
       <div className="col" style={{ marginTop: 28, gap: 16, position: "relative" }}>
@@ -43,7 +43,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
           <>
             <div className="col" style={{ gap: 6 }}>
               <h1 className="h2" style={{ margin: 0 }}>
-                {info.full_name ? `Welcome, ${info.full_name.split(/\s+/)[0]}.` : "Welcome to AMBITION."}
+                {info.full_name ? `Welcome, ${info.full_name.split(/\s+/)[0]}.` : "Welcome to AMBIT Intelligence."}
               </h1>
               <p className="muted small" style={{ margin: 0 }}>
                 {info.invited_by_name ?? "AMBIT"} set up your account

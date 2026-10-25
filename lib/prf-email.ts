@@ -25,7 +25,7 @@ ${input.customer && input.contact ? `<div style="font-size:14px;color:#52525b;ma
 ${table}
 </table>
 ${input.note ? `<div style="font-size:14px;white-space:pre-wrap;background:#fafafa;border-left:4px solid #15803d;padding:12px 14px;margin:16px 0 0;">${h(input.note)}</div>` : ""}
-<p style="margin:20px 0 0;"><a href="${h(input.link)}" style="display:inline-block;background:#E33527;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:12px 18px;border-radius:8px;">OPEN IN AMBITION</a></p>`;
+<p style="margin:20px 0 0;"><a href="${h(input.link)}" style="display:inline-block;background:#E33527;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:12px 18px;border-radius:8px;">OPEN IN AMBIT A.I.</a></p>`;
   const text = [
     `PRICES APPROVED: ${input.customer || input.contact}`,
     `${input.approver} approved pricing for your request.`,

@@ -214,14 +214,14 @@ function ApprovalBox({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: strin
       ];
     } else if (o.approval_method === "in_app" && o.placed_by_role === "customer") {
       title = "ORDER APPROVED";
-      lead = `Placed and approved by the customer from their own AMBITION login, then sent to ${ORDERS_EMAIL}.`;
+      lead = `Placed and approved by the customer from their own AMBIT Intelligence login, then sent to ${ORDERS_EMAIL}.`;
       rows = [
         ["Approved by", byCustomerName],
         ["How", "Approve order button in the app"],
         ["Approved", dateTime(o.approved_at)],
       ];
     } else if (o.approval_method === "in_app") {
-      lead = `Approved by the customer in the AMBITION app, then sent to ${ORDERS_EMAIL}.`;
+      lead = `Approved by the customer in the AMBIT Intelligence app, then sent to ${ORDERS_EMAIL}.`;
       rows = [
         ["Approved by", byCustomerName],
         ["How", "In the app, customer's own login"],
@@ -301,7 +301,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
   ];
 
   return (
-    <Document title={`AMBIT Order ${no}`} author="AMBIT Polyurethane" creator="AMBITION" producer="AMBITION" subject={`Order ${no} for ${o.company_name}`}>
+    <Document title={`AMBIT Order ${no}`} author="AMBIT Polyurethane" creator="AMBIT Intelligence" producer="AMBIT Intelligence" subject={`Order ${no} for ${o.company_name}`}>
       <Page size="LETTER" style={s.page}>
         <View style={s.topbar} fixed />
         <Text style={s.cont} fixed render={({ pageNumber }) => (pageNumber > 1 ? `AMBIT ORDER ${no}  ·  ${up(o.company_name)}  ·  CONTINUED` : "")} />
@@ -432,7 +432,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
         </View>
 
         <View style={s.foot} fixed>
-          <Text>AMBIT Polyurethane  ·  Order {no}  ·  Created in the AMBITION app {dateTime(o.created_at)}</Text>
+          <Text>AMBIT Polyurethane  ·  Order {no}  ·  Created in the AMBIT Intelligence app {dateTime(o.created_at)}</Text>
         </View>
         <Text style={s.pageNo} fixed render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
       </Page>

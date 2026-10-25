@@ -22,6 +22,7 @@ export async function homeApps(
         can(profile, "ordering") && { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
         seesOrders(profile) && { key: "orders", label: "Orders", href: "/orders", icon: "clipboard", color: APP_COLOR.slate },
         (can(profile, "order_desk") || can(profile, "credit_check")) && { key: "desk", label: "Order desk", href: "/orders/desk", icon: "truck", color: APP_COLOR.orange },
+        can(profile, "takeoff") && { key: "takeoff", label: "Takeoff", href: "/takeoff", icon: "ruler", color: APP_COLOR.sky },
         can(profile, "inventory") && { key: "inventory", label: "Inventory", href: "/inventory", icon: "boxes", color: APP_COLOR.cyan },
         can(profile, "prf_approve") && { key: "prices", label: "Price approvals", href: "/price-requests/approvals", icon: "tag", color: APP_COLOR.amber },
         can(profile, "price_requests") && { key: "prf", label: "My price requests", href: "/price-requests", icon: "tag", color: "#CA8A04" },

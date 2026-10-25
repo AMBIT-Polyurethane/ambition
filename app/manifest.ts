@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "AMBITION by AMBIT Polyurethane",
-    short_name: "AMBITION",
+    name: "AMBIT Intelligence by AMBIT Polyurethane",
+    short_name: "AMBIT A.I.",
     description: "Ordering, product docs and training from AMBIT Polyurethane.",
     start_url: "/",
     display: "standalone",

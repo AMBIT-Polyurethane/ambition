@@ -98,7 +98,7 @@ ${detailTable(rows)}
 ${itemsTable(doc)}
 ${o.has_customer_pricing ? `<p style="font-size:13px;color:#b42318;margin:8px 0 0;">Includes items at account pricing. Apply the account's pricing on the invoice.</p>` : ""}
 <p style="font-size:13px;color:#52525b;margin:16px 0 0;">The printable order is attached as a PDF. Final pricing, tax and freight are confirmed by AMBIT on the invoice.</p>
-<p style="margin:20px 0 0;">${button(link, "OPEN IN AMBITION")}</p>`;
+<p style="margin:20px 0 0;">${button(link, "OPEN IN AMBIT A.I.")}</p>`;
 
   const text = [
     `${approved ? "APPROVED ORDER" : "ORDER REQUEST"} ${no}`,

@@ -1,7 +1,8 @@
 /**
  * The opening screen: the AMBIT atom spins together out of two halves, locks with a hit
- * (flash, shock ring, sparks), AMBITION rises in letter by letter, a loading line fills, and
- * then the screen opens from the middle into the app.
+ * (flash, shock ring, sparks), AMBIT rises in letter by letter with INTELLIGENCE tracking in under it,
+ * then everything but the A and the I dims away and an "A.I." badge punches in, a loading line
+ * fills, and the screen opens from the middle into the app.
  *
  * A tiny script at the very top of <body> runs before the page is drawn, so the first thing on
  * screen is this, not the page. It shows once per opening (launching the home-screen app or
@@ -24,10 +25,14 @@ const SCRIPT = `(function () {
     var still = !!((w.matchMedia && w.matchMedia("(prefers-reduced-motion: reduce)").matches)
       || (navigator.connection && navigator.connection.saveData));
 
-    var word = "AMBITION", letters = "";
-    for (var i = 0; i < word.length; i++) {
-      letters += '<span class="' + (i >= 5 ? "r" : "") + '" style="--i:' + i + '">' + word[i] + "</span>";
+    function spans(word) {
+      var out = "";
+      for (var i = 0; i < word.length; i++) {
+        out += '<span class="' + (i === 0 ? "k" : "") + '" style="--i:' + i + '">' + word[i] + "</span>";
+      }
+      return out;
     }
+    var letters = spans("AMBIT"), sub = spans("INTELLIGENCE");
     var sparks = "";
     for (var k = 0; k < 14; k++) {
       var ang = (k / 14) * 360 + (k % 2 ? 9 : -9), dist = 110 + (k * 37) % 90;
@@ -51,6 +56,8 @@ const SCRIPT = `(function () {
           "</div>" +
         "</div>" +
         '<div class="sp-word">' + letters + "</div>" +
+        '<div class="sp-sub">' + sub + "</div>" +
+        '<div class="sp-ai">A.I.</div>' +
         '<div class="sp-tag">AMBIT POLYURETHANE</div>' +
         '<div class="sp-load"><i></i></div>' +
       "</div>";
@@ -65,8 +72,8 @@ const SCRIPT = `(function () {
       el.classList.add("out");
       setTimeout(function () { el.remove(); }, 900);
     }
-    // The animation runs about 2.3 seconds; after that it leaves as soon as the page has loaded.
-    var MIN = still ? 900 : 2300;
+    // The animation runs about 2.8 seconds; after that it leaves as soon as the page has loaded.
+    var MIN = still ? 900 : 2800;
     function ready() {
       if (done) return;
       var left = MIN - (Date.now() - started);

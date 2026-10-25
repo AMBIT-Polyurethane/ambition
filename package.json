@@ -2,7 +2,7 @@
   "name": "ambition",
   "version": "0.1.0",
   "private": true,
-  "description": "AMBITION - the AMBIT Polyurethane app for employees and contractor customers",
+  "description": "AMBIT Intelligence (A.I.) - the AMBIT Polyurethane app for employees and contractor customers",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -20,6 +20,7 @@
     "lucide-react": "^1.58.0",
     "next": "^15.5.27",
     "papaparse": "^5.5.3",
+    "pdfjs-dist": "5.4.624",
     "qrcode": "1.5.4",
     "react": "^19.1.10",
     "react-dom": "^19.1.10",

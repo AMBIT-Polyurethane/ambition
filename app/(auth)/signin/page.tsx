@@ -32,7 +32,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
       <div className="swoosh" aria-hidden="true" />
       <div className="col" style={{ alignItems: "center", gap: 14, marginTop: 36, position: "relative" }}>
         <BrandImg art="atom-mark" width={104} height={104} />
-        <div className="wordmark" style={{ fontSize: 34 }}>AMBIT<span>ION</span></div>
+        <div className="wordmark ai-mark" style={{ fontSize: 34 }}><span className="w1">AMBIT</span><span className="w2">INTELLIGENCE</span></div>
         <p className="muted center small" style={{ maxWidth: 280, margin: 0 }}>
           Ordering, product docs and training from AMBIT Polyurethane.
         </p>
@@ -40,7 +40,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
 
       <div className="col" style={{ marginTop: 40, gap: 14, position: "relative" }}>
         {sp.deleted ? (
-          <div className="alert ok">Your AMBITION account was deleted. Thanks for using AMBITION.</div>
+          <div className="alert ok">Your AMBIT Intelligence account was deleted. Thanks for using AMBIT Intelligence.</div>
         ) : null}
         {sp.error === "microsoft" ? (
           <div className="alert err">Microsoft sign-in didn&apos;t finish. Please try again.</div>

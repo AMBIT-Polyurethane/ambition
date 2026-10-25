@@ -20,7 +20,7 @@ export default async function PendingPage() {
         <h1 className="h1 center">{disabled ? "This account is turned off" : `Thanks, ${firstName(s.profile?.full_name, s.user.email)}`}</h1>
         <p className="muted center">
           {disabled
-            ? "Your access to AMBITION has been turned off. If you think this is a mistake, contact your AMBIT rep."
+            ? "Your access to AMBIT Intelligence has been turned off. If you think this is a mistake, contact your AMBIT rep."
             : "AMBIT is reviewing your request and linking your login to your company account. You'll get an email as soon as you're approved, usually within one business day."}
         </p>
         {!disabled && s.profile?.requested_company ? (

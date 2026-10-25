@@ -15,7 +15,7 @@ export default async function DirectoryPage() {
   return (
     <main className="shell">
       <TopBar title="Company directory" back="/" />
-      <p className="muted small" style={{ margin: 0 }}>Everyone at AMBIT who has signed in to AMBITION. Add your title and phone on your Profile.</p>
+      <p className="muted small" style={{ margin: 0 }}>Everyone at AMBIT who has signed in to AMBIT Intelligence. Add your title and phone on your Profile.</p>
       <DirectoryList people={list} />
     </main>
   );

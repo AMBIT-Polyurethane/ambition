@@ -87,12 +87,12 @@ export async function addCustomer(input: NewCustomerInput): Promise<NewCustomerR
     subject: `New customer to set up in QuickBooks · ${name}`,
     html: wrapEmail(
       "New customer",
-      `<div style="font-size:22px;font-weight:800;margin-bottom:6px;">New customer added in AMBITION</div>
+      `<div style="font-size:22px;font-weight:800;margin-bottom:6px;">New customer added in AMBIT Intelligence</div>
 <p style="margin:0 0 16px;color:#52525b;font-size:14px;">${h(who)} added this customer while placing an order. Please set them up in QuickBooks, then add the QuickBooks account number in the app.</p>
 <table role="presentation" cellpadding="0" cellspacing="0">${rows}</table>
 <p style="margin:20px 0 0;"><a href="${h(origin)}/admin/companies?needs=1" style="display:inline-block;background:#E33527;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 18px;border-radius:8px;">Open new customers</a></p>`,
     ),
-    text: `New customer added in AMBITION by ${who}. Please set them up in QuickBooks.\n\n${[
+    text: `New customer added in AMBIT Intelligence by ${who}. Please set them up in QuickBooks.\n\n${[
       ["Company", name],
       ["Contact", created.contact_name ?? "-"],
       ["Phone", created.phone ?? "-"],

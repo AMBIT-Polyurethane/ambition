@@ -123,13 +123,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <div className="col" style={{ gap: 2 }}>
         <h1 className="hello">{greeting()}, {firstName(profile.full_name, profile.email)}</h1>
         <span className="muted small">
-          {emp ? "Here's what's moving at AMBIT today." : `${profile.company?.name ?? "Welcome to AMBITION"}${profile.company?.account_no ? ` · ${profile.company.account_no}` : ""}`}
+          {emp ? "Here's what's moving at AMBIT today." : `${profile.company?.name ?? "Welcome to AMBIT Intelligence"}${profile.company?.account_no ? ` · ${profile.company.account_no}` : ""}`}
         </span>
       </div>
 
       {sp.password === "updated" ? <div className="alert ok">Your password was updated.</div> : null}
       {sp.welcome ? (
-        <div className="alert ok">You&apos;re all set. Welcome to AMBITION! Tip: on your phone, use Share → &ldquo;Add to Home Screen&rdquo; to open it like an app.</div>
+        <div className="alert ok">You&apos;re all set. Welcome to AMBIT Intelligence! Tip: on your phone, use Share → &ldquo;Add to Home Screen&rdquo; to open it like an app.</div>
       ) : null}
       {pending > 0 ? (
         <Link href="/admin/users" className="alert warn" style={{ alignItems: "center" }}>

@@ -161,7 +161,7 @@ export async function syncBranch(branch: string, opts: { force?: boolean; why?: 
         const msg = e instanceof Error ? e.message : String(e);
         await db.from("inventory_sheets").update({ last_error: msg.slice(0, 500) }).eq("branch_id", branch);
         if (msg !== fresh?.last_error) {
-          await db.from("inventory_log").insert({ branch_id: branch, kind: "error", message: `Sync didn't finish: ${msg}`.slice(0, 600), by_name: "AMBITION" });
+          await db.from("inventory_log").insert({ branch_id: branch, kind: "error", message: `Sync didn't finish: ${msg}`.slice(0, 600), by_name: "AMBIT A.I." });
         }
         return { branch, ok: false, error: msg };
       }
@@ -487,7 +487,7 @@ async function ensureProducts(
       .select("id")
       .single<{ id: string }>();
     if (pe || !made) {
-      log("error", `Couldn't add ${i.sku} as a product: ${pe?.message ?? "unknown"}`, i.sku, null, null, "AMBITION");
+      log("error", `Couldn't add ${i.sku} as a product: ${pe?.message ?? "unknown"}`, i.sku, null, null, "AMBIT A.I.");
       continue;
     }
     map.set(i.key, made.id);
@@ -571,7 +571,7 @@ async function reconcilePending(
     if (!row) {
       if (l.state === "reserved") {
         appends.push({ line: l, kind: "pending" });
-        if (l.sheet_row) log("sheet", `${orderLabel(o.order_no)} ${l.sku} was missing from PENDING ORDERS (still open in the app), so it was added back.`, l.sku, null, null, "AMBITION");
+        if (l.sheet_row) log("sheet", `${orderLabel(o.order_no)} ${l.sku} was missing from PENDING ORDERS (still open in the app), so it was added back.`, l.sku, null, null, "AMBIT A.I.");
       } else if (l.state === "done" && !l.sheet_row && l.needs_write) {
         appends.push({ line: l, kind: "done" }); // picked up before it ever reached the sheet: keep the record
       } else if (l.needs_write) {
@@ -615,7 +615,7 @@ async function reconcilePending(
         // The app's state stands (for example a line on a cancelled order can't be picked up).
         setStatus(row, want, l);
         final = STATUS[want];
-        log("sheet", `${orderLabel(o.order_no)} ${l.sku}: STATUS set back to ${STATUS[want]} (that's where the order is in the app).`, l.sku, null, null, "AMBITION");
+        log("sheet", `${orderLabel(o.order_no)} ${l.sku}: STATUS set back to ${STATUS[want]} (that's where the order is in the app).`, l.sku, null, null, "AMBIT A.I.");
       }
     } else if (row.kind !== want) {
       setStatus(row, want, l);
@@ -655,7 +655,7 @@ async function reconcilePending(
     const price = l.item?.customer_priced ? "" : l.item?.unit_price ?? "";
     const wt = item?.weight ? r2(item.weight * l.qty) : "";
     const how = o.delivery_method === "jobsite" ? "Job site delivery" : "Branch pickup";
-    const notes = [`AMBITION app · ${how}`, o.needed_by ? `needed ${sheetDate(o.needed_by)}` : "", kind === "done" ? stockMark(today) : ""].filter(Boolean).join(" · ");
+    const notes = [`AMBIT A.I. app · ${how}`, o.needed_by ? `needed ${sheetDate(o.needed_by)}` : "", kind === "done" ? stockMark(today) : ""].filter(Boolean).join(" · ");
     const skuCell = typeof item?.skuRaw === "string" && /^0\d+$/.test(item.skuRaw) ? `'${item.skuRaw}` : item?.skuRaw ?? l.sku;
     return {
       order: orderLabel(o.order_no),
@@ -678,7 +678,7 @@ async function reconcilePending(
     const r = free.shift();
     if (r === undefined) {
       sum.full = true;
-      log("error", `PENDING ORDERS is full, so ${orderLabel(a.line.ord!.order_no)} ${a.line.sku} couldn't be added. Clear out closed lines (or add rows inside the table) and it goes in on the next sync.`, a.line.sku, null, null, "AMBITION");
+      log("error", `PENDING ORDERS is full, so ${orderLabel(a.line.ord!.order_no)} ${a.line.sku} couldn't be added. Clear out closed lines (or add rows inside the table) and it goes in on the next sync.`, a.line.sku, null, null, "AMBIT A.I.");
       continue;
     }
     placed.push({ line: a.line, row: r, kind: a.kind });

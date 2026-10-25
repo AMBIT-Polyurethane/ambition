@@ -180,7 +180,7 @@ function Line({ label, value, color }: { label: string; value?: string | null; c
 
 function Shell({ title, subject, cont, foot, children }: { title: string; subject: string; cont: string; foot: string; children: React.ReactNode }) {
   return (
-    <Document title={title} author="AMBIT Polyurethane" creator="AMBITION" producer="AMBITION" subject={subject}>
+    <Document title={title} author="AMBIT Polyurethane" creator="AMBIT Intelligence" producer="AMBIT Intelligence" subject={subject}>
       <Page size="LETTER" style={s.page}>
         <View style={s.topbar} fixed />
         <Text style={s.cont} fixed render={({ pageNumber }) => (pageNumber > 1 ? cont : "")} />
