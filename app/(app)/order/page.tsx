@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
-import { OrderBuilder, type CatalogProduct } from "@/components/order-builder";
+import { OrderBuilder, type CatalogProduct, type StockMap } from "@/components/order-builder";
 import { approvalsEnabled } from "@/lib/order-send";
 import { saleOn, todayCentral } from "@/lib/sale";
 import type { OrderCustomer } from "@/lib/customers";
@@ -28,6 +28,30 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       ? supabase.from("orders").select("order_no, company_id, order_items(product_id, qty)").eq("id", sp.reorder).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+
+  // Live stock for locations with an inventory spreadsheet (Oklahoma City first). Staff see the numbers;
+  // contractors only In stock / Low stock / Ships from supplier (the database decides what each gets).
+  const stockBranches = emp
+    ? (((await supabase.from("inventory_sheets").select("branch_id").eq("enabled", true)).data ?? []) as { branch_id: string }[]).map((b) => b.branch_id)
+    : [profile.company?.default_branch_id ?? profile.branch_id].filter((b): b is string => Boolean(b));
+  const stock: StockMap = {};
+  await Promise.all(
+    stockBranches.map(async (b) => {
+      const { data, error } = await supabase.rpc("stock_for", { p_branch: b });
+      if (error || !data?.length) return;
+      stock[b] = Object.fromEntries(
+        (data as { product_id: string; on_hand: number | null; pending: number | null; net: number | null; reorder_point: number | null; label: string | null }[]).map((r) => [
+          r.product_id,
+          {
+            on_hand: r.on_hand === null ? null : Number(r.on_hand),
+            pending: r.pending === null ? null : Number(r.pending),
+            net: r.net === null ? null : Number(r.net),
+            label: r.label === "in" || r.label === "low" || r.label === "out" ? r.label : null,
+          },
+        ]),
+      );
+    }),
+  );
 
   const cats = (categories ?? []) as Category[];
   const cpByCat = new Map(cats.map((c) => [c.id, c.customer_priced]));
@@ -82,6 +106,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       reorderNo={reorderData?.order_no ?? null}
       reorderCompany={reorderData?.company_id ?? null}
       initialSearch={sp.q ?? ""}
+      stock={stock}
     />
   );
 }

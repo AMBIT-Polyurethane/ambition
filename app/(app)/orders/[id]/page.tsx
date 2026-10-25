@@ -37,6 +37,18 @@ export default async function OrderDetailPage({
       : Promise.resolve({ data: null }),
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null } | null })[];
+  // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
+  const { data: invRows } = emp
+    ? await supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id)
+    : { data: null };
+  const inv = new Map(((invRows ?? []) as { order_item_id: number; state: string; sheet_row: number | null; sheet_status: string | null }[]).map((r) => [r.order_item_id, r]));
+  const stockNote = (itemId: number) => {
+    const r = inv.get(itemId);
+    if (!r) return null;
+    if (r.state === "reserved") return { cls: "in", text: r.sheet_row ? `Reserved on the ${order.branch_id?.toUpperCase()} spreadsheet (PENDING ORDERS row ${r.sheet_row})` : "Reserved · going onto the spreadsheet" };
+    if (r.state === "done") return { cls: "none", text: "Picked up · taken out of stock" };
+    return { cls: "none", text: "Released (cancelled)" };
+  };
   const state = docState(order);
   const waiting = state === "pending" || state === "expired" || state === "changes_requested";
   const justSent = sp.sent === "1" || sp.sent === "approval";
@@ -165,6 +177,10 @@ export default async function OrderDetailPage({
               <div className="grow">
                 <div className="name">{l.name}</div>
                 <div className="desc">{l.sku} · {qtyText(l.qty, l.unit)}</div>
+                {(() => {
+                  const n = stockNote(l.id);
+                  return n ? <div className={`stock-tag ${n.cls}`}>{n.text}</div> : null;
+                })()}
               </div>
               <div style={{ textAlign: "right" }}>
                 {l.customer_priced ? (

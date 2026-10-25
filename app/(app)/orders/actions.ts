@@ -6,6 +6,7 @@ import { getSession, isEmployee } from "@/lib/session";
 import { sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendScheduledNotice } from "@/lib/order-send";
 import { loadOrderDoc } from "@/lib/order-doc/load";
 import type { Order } from "@/lib/types";
+import { kickForOrder } from "@/lib/inventory/sync";
 
 const STATUSES = ["new", "processing", "completed", "cancelled"];
 
@@ -22,6 +23,7 @@ export async function setOrderStatus(form: FormData) {
   const status = String(form.get("status") ?? "");
   if (!STATUSES.includes(status)) return;
   await s.supabase.from("orders").update({ status }).eq("id", id);
+  await kickForOrder(s.supabase, id, `order ${status}`);
   revalidatePath(`/orders/${id}`);
   revalidatePath("/orders");
 }
@@ -91,6 +93,7 @@ export async function setOrderPo(form: FormData) {
   const { data: before } = await s.supabase.from("orders").select("credit_status").eq("id", id).maybeSingle<{ credit_status: string | null }>();
   const { error } = await s.supabase.rpc("order_set_po", { p_order: id, p_po: po });
   if (error) back(id, "err", error.message);
+  await kickForOrder(s.supabase, id, "PO entered");
   if (!before?.credit_status) await sendDeskNotice(s.supabase, id, "credit_needed");
   back(id, "msg", before?.credit_status ? `PO # changed to ${po}.` : `PO # ${po} saved. Accounting has been asked for the credit check.`);
 }
@@ -143,5 +146,6 @@ export async function completeOrder(form: FormData) {
   const id = String(form.get("id") ?? "");
   const { error } = await s.supabase.rpc("order_complete", { p_order: id });
   if (error) back(id, "err", error.message);
+  await kickForOrder(s.supabase, id, "order completed");
   back(id, "msg", "Marked complete.");
 }

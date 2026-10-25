@@ -24,7 +24,8 @@ Prices are always read from the products table when an order is placed.
 Pick items → review → choose branch pickup, job site or drop ship → **Send order to AMBIT**.
 The order is saved, then emailed to `ORDERS_EMAIL` (orders@ambitpu.com) with a copy to the person who placed it.
 Spray foam and fiberglass categories show "Based on customer pricing"; everything else shows list price.
-No checkout, payments or inventory: AMBIT handles invoices and POs as usual.
+No checkout or payments: AMBIT handles invoices and POs as usual. Locations with a live inventory spreadsheet
+(Oklahoma City first) show stock on the Order screen, see "Live inventory" below.
 
 ## First-time setup
 
@@ -77,6 +78,32 @@ Pick one:
   `MS_CLIENT_SECRET`, `MS_SENDER_MAILBOX`.
 
 With neither set, orders are still saved and show under Orders with "Email sending isn't set up yet".
+
+### Live inventory (Oklahoma City first)
+
+Each location keeps its stock in its Excel workbook in OneDrive / SharePoint (tabs COUNT SHEET and PENDING ORDERS).
+The app keeps itself and the workbook in step, every 2 minutes (Vercel cron, `vercel.json`) and right after anything
+changes in the app:
+
+- **New SKU on the COUNT SHEET** → added as a product (name = Description, unit = UOM, price = Sell Price, category
+  from Group). After that the app is in charge of names and prices.
+- **TOTAL IN STOCK** changed on the sheet → the app takes it. Changed in the app (Inventory screen: count, received,
+  damaged / used) → written to the sheet with Last Counted / Counted By. Changed on both at once: a new count on the
+  sheet wins, otherwise both changes are kept.
+- **Orders** (branch pickup or job site from that location) reserve stock the moment they're placed: a "Pending
+  Pickup" line on PENDING ORDERS (Order # ORD-1234), so PENDING PICKUP / NET AVAILABLE on the sheet include it.
+  Cancelled → "Cancelled". Picked up / delivered → "Picked Up / Completed" and TOTAL IN STOCK goes down once (Notes
+  say "[Stock taken …]"). The AMBIT PO # is filled in when CRM enters it. Lines marked Picked Up / Completed or
+  Cancelled on the sheet (including lines typed straight into the sheet) do the same in the app.
+- **Order screen:** staff see the exact number available at that location; contractors see In stock / Low stock /
+  Ships from supplier.
+
+Setup (once): Microsoft Entra app registration "AMBITION" (Web redirect URI
+`https://<app>/api/microsoft/callback`, delegated permissions Files.ReadWrite.All, offline_access, User.Read, a client
+secret), then in Vercel set `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` and `SUPABASE_SECRET_KEY` (Supabase →
+Project Settings → API Keys → Secret keys), redeploy, and in the app Admin → Inventory → Connect Microsoft. Optional:
+`CRON_SECRET` (Vercel sends it with the timer; then nobody else can start a sync). Needs
+`supabase/migrations/0018_inventory.sql`.
 
 ### Customer approval
 
@@ -174,7 +201,8 @@ npm run dev
 
 ```
 app/(auth)/        sign in, request access, forgot password + server actions
-app/(app)/         signed-in screens (home, order, orders, docs, academy, directory, profile, admin)
+app/(app)/         signed-in screens (home, order, orders, inventory, docs, academy, directory, profile, admin)
+app/api/           inventory sync timer, Microsoft connect / callback
 app/auth/          OAuth/email-link callback and sign out
 components/        UI pieces (order builder, tab bar, CSV import, doc upload)
 lib/               Supabase clients, session/role helpers, email, formatting

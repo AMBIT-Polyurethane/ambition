@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/env";
 
 // /approve: customers approve orders from an emailed link without an account.
-const PUBLIC_PATHS = ["/signin", "/request-access", "/forgot", "/auth", "/setup", "/approve", "/join"];
+// /api/inventory/sync: the 2-minute inventory timer (it checks CRON_SECRET itself).
+const PUBLIC_PATHS = ["/signin", "/request-access", "/forgot", "/auth", "/setup", "/approve", "/join", "/api/inventory/sync"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

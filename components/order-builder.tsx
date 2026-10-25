@@ -27,6 +27,27 @@ export type CatalogProduct = {
   sqft: number | null; // batts: square feet per bag (order by bags or by square feet)
 };
 
+/** Live stock at a location (only locations with an inventory spreadsheet). Contractors get the label only. */
+export type StockInfo = { on_hand: number | null; pending: number | null; net: number | null; label: "in" | "low" | "out" | null };
+export type StockMap = Record<string, Record<string, StockInfo>>;
+
+const qtyText = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, "").replace(/\.$/, ""));
+
+function StockTag({ s, staff }: { s: StockInfo | undefined; staff: boolean }) {
+  if (!s) return null;
+  if (staff) {
+    if (s.on_hand === null || s.net === null) return <div className="stock-tag none">Not counted yet</div>;
+    return (
+      <div className={`stock-tag ${s.label ?? "none"}`} title={`${qtyText(s.on_hand)} in stock, ${qtyText(s.pending ?? 0)} reserved`}>
+        {s.net > 0 ? `${qtyText(s.net)} available` : "None available"}
+        {s.pending ? <span className="faint"> · {qtyText(s.pending)} reserved</span> : null}
+      </div>
+    );
+  }
+  if (!s.label) return null;
+  return <div className={`stock-tag ${s.label}`}>{s.label === "in" ? "In stock" : s.label === "low" ? "Low stock" : "Ships from supplier"}</div>;
+}
+
 type Props = {
   products: CatalogProduct[];
   categories: Category[];
@@ -46,6 +67,7 @@ type Props = {
   reorderCompany: string | null;
   /** Opens the catalog already searched (the Home banner sends people to one product). */
   initialSearch?: string;
+  stock?: StockMap;
 };
 
 function PriceLine({ p }: { p: CatalogProduct }) {
@@ -186,6 +208,7 @@ export function OrderBuilder(props: Props) {
   const customer = isEmployee ? customerList.find((c) => c.id === companyId) ?? null : null;
 
   const branch = branches.find((b) => b.id === branchId) ?? null;
+  const stockHere = (props.stock ?? {})[delivery === "dropship" ? "" : branchId];
   const branchLabel = (b: Branch | null | undefined) => (b ? `${b.name}, ${b.state}` : "");
   const pickLocation = (id: string) => {
     setBranchId(id);
@@ -308,6 +331,7 @@ export function OrderBuilder(props: Props) {
                       <span className="t">{b.name}, {b.state}</span>
                       {b.address ? <span className="s loc-addr">{b.address}</span> : null}
                     </div>
+                    {props.stock?.[b.id] ? <span className="pill grey">Live stock</span> : null}
                     {current ? <span className="pill ok">Picked</span> : last ? <span className="pill grey">Last used</span> : null}
                     <ChevronRight size={18} className="chev" />
                   </button>
@@ -384,6 +408,14 @@ export function OrderBuilder(props: Props) {
                     )}
                     {p.sqft ? <div className="tiny muted" style={{ marginTop: 2 }}>Covers {sqftText(qty * p.sqft)} sq ft</div> : null}
                     {p.sqft ? <SqftBox p={p} qty={qty} onQty={(n) => setQty(p.id, n)} /> : null}
+                    <StockTag s={stockHere?.[p.id]} staff={isEmployee} />
+                    {isEmployee && stockHere?.[p.id]?.net != null && qty > Math.max(0, stockHere[p.id].net ?? 0) ? (
+                      <div className="tiny" style={{ color: "var(--warn-text)", marginTop: 2 }}>
+                        {(stockHere[p.id].net ?? 0) > 0
+                          ? `Only ${qtyText(stockHere[p.id].net ?? 0)} available here. The rest ships from the supplier.`
+                          : "None available here. It ships from the supplier."}
+                      </div>
+                    ) : null}
                   </div>
                   <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
                 </div>
@@ -568,6 +600,7 @@ export function OrderBuilder(props: Props) {
                   <div className="name">{p.name}</div>
                   <div className="desc">{p.description ? p.description : p.sku}</div>
                   <PriceLine p={p} />
+                  <StockTag s={stockHere?.[p.id]} staff={isEmployee} />
                   {p.sqft ? <SqftBox p={p} qty={qty} onQty={(n) => setQty(p.id, n)} /> : null}
                 </div>
                 {qty > 0 ? (

@@ -11,6 +11,7 @@ import { arrangeApps, parseLayout } from "@/lib/home-apps";
 import { homeApps } from "@/lib/home-apps-server";
 import { homePromos } from "@/lib/promos";
 import { PromoBanner } from "@/components/promo-banner";
+import { reorderCount } from "@/lib/inventory/view";
 import type { Course, DocumentRow, Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -83,7 +84,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   ]);
 
   const apps = arrangeApps(
-    await homeApps(supabase, profile, { desk: needPo + toSchedule + needCredit, credit: waitingApps }),
+    await homeApps(supabase, profile, {
+      desk: needPo + toSchedule + needCredit,
+      credit: waitingApps,
+      inventory: emp && can(profile, "inventory") ? await reorderCount(supabase, profile.branch_id) : 0,
+    }),
     parseLayout(profile.home_apps),
   );
 

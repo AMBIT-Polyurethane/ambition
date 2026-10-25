@@ -8,6 +8,7 @@ import { ACCOUNTING_EMAIL } from "@/lib/env";
 import { currentOrigin } from "@/lib/origin";
 import { escapeHtml as h } from "@/lib/format";
 import { ORDER_CUSTOMER_COLUMNS, type OrderCustomer } from "@/lib/customers";
+import { kickSync } from "@/lib/inventory/sync";
 
 export type NewCustomerInput = {
   name: string;
@@ -176,6 +177,8 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   const orderId = id as string;
   revalidatePath("/");
   revalidatePath("/orders");
+  // Branches with a live inventory sheet: the order's lines go onto PENDING ORDERS right away.
+  if (input.delivery !== "dropship") kickSync(input.branchId, "order placed");
 
   if (needsApproval) {
     const sent = await sendApprovalRequest(s.supabase, orderId, approvalEmail);
