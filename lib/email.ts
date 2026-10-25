@@ -139,7 +139,7 @@ export function wrapEmail(title: string, inner: string): string {
 <tr><td align="center">
 <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#18181b;">
 <tr><td style="background:#0A0A0B;padding:18px 24px;border-bottom:4px solid #E33527;">
-<span style="font-size:20px;font-weight:800;letter-spacing:2px;color:#ffffff;">AMBIT</span><span style="font-size:20px;font-weight:800;letter-spacing:2px;color:#E33527;">ION</span>
+<span style="font-size:20px;font-weight:800;letter-spacing:2px;color:#ffffff;">AMBIT</span><span style="font-size:20px;font-weight:800;letter-spacing:2px;color:#E33527;"> A.I.</span>
 <span style="float:right;font-size:12px;color:#B4B4BC;line-height:26px;">${title}</span>
 </td></tr>
 <tr><td style="padding:24px;">${inner}</td></tr>

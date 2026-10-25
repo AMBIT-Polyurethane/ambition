@@ -25,6 +25,7 @@ export default async function AdminPage() {
         <div className="alert info small">&ldquo;Sign in with Microsoft&rdquo; is off. Until IT finishes the Microsoft set-up, add AMBIT staff by having them request access, then set their role to Employee here.</div>
       ) : null}
       <div className="list">
+        <ListLink href="/admin/assistant" icon="spark" title="Ask AMBIT" sub="Teach the assistant, answer questions sent to AMBIT's expert, settings" />
         <ListLink href="/admin/users" icon="users" title="Accounts" sub={`${pending.count ?? 0} waiting for approval`} />
         <ListLink href="/admin/companies" icon="building" title="Customers" sub={`${companies.count ?? 0} companies`} />
         <ListLink href="/admin/products" icon="box" title="Products & pricing" sub={`${products.count ?? 0} active products`} />

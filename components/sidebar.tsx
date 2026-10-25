@@ -14,6 +14,7 @@ import {
   Ruler,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
   Tag,
   Truck,
   User,
@@ -30,6 +31,7 @@ export type SideItem = { href: string; label: string; icon: keyof typeof ICONS; 
 
 const ICONS = {
   home: House,
+  assistant: Sparkles,
   cart: ShoppingCart,
   orders: ClipboardList,
   desk: Truck,

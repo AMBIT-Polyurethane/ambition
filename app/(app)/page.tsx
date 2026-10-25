@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, ChevronRight, Plus, RefreshCw, UserCheck } from "lucide-react";
+import { Bell, ChevronRight, Plus, RefreshCw, Sparkles, UserCheck } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { firstName, greeting, initials, orderNo, dateShort } from "@/lib/format";
 import { Icon } from "@/components/icons";
@@ -126,6 +126,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           {emp ? "Here's what's moving at AMBIT today." : `${profile.company?.name ?? "Welcome to AMBIT Intelligence"}${profile.company?.account_no ? ` · ${profile.company.account_no}` : ""}`}
         </span>
       </div>
+
+      {apps.some((a) => a.key === "ask") ? (
+        <Link href="/assistant" className="ask-bar">
+          <Sparkles size={18} />
+          <span className="grow ellipsis">Ask AMBIT about products, building science, codes or the app…</span>
+          <ChevronRight size={18} />
+        </Link>
+      ) : null}
 
       {sp.password === "updated" ? <div className="alert ok">Your password was updated.</div> : null}
       {sp.welcome ? (

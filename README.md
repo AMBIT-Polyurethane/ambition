@@ -107,6 +107,31 @@ H move, S scale, A area, L linear, C count, X cutout, Enter finish, Esc cancel, 
 straight lines, scroll to zoom. The report totals by item, material and sheet, prints to PDF and downloads for Excel.
 Plans are stored in the private "plans" bucket. Needs `supabase/migrations/0019_takeoff.sql`.
 
+### Ask AMBIT (AI assistant)
+
+Home → Ask AMBIT (or the Ask AMBIT bar on Home). Answers questions about AMBIT products, building science as AMBIT
+teaches it, building codes, HVAC design and how to use the app, with numbered sources under each answer.
+
+**Where its knowledge may come from (set by Jeremiah, enforced in `lib/assistant/policy.ts`):** building science only
+from AMBIT teaching (Jeremiah's TSBs and notes); codes and climate zones only from the IECC, IRC and IBC; HVAC design
+only from ACCA, ASHRAE and other neutral parties; AMBIT products only from AMBIT's own TDS / SDS / ESR / CCRR /
+guides / warranties; plus basic physics. Never SPFA, Spray Foam World or any foam- or HVAC-industry source. The SPFA
+library in Docs is never added. Web lookups (optional) can only reach the approved sites in Admin → Ask AMBIT →
+Settings, and foam-industry sites can't be added there.
+
+- **How it answers:** it searches AMBIT's knowledge (Postgres full-text search, `ai_search`), lets Claude search more,
+  optionally looks things up on the approved sites (Anthropic web search with `allowed_domains`), and streams the
+  answer with citations. Without an approved source it says so and offers "Send to AMBIT's expert".
+- **Admin → Ask AMBIT:** Teach (add PDFs, add AMBIT documents from Product docs, write teaching or app help, turn
+  sources on/off, staff-only), Questions (the expert inbox: the answer goes back into the person's conversation, by
+  email once app email works, and can be saved as teaching), Conversations (not helpful / no source / all, with
+  "write a correction"), Settings (staff only or contractors too, model, daily limits, approved sites, the
+  building-science teacher who alone can change teaching, extra rules).
+- **Setup:** `ANTHROPIC_API_KEY` in Vercel (an API key from platform.claude.com with billing), then Redeploy. Needs
+  `supabase/migrations/0020_assistant.sql`. PDF words are read in the admin's browser (pdf.js); scanned PDFs without
+  text can't be used. How the app works for the assistant: `lib/assistant/app-guide.ts` (each person only gets the
+  sections they can use; update it when screens change).
+
 ### Live inventory (Oklahoma City first)
 
 Each location keeps its stock in its Excel workbook in OneDrive / SharePoint (tabs COUNT SHEET and PENDING ORDERS).
@@ -230,9 +255,9 @@ npm run dev
 ```
 app/(auth)/        sign in, request access, forgot password + server actions
 app/(app)/         signed-in screens (home, order, orders, takeoff, inventory, docs, academy, directory, profile, admin)
-app/api/           inventory sync timer, Microsoft connect / callback
+app/api/           Ask AMBIT answers, inventory sync timer, Microsoft connect / callback, version check
 app/auth/          OAuth/email-link callback and sign out
 components/        UI pieces (order builder, tab bar, CSV import, doc upload)
-lib/               Supabase clients, session/role helpers, email, formatting
+lib/               Supabase clients, session/role helpers, email, formatting, assistant/ (Ask AMBIT rules, app guide, Claude loop)
 supabase/          database schema, starter data and storage rules
 ```

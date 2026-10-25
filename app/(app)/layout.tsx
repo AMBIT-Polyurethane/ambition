@@ -2,17 +2,21 @@ import { TabBar } from "@/components/tabbar";
 import { Sidebar, type SideItem } from "@/components/sidebar";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can, roleLabel, seesOrders } from "@/lib/access";
+import { assistantAccess } from "@/lib/assistant/settings";
 
 export const dynamic = "force-dynamic";
 
 // One app for phones and computers. Phones get the bottom tabs; wider screens (tablets in
 // landscape, laptops, desktops) get the menu down the left side. Every page works in both.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { profile } = await requireActive();
+  const { supabase, profile } = await requireActive();
   const emp = isEmployee(profile);
+  const ai = await assistantAccess(supabase, profile);
+  const ask: SideItem | false = ai.on && { href: "/assistant", label: "Ask AMBIT", icon: "assistant", badge: ai.unread };
   const items: (SideItem | false)[] = emp
     ? [
         { href: "/", label: "Home", icon: "home" },
+        ask,
         can(profile, "ordering") && { href: "/order", label: "Order", icon: "cart" },
         seesOrders(profile) && { href: "/orders", label: "Orders", icon: "orders" },
         (can(profile, "order_desk") || can(profile, "credit_check")) && { href: "/orders/desk", label: "Order desk", icon: "desk" },
@@ -30,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ]
     : [
         { href: "/", label: "Home", icon: "home" },
+        ask,
         { href: "/order", label: "Order", icon: "cart" },
         { href: "/orders", label: "My orders", icon: "orders" },
         { href: "/docs", label: "Product docs", icon: "docs" },

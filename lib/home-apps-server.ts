@@ -5,6 +5,7 @@ import { isEmployee } from "@/lib/session";
 import { linkHref } from "@/lib/links";
 import { APP_COLOR, linkColor, type HomeApp } from "@/lib/home-apps";
 import type { LinkRow, Profile } from "@/lib/types";
+import { assistantAccess } from "@/lib/assistant/settings";
 
 /** Every app this person can use, in the default order for their role. Badges are filled in by the caller. */
 export async function homeApps(
@@ -16,9 +17,12 @@ export async function homeApps(
   const audiences = emp ? ["all", "employee"] : ["all", "customer"];
   const { data } = await supabase.from("links").select("*").eq("active", true).in("audience", audiences).order("sort").order("title");
   const links = ((data ?? []) as LinkRow[]).filter((l) => !emp || !l.perm || can(profile, l.perm as Perm));
+  const ai = await assistantAccess(supabase, profile);
+  const ask: HomeApp | false = ai.on && { key: "ask", label: "Ask AMBIT", href: "/assistant", icon: "spark", color: APP_COLOR.fuchsia, badge: ai.unread || undefined };
 
   const apps: (HomeApp | false)[] = emp
     ? [
+        ask,
         can(profile, "ordering") && { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
         seesOrders(profile) && { key: "orders", label: "Orders", href: "/orders", icon: "clipboard", color: APP_COLOR.slate },
         (can(profile, "order_desk") || can(profile, "credit_check")) && { key: "desk", label: "Order desk", href: "/orders/desk", icon: "truck", color: APP_COLOR.orange },
@@ -37,6 +41,7 @@ export async function homeApps(
       ]
     : [
         { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
+        ask,
         { key: "orders", label: "My orders", href: "/orders", icon: "clipboard", color: APP_COLOR.slate },
         { key: "tsb", label: "Bulletins", href: "/docs?type=tsb", icon: "bulletin", color: APP_COLOR.blue },
         { key: "docs", label: "Product docs", href: "/docs", icon: "docs", color: APP_COLOR.teal },
