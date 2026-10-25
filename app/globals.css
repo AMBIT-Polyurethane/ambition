@@ -512,6 +512,7 @@ details > summary.linkbtn { display: inline-block; }
 /* Opening animation (components/splash.tsx) */
 @property --sp-hole { syntax: "<length>"; inherits: false; initial-value: -4px; }
 #ambit-splash {
+  display: block;
   --sp-red: #e33527;
   --sp-hole: -4px;
   position: fixed; inset: 0; z-index: 2147483000; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent;
@@ -1115,3 +1116,23 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
   .paper-table { min-width: 0; }
   .paper-table tr, .paper-tiles { break-inside: avoid; }
 }
+
+/* "A new version is ready" bar (components/splash.tsx) */
+#ambit-update {
+  position: fixed; z-index: 2147482000; left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top) + 10px); width: min(440px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px;
+  background: var(--s1); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); font: 600 14px/1.3 var(--font);
+  animation: upd-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+#ambit-update span { flex: 1; }
+#ambit-update .u-go {
+  background: var(--red); color: #fff; border: 0; border-radius: 10px; padding: 9px 16px;
+  font: 800 13px/1 var(--font); letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer;
+}
+#ambit-update .u-go:hover { background: var(--red-hot); }
+#ambit-update .u-x { background: none; border: 0; color: var(--text3); font-size: 22px; line-height: 1; padding: 4px 6px; cursor: pointer; }
+@keyframes upd-in { from { opacity: 0; transform: translate(-50%, -12px); } }
+@media print { #ambit-update { display: none; } }
+@media (min-width: 1024px) { #ambit-update { left: calc(50% + var(--side, 0px) / 2); } }

@@ -5,25 +5,29 @@
  * fills, and the screen opens from the middle into the app.
  *
  * A tiny script at the very top of <body> runs before the page is drawn, so the first thing on
- * screen is this, not the page. It shows once per opening (launching the home-screen app or
- * opening the site), not on every page, reload or sign-in hop. It waits for the page to finish
- * loading (at most a few seconds) and a tap skips it. Customers' approval links skip it.
+ * screen is this, not the page. It shows every time the app is opened (launching the home-screen
+ * app or opening the site), not on every page, reload or sign-in hop. It waits for the page to
+ * finish loading (at most a few seconds) and a tap skips it. Customers' approval links skip it.
+ *
+ * Phones keep a home-screen app in memory, so "opening" it often just brings back the copy that
+ * was already open. So when the app comes back on screen:
+ *  - a newer version is live and they were away 30+ minutes -> it reloads into the new version
+ *    with the opening animation (unless something is half typed, then it asks, see below);
+ *  - a newer version is live and they were away a short while -> a small "Update" bar asks;
+ *  - the installed app (home screen / computer) was away 30+ minutes -> the animation plays again,
+ *    like opening a real app. A browser tab doesn't replay it.
  * Everything is drawn with code and three small logo files, so it's sharp on any screen.
  * Styles: "Opening animation" in app/globals.css.
  */
+// Which build this page came from; /api/version says which one is live now.
+const BUILD = process.env.APP_BUILD ?? "";
+
 const SCRIPT = `(function () {
   try {
     var d = document, w = window, p = location.pathname;
-    if (/^\\/(approve|auth)(\\/|$)/.test(p)) return;
-    var nav = (performance.getEntriesByType && performance.getEntriesByType("navigation")[0]) || {};
-    if (nav.type && nav.type !== "navigate") return;
-    if (d.referrer) { try { if (new URL(d.referrer).origin === location.origin) return; } catch (e) {} }
-    var KEY = "ambit-splash", now = Date.now(), last = 0;
-    try { last = Number(sessionStorage.getItem(KEY)) || 0; sessionStorage.setItem(KEY, String(now)); } catch (e) { return; }
-    if (now - last < 10 * 60 * 1000) return;
-
-    var still = !!((w.matchMedia && w.matchMedia("(prefers-reduced-motion: reduce)").matches)
-      || (navigator.connection && navigator.connection.saveData));
+    var BUILD = ${JSON.stringify(BUILD)};
+    var LONG = 30 * 60 * 1000;
+    var skipHere = function () { return /^\\/(approve|auth)(\\/|$)/.test(location.pathname); };
 
     function spans(word) {
       var out = "";
@@ -32,75 +36,160 @@ const SCRIPT = `(function () {
       }
       return out;
     }
-    var letters = spans("AMBIT"), sub = spans("INTELLIGENCE");
-    var sparks = "";
-    for (var k = 0; k < 14; k++) {
-      var ang = (k / 14) * 360 + (k % 2 ? 9 : -9), dist = 110 + (k * 37) % 90;
-      sparks += '<i style="--a:' + ang + "deg;--d:" + dist + "px;--s:" + (0.6 + ((k * 7) % 5) / 6) + '"></i>';
-    }
 
-    var el = d.createElement("div");
-    el.id = "ambit-splash";
-    el.setAttribute("aria-hidden", "true");
-    if (still) el.className = "still";
-    el.innerHTML =
-      '<div class="sp-grid"></div><div class="sp-glow"></div>' +
-      '<div class="sp-stage">' +
-        '<div class="sp-atom">' +
-          '<div class="sp-streak"></div><div class="sp-ring"></div><div class="sp-ring two"></div><div class="sp-flash"></div>' +
-          '<div class="sp-sparks">' + sparks + "</div>" +
-          '<div class="sp-mark">' +
-            '<img class="sp-w" src="/splash/atom-white.svg" alt="">' +
-            '<img class="sp-r" src="/splash/atom-red.svg" alt="">' +
-            '<img class="sp-c" src="/splash/atom-core.svg" alt="">' +
+    // Draws the opening screen and plays it.
+    function play() {
+      if (d.getElementById("ambit-splash")) return;
+      var still = !!((w.matchMedia && w.matchMedia("(prefers-reduced-motion: reduce)").matches)
+        || (navigator.connection && navigator.connection.saveData));
+      var sparks = "";
+      for (var k = 0; k < 14; k++) {
+        var ang = (k / 14) * 360 + (k % 2 ? 9 : -9), dist = 110 + (k * 37) % 90;
+        sparks += '<i style="--a:' + ang + "deg;--d:" + dist + "px;--s:" + (0.6 + ((k * 7) % 5) / 6) + '"></i>';
+      }
+      // Its own tag, not a <div>: React checks the first <div> in the page against what it drew on the
+      // server, and finding this there instead made it throw the page away and redraw it (wiping this out).
+      var el = d.createElement("ambit-splash");
+      el.id = "ambit-splash";
+      el.setAttribute("aria-hidden", "true");
+      if (still) el.className = "still";
+      el.innerHTML =
+        '<div class="sp-grid"></div><div class="sp-glow"></div>' +
+        '<div class="sp-stage">' +
+          '<div class="sp-atom">' +
+            '<div class="sp-streak"></div><div class="sp-ring"></div><div class="sp-ring two"></div><div class="sp-flash"></div>' +
+            '<div class="sp-sparks">' + sparks + "</div>" +
+            '<div class="sp-mark">' +
+              '<img class="sp-w" src="/splash/atom-white.svg" alt="">' +
+              '<img class="sp-r" src="/splash/atom-red.svg" alt="">' +
+              '<img class="sp-c" src="/splash/atom-core.svg" alt="">' +
+            "</div>" +
           "</div>" +
-        "</div>" +
-        '<div class="sp-word">' + letters + "</div>" +
-        '<div class="sp-sub">' + sub + "</div>" +
-        '<div class="sp-ai">A.I.</div>' +
-        '<div class="sp-tag">AMBIT POLYURETHANE</div>' +
-        '<div class="sp-load"><i></i></div>' +
-      "</div>";
-    d.body.appendChild(el);
+          '<div class="sp-word">' + spans("AMBIT") + "</div>" +
+          '<div class="sp-sub">' + spans("INTELLIGENCE") + "</div>" +
+          '<div class="sp-ai">A.I.</div>' +
+          '<div class="sp-tag">AMBIT POLYURETHANE</div>' +
+          '<div class="sp-load"><i></i></div>' +
+        "</div>";
+      d.body.appendChild(el);
 
-    var done = false, started = 0, timers = [];
-    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
-    function finish() {
-      if (done) return;
-      done = true;
-      timers.forEach(clearTimeout);
-      el.classList.add("out");
-      setTimeout(function () { el.remove(); }, 900);
-    }
-    // The animation runs about 2.8 seconds; after that it leaves as soon as the page has loaded.
-    var MIN = still ? 900 : 2800;
-    function ready() {
-      if (done) return;
-      var left = MIN - (Date.now() - started);
-      if (left > 0) return later(ready, left);
-      if (d.readyState !== "complete") return later(ready, 120);
-      finish();
-    }
-    function go() {
-      if (started) return;
-      started = Date.now();
-      el.classList.add("go");
-      later(ready, MIN);
-    }
-    el.addEventListener("click", finish);
-    w.addEventListener("pageshow", function (e) { if (e.persisted) finish(); });
+      var done = false, started = 0, timers = [];
+      function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+      function finish() {
+        if (done) return;
+        done = true;
+        timers.forEach(clearTimeout);
+        el.classList.add("out");
+        setTimeout(function () { el.remove(); }, 900);
+      }
+      // The animation runs about 2.8 seconds; after that it leaves as soon as the page has loaded.
+      var MIN = still ? 900 : 2800;
+      function ready() {
+        if (done) return;
+        var left = MIN - (Date.now() - started);
+        if (left > 0) return later(ready, left);
+        if (d.readyState !== "complete") return later(ready, 120);
+        finish();
+      }
+      function go() {
+        if (started) return;
+        started = Date.now();
+        el.classList.add("go");
+        later(ready, MIN);
+      }
+      el.addEventListener("click", finish);
+      w.addEventListener("pageshow", function (e) { if (e.persisted) finish(); });
 
-    // Start once the logo files are in (they're tiny and cached after the first time).
-    var imgs = el.querySelectorAll("img"), loaded = 0;
-    for (var j = 0; j < imgs.length; j++) {
-      if (imgs[j].complete) { loaded++; continue; }
-      imgs[j].addEventListener("load", function () { if (++loaded >= imgs.length) go(); });
-      imgs[j].addEventListener("error", go);
+      // Start once the logo files are in (they're tiny and cached after the first time).
+      var imgs = el.querySelectorAll("img"), loaded = 0;
+      for (var j = 0; j < imgs.length; j++) {
+        if (imgs[j].complete) { loaded++; continue; }
+        imgs[j].addEventListener("load", function () { if (++loaded >= imgs.length) go(); });
+        imgs[j].addEventListener("error", go);
+      }
+      if (loaded >= imgs.length) go();
+      later(go, 700);
+      // Hard stop, whatever happens.
+      later(finish, 6000);
     }
-    if (loaded >= imgs.length) go();
-    later(go, 700);
-    // Hard stop, whatever happens.
-    later(finish, 6000);
+
+    // ---- Opening the app (a fresh page load) ----
+    function onOpen() {
+      var forced = false;
+      try { forced = sessionStorage.getItem("ambit-splash-update") === "1"; sessionStorage.removeItem("ambit-splash-update"); } catch (e) {}
+      if (skipHere()) return;
+      if (!forced) {
+        var nav = (performance.getEntriesByType && performance.getEntriesByType("navigation")[0]) || {};
+        if (nav.type && nav.type !== "navigate") return;
+        if (d.referrer) { try { if (new URL(d.referrer).origin === location.origin) return; } catch (e) {} }
+        // A sign-in bounce right after opening doesn't play it twice.
+        var KEY = "ambit-splash", now = Date.now(), last = 0;
+        try { last = Number(sessionStorage.getItem(KEY)) || 0; sessionStorage.setItem(KEY, String(now)); } catch (e) {}
+        if (now - last < 60 * 1000) return;
+      }
+      play();
+    }
+    onOpen();
+
+    // ---- Coming back to the app ----
+    var installed = !!((w.matchMedia && (w.matchMedia("(display-mode: standalone)").matches || w.matchMedia("(display-mode: window-controls-overlay)").matches)) || navigator.standalone);
+
+    // Something typed but not saved yet: don't reload under it.
+    function busy() {
+      var a = d.activeElement;
+      if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+      var f = d.querySelectorAll("input, textarea, select");
+      for (var i = 0; i < f.length; i++) {
+        var x = f[i];
+        if (x.type === "hidden" || x.type === "search") continue;
+        if (x.tagName === "SELECT") {
+          for (var o = 0; o < x.options.length; o++) if (x.options[o].selected !== x.options[o].defaultSelected) return true;
+        } else if (x.type === "checkbox" || x.type === "radio") {
+          if (x.checked !== x.defaultChecked) return true;
+        } else if (x.type !== "file" && x.value !== x.defaultValue) return true;
+        else if (x.type === "file" && x.files && x.files.length) return true;
+      }
+      return false;
+    }
+    function update() {
+      try { sessionStorage.setItem("ambit-splash-update", "1"); } catch (e) {}
+      location.reload();
+    }
+    function askToUpdate() {
+      if (d.getElementById("ambit-update")) return;
+      var bar = d.createElement("ambit-update");
+      bar.id = "ambit-update";
+      bar.setAttribute("role", "status");
+      bar.innerHTML = '<span>A new version of AMBIT A.I. is ready.</span><button type="button" class="u-go">Update</button><button type="button" class="u-x" aria-label="Later">\\u00d7</button>';
+      bar.querySelector(".u-go").addEventListener("click", update);
+      bar.querySelector(".u-x").addEventListener("click", function () { bar.remove(); });
+      d.body.appendChild(bar);
+    }
+    function back(away) {
+      var x = new XMLHttpRequest();
+      x.open("GET", "/api/version?t=" + Date.now());
+      x.timeout = 8000;
+      x.onload = function () {
+        var v = null;
+        try { v = JSON.parse(x.responseText).v; } catch (e) {}
+        if (x.status === 200 && v && BUILD && v !== BUILD) {
+          if (away >= LONG && !busy() && !skipHere()) update();
+          else askToUpdate();
+          return;
+        }
+        if (installed && away >= LONG && !skipHere()) play();
+      };
+      x.onerror = x.ontimeout = function () { if (installed && away >= LONG && !skipHere()) play(); };
+      x.send();
+    }
+    var hiddenAt = 0;
+    d.addEventListener("visibilitychange", function () {
+      if (d.visibilityState === "hidden") { hiddenAt = Date.now(); return; }
+      if (!hiddenAt) return;
+      var away = Date.now() - hiddenAt;
+      hiddenAt = 0;
+      if (away >= 60 * 1000) back(away);
+    });
   } catch (e) {
     var s = document.getElementById("ambit-splash");
     if (s) s.remove();

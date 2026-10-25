@@ -86,6 +86,15 @@ down the left side and pages get wider; phones keep the tabs. Chrome and Edge sh
 bottom of the menu (its own icon and window); on a Mac in Safari use File → Add to Dock. Every feature is built
 once and works on both.
 
+### Updates and the opening animation
+
+Phones keep a home-screen app open in the background, so it can keep showing an older version. When the app comes
+back on screen it asks `/api/version` which version is live: after 30+ minutes away it reloads into the new version
+by itself (with the opening animation), unless something is half typed; otherwise a small "A new version of AMBIT
+A.I. is ready · Update" bar appears at the top. The installed app also replays the opening animation after 30+
+minutes away. (components/splash.tsx; the opening screen is its own `<ambit-splash>` tag, never a `<div>`, so React
+doesn't mistake it for the first box of the page and wipe it out.)
+
 ### Takeoff
 
 Home → Takeoff (staff with the Takeoff box; admins always, CRM and Sales reps by default). Start a takeoff, drop in
