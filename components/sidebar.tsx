@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Blocks,
   Boxes,
   ClipboardList,
   Download,
@@ -38,6 +39,7 @@ const ICONS = {
   orders: ClipboardList,
   desk: Truck,
   takeoff: Ruler,
+  ops: Blocks,
   inventory: Boxes,
   prices: Tag,
   expenses: Receipt,
@@ -56,6 +58,7 @@ function isOn(href: string, path: string) {
   if (href === "/") return path === "/";
   if (href === "/orders") return path === "/orders" || (path.startsWith("/orders/") && !path.startsWith("/orders/desk"));
   if (href === "/profile") return path.startsWith("/profile");
+  if (href === "/ops") return path === "/ops" || path.startsWith("/ops/") || path === "/takeoff" || path.startsWith("/takeoff/");
   return path === href || path.startsWith(href + "/");
 }
 

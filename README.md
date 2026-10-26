@@ -95,6 +95,13 @@ A.I. is ready · Update" bar appears at the top. The installed app also replays 
 minutes away. (components/splash.tsx; the opening screen is its own `<ambit-splash>` tag, never a `<div>`, so React
 doesn't mistake it for the first box of the page and wipe it out.)
 
+### AMBIT-OPS
+
+`/ops` (Home tile and left menu "AMBIT-OPS"): the contractor operations software being built inside AMBIT
+Intelligence. Takeoff is its first live module; Quoting & proposals, CRM, Dispatching, Job scheduling and Job costing
+are listed as planned. Open to people with the Takeoff box for now (contractors later). New modules go under
+`app/(app)/ops/`.
+
 ### Takeoff
 
 Home → Takeoff (staff with the Takeoff box; admins always, CRM and Sales reps by default). Start a takeoff, drop in

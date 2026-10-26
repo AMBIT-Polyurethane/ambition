@@ -1428,3 +1428,25 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .home-alert.err .ic { background: var(--red-soft); color: var(--red-text); }
 .home-alert .t { font-size: 14.5px; font-weight: 700; }
 .home-alert .s { font-size: 12.5px; color: var(--text3); }
+
+/* ---------------------------------------------------------------- AMBIT-OPS */
+.ops-hero {
+  display: flex; flex-direction: column; gap: 8px; padding: 22px 22px 24px; border-radius: var(--radius);
+  background: radial-gradient(120% 140% at 100% 0%, rgba(2, 132, 199, 0.28) 0%, transparent 55%), var(--s1); border: 1px solid var(--line);
+}
+.ops-hero h2 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 850; letter-spacing: -0.01em; max-width: 720px; }
+.ops-hero p { margin: 0; color: var(--text2); font-size: 14.5px; }
+.ops-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 760px) { .ops-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1200px) { .ops-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.ops-card {
+  display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: var(--radius); background: var(--s1);
+  border: 1px solid var(--line); color: var(--text); text-decoration: none;
+}
+.ops-card b { font-size: 16px; }
+.ops-card .s { font-size: 13.5px; color: var(--text2); line-height: 1.4; }
+.ops-card.live:hover { border-color: #0284c7; }
+.ops-card.soon { opacity: 0.72; }
+.ops-ic { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgba(2, 132, 199, 0.16); color: #38bdf8; }
+.ops-card.soon .ops-ic { background: var(--s2); color: var(--text3); }
+.ops-card .chev { margin-top: 12px; color: var(--text3); }

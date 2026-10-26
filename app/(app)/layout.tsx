@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         can(profile, "ordering") && { href: "/order", label: "Order", icon: "cart" },
         seesOrders(profile) && { href: "/orders", label: "Orders", icon: "orders" },
         (can(profile, "order_desk") || can(profile, "credit_check")) && { href: "/orders/desk", label: "Order desk", icon: "desk" },
-        can(profile, "takeoff") && { href: "/takeoff", label: "Takeoff", icon: "takeoff" },
+        can(profile, "takeoff") && { href: "/ops", label: "AMBIT-OPS", icon: "ops" },
         can(profile, "inventory") && { href: "/inventory", label: "Inventory", icon: "inventory" },
         (can(profile, "credit_check") || profile.role === "admin") && { href: "/tax", label: "Tax certificates", icon: "tax" },
         (can(profile, "complaints") || profile.role === "admin") && { href: "/complaints", label: "Complaint reports", icon: "complaints" },

@@ -37,7 +37,7 @@ export async function homeApps(
         can(profile, "ordering") && { key: "due", label: "Due to order", href: "/orders/due", icon: "due", color: APP_COLOR.steel },
         seesOrders(profile) && { key: "orders", label: "Orders", href: "/orders", icon: "clipboard", color: APP_COLOR.slate },
         (can(profile, "order_desk") || can(profile, "credit_check")) && { key: "desk", label: "Order desk", href: "/orders/desk", icon: "truck", color: APP_COLOR.orange },
-        can(profile, "takeoff") && { key: "takeoff", label: "Takeoff", href: "/takeoff", icon: "ruler", color: APP_COLOR.sky },
+        can(profile, "takeoff") && { key: "ops", label: "AMBIT-OPS", href: "/ops", icon: "ops", color: APP_COLOR.sky },
         can(profile, "inventory") && { key: "inventory", label: "Inventory", href: "/inventory", icon: "boxes", color: APP_COLOR.cyan },
         (can(profile, "credit_check") || profile.role === "admin") && { key: "tax", label: "Tax certificates", href: "/tax", icon: "tax", color: APP_COLOR.emerald },
         complaints,

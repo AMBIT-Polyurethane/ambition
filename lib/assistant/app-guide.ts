@@ -115,7 +115,7 @@ const SECTIONS: Section[] = [
     who: "staff",
     perm: "takeoff",
     title: "Takeoff: measuring plans (staff)",
-    body: `[Takeoff](/takeoff) replaces STACK for measuring plans. Works best on a computer.
+    body: `[Takeoff](/takeoff) replaces STACK for measuring plans. It lives under [AMBIT-OPS](/ops) (Home tile and left menu), the contractor operations software AMBIT is building (quoting, CRM, dispatching and more are planned there). Works best on a computer.
 1. "New takeoff": job name and customer, then Create.
 2. Drag the plan PDFs onto the screen (or "Upload plans"). Each page becomes a sheet; sheet numbers (A2.1) and the scale written on the sheet (1/4" = 1'-0", 1" = 20') are read automatically when the PDF has text.
 3. Check the scale. If a sheet has no scale, a yellow bar says so: "Set scale", then either pick the scale from the list or draw a line over a dimension you know and type its length (e.g. 24'-6"). Always check one known dimension before measuring.

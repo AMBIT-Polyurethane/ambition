@@ -55,7 +55,7 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
 
   return (
     <main className="shell wide">
-      <TopBar title="Takeoff" back="/" />
+      <TopBar title="Takeoff" back="/ops" />
       {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
       {sp.err ? <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div> : null}
       {error ? <div className="alert warn small">Run supabase/migrations/0019_takeoff.sql in Supabase first (SQL Editor).</div> : null}
