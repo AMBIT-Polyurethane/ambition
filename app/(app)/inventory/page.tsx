@@ -90,6 +90,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             </Submit>
           </form>
         </div>
+        {sheet.last_summary?.lot_issues?.length ? (
+          <div className="alert warn small">
+            <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
+            <span>FOAM LOTS: {sheet.last_summary.lot_issues.join("; ")}.</span>
+          </div>
+        ) : null}
         {sheet.last_error ? (
           <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>Last try didn&apos;t finish: {sheet.last_error}</span></div>
         ) : null}
@@ -102,11 +108,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <p className="tiny faint" style={{ margin: 0 }}>
           Counts saved here reach the spreadsheet in seconds. Changes made on the spreadsheet show here within 2 minutes.
           When a PENDING ORDERS line is marked Picked Up / Completed, the app lowers TOTAL IN STOCK for you (its Notes say
-          &ldquo;Stock taken&rdquo;).
+          &ldquo;Stock taken&rdquo;). Spray foam is counted by lot on the FOAM LOTS tab: orders take ISO from Covestro first, then the lot
+          that expires soonest.
         </p>
       </section>
 
-      <InventoryList rows={rows} branch={branch} categories={(catRows ?? []) as Category[]} action={stockChange} initialFilter={sp.f ?? "all"} />
+      <InventoryList rows={rows} branch={branch} categories={(catRows ?? []) as Category[]} action={stockChange} initialFilter={sp.f ?? "all"} sheetUrl={sheet.share_url} />
     </main>
   );
 }

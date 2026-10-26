@@ -176,3 +176,17 @@ export async function deleteOrder(form: FormData) {
   redirect(`/orders?msg=${encodeURIComponent(`${no} was deleted.`)}`);
 }
 
+
+/** Warehouse / order desk: take a line's drums from a different lot (or another ISO brand). */
+export async function changeLot(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const id = String(form.get("id") ?? "");
+  const line = Number(form.get("line"));
+  const lot = Number(form.get("lot"));
+  if (!line || !lot) back(id, "err", "Choose a lot.");
+  const { data, error } = await s.supabase.rpc("inventory_repick", { p_line: line, p_lot: lot });
+  if (error) back(id, "err", error.message);
+  await kickForOrder(s.supabase, id, "lot changed");
+  back(id, "msg", `Lot changed to ${data}. The spreadsheet updates in a moment.`);
+}

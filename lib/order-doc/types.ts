@@ -1,10 +1,14 @@
 import type { Branch, Order, OrderItem } from "@/lib/types";
-import type { FoamSide } from "@/lib/order-doc/loads";
+import type { FoamSide, LotPick } from "@/lib/order-doc/loads";
 
 /** Where an order stands from the customer's point of view. */
 export type DocState = "pending" | "approved" | "changes_requested" | "expired" | "cancelled" | "closed";
 
-export type DocItem = Pick<OrderItem, "id" | "sku" | "name" | "unit" | "qty" | "unit_price" | "customer_priced" | "line_total"> & { foam?: FoamSide };
+export type DocItem = Pick<OrderItem, "id" | "sku" | "name" | "unit" | "qty" | "unit_price" | "customer_priced" | "line_total"> & {
+  foam?: FoamSide;
+  /** Brand and lot each drum comes from: the warehouse copy only (AMBIT staff). */
+  picks?: LotPick[];
+};
 
 export type DocCompany = {
   contact_name: string | null;

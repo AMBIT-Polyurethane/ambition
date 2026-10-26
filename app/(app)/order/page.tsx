@@ -77,10 +77,17 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
     };
   });
 
+  // A brand that's only stocked, never sold by name (ISO-COVESTRO), reorders as what the store sells (ISO A-Side).
+  const { data: parentRows } = await supabase.rpc("stock_parents");
+  const parentOf = new Map(((parentRows ?? []) as { product_id: string; parent_id: string }[]).map((r) => [r.product_id, r.parent_id]));
+  const sold = (pid: string) => parentOf.get(pid) ?? pid;
+
   const reorderData = reorderRes.data as { order_no: number; company_id: string | null; order_items: { product_id: string | null; qty: number }[] } | null;
-  const reorder = reorderData
-    ? Object.fromEntries(reorderData.order_items.filter((i) => i.product_id).map((i) => [i.product_id as string, Number(i.qty)]))
-    : null;
+  let reorder: Record<string, number> | null = null;
+  if (reorderData) {
+    reorder = {};
+    for (const i of reorderData.order_items) if (i.product_id) reorder[sold(i.product_id)] = (reorder[sold(i.product_id)] ?? 0) + Number(i.qty);
+  }
 
   // A draft from AI order intake (staff), or this customer's usual items (smart reorder).
   let draft: OrderDraft | null = null;
@@ -89,7 +96,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
     if (d && d.status !== "sent") {
       const items: Record<string, number> = {};
       for (const it of (d.items ?? []) as { product_id: string | null; qty: number }[]) {
-        if (it.product_id && Number(it.qty) > 0) items[it.product_id] = (items[it.product_id] ?? 0) + Number(it.qty);
+        if (it.product_id && Number(it.qty) > 0) items[sold(it.product_id)] = (items[sold(it.product_id)] ?? 0) + Number(it.qty);
       }
       draft = {
         id: d.id,

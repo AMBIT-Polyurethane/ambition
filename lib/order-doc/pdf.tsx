@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, qtyText } from "@/lib/format";
 import { LOGO_ASPECT, LOGO_PNG } from "@/lib/order-doc/logo";
 import { awaitingCustomer, type OrderDoc } from "@/lib/order-doc/types";
-import { foamLoads, splitNote } from "@/lib/order-doc/loads";
+import { foamLoads, pickText, splitNote } from "@/lib/order-doc/loads";
 import { plural } from "@/lib/format";
 
 // The printed AMBIT order: white, one Letter page for most orders, more pages when it needs them.
@@ -64,6 +64,9 @@ const s = StyleSheet.create({
   acct: { fontFamily: "Helvetica-Bold", fontSize: 7.2, color: GRAY },
   loadBreak: { borderTopWidth: 1.8, borderTopColor: INK },
   splitNote: { fontSize: 7, color: GRAY, marginTop: 1 },
+  pick: { fontSize: 7.4, color: INK, marginTop: 1.5 },
+  pickQ: { fontFamily: "Helvetica-Bold" },
+  copyTag: { fontSize: 7, letterSpacing: 0.8, color: "#B42318", fontFamily: "Helvetica-Bold", marginTop: 4, textAlign: "right" },
   below: { flexDirection: "row", marginTop: 11, alignItems: "flex-start", fontSize: 8.6, lineHeight: 1.35 },
   notes: { flex: 1, marginRight: 22 },
   totals: { width: 205 },
@@ -298,6 +301,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
   const groups = foamLoads(doc.items);
   let counter = 0;
   const rows = groups.flatMap((g, gi) => g.rows.map((row, ri) => ({ row, it: row.item, n: ++counter, first: gi > 0 && ri === 0 })));
+  const warehouse = doc.items.some((i) => i.picks?.length);
 
   const facts: [string, string, number][] = [
     ["ORDER DATE", dateShort(o.created_at), 1],
@@ -320,6 +324,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
             <Text style={s.kicker}>AMBIT ORDER</Text>
             <Text style={s.h1}>{no}</Text>
             <Text style={[s.stamp, { color: stamp.color, borderColor: stamp.color }]}>{stamp.text}</Text>
+            {warehouse ? <Text style={s.copyTag}>WAREHOUSE COPY  ·  BRANDS AND LOTS  ·  NOT FOR THE CUSTOMER</Text> : null}
           </View>
         </View>
 
@@ -391,6 +396,11 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
             <View style={[s.td, s.cDesc]}>
               <Text style={{ fontFamily: "Helvetica-Bold" }}>{it.name}</Text>
               {splitNote(row, plural(it.unit, 2)) ? <Text style={s.splitNote}>{splitNote(row, plural(it.unit, 2))}</Text> : null}
+              {(row.picks ?? []).map((p, k) => (
+                <Text key={k} style={s.pick}>
+                  <Text style={s.pickQ}>{qtyText(p.qty, it.unit)}</Text>  {pickText(p)}
+                </Text>
+              ))}
             </View>
             <Text style={[s.td, s.cQty]}>{qtyText(row.qty, it.unit)}</Text>
             {it.customer_priced ? (

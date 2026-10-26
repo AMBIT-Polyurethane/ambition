@@ -204,6 +204,18 @@ changes in the app:
   Cancelled on the sheet (including lines typed straight into the sheet) do the same in the app.
 - **Order screen:** staff see the exact number available at that location; contractors see In stock / Low stock /
   Ships from supplier.
+- **Spray foam by lot (FOAM LOTS tab, `0023_foam_lots.sql`):** the store sells one "ISO A-Side" (`ISO`); the ISO
+  brands (`ISO-COVESTRO`, `ISO-WANHUA`, `ISO-DOW`, `ISO-HUNTSMAN`) are stock-only products (`products.stock_of`,
+  `pick_rank`). AMBI-SEAL 5.0 and AMBI-TITE 204 have Winter versions (`-W`). When an order is placed,
+  `inventory_pick()` splits each foam line across lots (`inventory_lots`, one `inventory_lines` row per lot): brand
+  rank first (Covestro 1), then the lot that expires soonest (`use_by` = Exp, or Mfg + 12 months), never an expired
+  lot; short on stock = a line with no lot yet. Staff see brand / lot on the order page and the warehouse PDF
+  (`?copy=customer` leaves them out; customers can't read lots at all) and can "Change lot" until pickup
+  (`inventory_repick`). The sheet owns each lot's Starting Qty / Shipped In / Adj / dates; the app adds pickups to
+  Shipped Out, fills in the formula columns on new lot rows, and writes app lines to PENDING ORDERS with the brand
+  SKU and "[Lot …]" in Notes (FOAM LOTS' Pending Pickup adds those up). TOTAL IN STOCK for these products on the
+  COUNT SHEET is a formula over FOAM LOTS. The app adds the tab itself the first time (from the lots in the
+  database).
 
 Setup (once): Microsoft Entra app registration "AMBIT Intelligence" (Web redirect URI
 `https://<app>/api/microsoft/callback`, delegated permissions Files.ReadWrite.All, offline_access, User.Read, a client

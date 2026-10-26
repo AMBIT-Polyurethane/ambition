@@ -4,10 +4,11 @@ import { Check, CircleAlert, CircleCheck, FileDown, MailCheck, RefreshCw } from 
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
-import { foamLoads, foamOf, splitNote } from "@/lib/order-doc/loads";
+import { brandOf, foamLoads, foamOf, pickText, splitNote } from "@/lib/order-doc/loads";
+import { orderPicks, showsPicks } from "@/lib/order-doc/load";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
-import { cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
+import { cancelOrder, changeLot, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard } from "@/components/order-desk-card";
 import { can } from "@/lib/access";
@@ -40,22 +41,58 @@ export default async function OrderDetailPage({
       : Promise.resolve({ data: null }),
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
+  // Staff: which brand and lot the spray foam drums come from (the warehouse can change it until pickup).
+  const picks = emp ? await orderPicks(supabase, id) : new Map<number, never[]>();
+  const pickFor = (l: OrderItem) => {
+    const p = picks.get(l.id);
+    return emp && showsPicks(l.sku, p) ? p : undefined;
+  };
+  const canPick = emp && (can(profile, "inventory") || can(profile, "order_desk")) && order.status !== "completed" && order.status !== "cancelled";
+  type Choice = { lot_id: number; sku: string; lot_no: string; exp: string | null; use_by: string | null; available: number; expired: boolean };
+  const choices = new Map<number, Choice[]>();
+  const pickQty = new Map<number, number>();
+  if (canPick) {
+    const open = lines.flatMap((l) => (pickFor(l) ?? []).filter((p) => p.state === "reserved"));
+    await Promise.all(
+      open.map(async (p) => {
+        pickQty.set(p.id, p.qty);
+        const { data } = await supabase.rpc("inventory_lot_choices", { p_line: p.id });
+        choices.set(p.id, ((data ?? []) as Choice[]).map((c) => ({ ...c, available: Number(c.available) })));
+      }),
+    );
+  }
+  const shownPick = new Set<number>();
+  const choiceText = (c: Choice) =>
+    [brandOf(c.sku), `Lot ${c.lot_no || "(no lot #)"}`, c.exp ? `exp ${dateShort(c.exp)}` : c.use_by ? `use by ${dateShort(c.use_by)}` : null, `${Math.max(0, c.available)} available`, c.expired ? "EXPIRED" : null]
+      .filter(Boolean)
+      .join(" · ");
   // Spray foam grouped by load (ISO with the resin it goes with), like the printed order.
-  const groups = foamLoads(lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) })));
+  const groups = foamLoads(lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id), picks: pickFor(l) })));
   const shownStock = new Set<number>();
   // Staff: the customer's sales-tax exemption (an expired certificate holds the order at the credit check).
   const tax = emp && order.company_id && stageOf(order) !== "completed" && stageOf(order) !== "cancelled" ? await companyTax(supabase, order.company_id) : null;
   // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
   const { data: invRows } = emp
-    ? await supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id)
+    ? await supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).order("id")
     : { data: null };
-  const inv = new Map(((invRows ?? []) as { order_item_id: number; state: string; sheet_row: number | null; sheet_status: string | null }[]).map((r) => [r.order_item_id, r]));
+  const inv = new Map<number, { state: string; sheet_row: number | null }[]>();
+  for (const r of (invRows ?? []) as { order_item_id: number; state: string; sheet_row: number | null }[]) inv.set(r.order_item_id, [...(inv.get(r.order_item_id) ?? []), r]);
   const stockNote = (itemId: number) => {
-    const r = inv.get(itemId);
-    if (!r) return null;
-    if (r.state === "reserved") return { cls: "in", text: r.sheet_row ? `Reserved on the ${order.branch_id?.toUpperCase()} spreadsheet (PENDING ORDERS row ${r.sheet_row})` : "Reserved · going onto the spreadsheet" };
-    if (r.state === "done") return { cls: "none", text: "Picked up · taken out of stock" };
-    return { cls: "none", text: "Released (cancelled)" };
+    const rs = inv.get(itemId);
+    if (!rs?.length) return null;
+    const open = rs.filter((r) => r.state === "reserved");
+    if (open.length === rs.length) {
+      const at = open.map((r) => r.sheet_row).filter((n): n is number => n !== null);
+      return {
+        cls: "in",
+        text: at.length === open.length
+          ? `Reserved on the ${order.branch_id?.toUpperCase()} spreadsheet (PENDING ORDERS ${at.length > 1 ? "rows" : "row"} ${at.join(", ")})`
+          : "Reserved · going onto the spreadsheet",
+      };
+    }
+    if (rs.every((r) => r.state === "done")) return { cls: "none", text: "Picked up · taken out of stock" };
+    if (rs.every((r) => r.state === "cancelled")) return { cls: "none", text: "Released (cancelled)" };
+    return { cls: "in", text: "Partly picked up" };
   };
   const state = docState(order);
   const waiting = state === "pending" || state === "expired" || state === "changes_requested";
@@ -203,6 +240,41 @@ export default async function OrderDetailPage({
                     <div className="desc">{l.sku} · {qtyText(row.qty, l.unit)}</div>
                     {note ? <div className="tiny faint">{note}</div> : null}
                     {stock ? <div className={`stock-tag ${stock.cls}`}>{stock.text}</div> : null}
+                    {row.picks?.length ? (
+                      <div className="picks">
+                        {row.picks.map((p, pi) => {
+                          // Empty placeholder rows (a brand with no lot # and nothing in it) aren't worth listing.
+                          const opts = (choices.get(p.id) ?? []).filter((c) => c.lot_id === p.lot_id || c.lot_no || c.available > 0);
+                          const change = canPick && p.state === "reserved" && opts.length > 0 && !shownPick.has(p.id);
+                          shownPick.add(p.id);
+                          const need = pickQty.get(p.id) ?? p.qty;
+                          return (
+                            <div key={`${p.id}-${pi}`} className="pick">
+                              <span><b>{qtyText(p.qty, l.unit)}</b> {pickText(p)}</span>
+                              {change ? (
+                                <details className="pick-change">
+                                  <summary className="linkbtn">Change lot</summary>
+                                  <form action={changeLot} className="pick-form">
+                                    <input type="hidden" name="id" value={order.id} />
+                                    <input type="hidden" name="line" value={p.id} />
+                                    <select className="select sm" name="lot" defaultValue={p.lot_id ?? ""} aria-label="Lot">
+                                      {p.lot_id === null ? <option value="">Choose a lot…</option> : null}
+                                      {opts.map((c) => (
+                                        <option key={c.lot_id} value={c.lot_id} disabled={c.lot_id !== p.lot_id && c.available < need}>
+                                          {choiceText(c)}{c.lot_id === p.lot_id ? " (now)" : ""}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <Submit className="btn sm dark" pendingText="Saving…">Use this lot</Submit>
+                                  </form>
+                                  <p className="tiny faint" style={{ margin: 0 }}>Moves all {qtyText(need, l.unit)} of this pick. Lots without enough available are greyed out.</p>
+                                </details>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     {l.customer_priced ? (
@@ -229,9 +301,14 @@ export default async function OrderDetailPage({
       </section>
 
       <div className="grid2">
-        <a href={`/orders/${order.id}/pdf`} target="_blank" rel="noopener" className="btn dark sm"><FileDown size={16} /> Order PDF</a>
+        <a href={`/orders/${order.id}/pdf`} target="_blank" rel="noopener" className="btn dark sm"><FileDown size={16} /> {lines.some((l) => pickFor(l)) ? "Warehouse PDF" : "Order PDF"}</a>
         <Link href={`/order?reorder=${order.id}`} className="btn dark sm"><RefreshCw size={16} /> Reorder</Link>
       </div>
+      {lines.some((l) => pickFor(l)) ? (
+        <p className="tiny faint" style={{ margin: "-6px 0 0", textAlign: "center" }}>
+          The warehouse PDF shows brands and lots (AMBIT only). <a href={`/orders/${order.id}/pdf?copy=customer`} target="_blank" rel="noopener">Customer copy</a> leaves them out.
+        </p>
+      ) : null}
 
       {emp ? (
         <section className="section">

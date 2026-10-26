@@ -8,6 +8,7 @@ import type { Category } from "@/lib/types";
 
 const q2 = (n: number | null) => (n === null ? "–" : Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
 const reorderNow = (r: StockRow) => r.reorder_point !== null && r.net !== null && r.net <= r.reorder_point;
+const md = (iso: string | null) => (iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}/${iso.slice(2, 4)}` : "–");
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -22,12 +23,14 @@ export function InventoryList({
   categories,
   action,
   initialFilter,
+  sheetUrl,
 }: {
   rows: StockRow[];
   branch: string;
   categories: Category[];
   action: (form: FormData) => Promise<void>;
   initialFilter: string;
+  sheetUrl?: string;
 }) {
   const [q, setQ] = useState("");
   const [f, setF] = useState<string>(FILTERS.some((x) => x.key === initialFilter) ? initialFilter : "all");
@@ -83,13 +86,41 @@ export function InventoryList({
                   <span className="tiny faint">
                     {r.sku}
                     {r.reorder_point !== null ? ` · reorder at ${q2(r.reorder_point)}` : ""}
-                    {r.last_counted ? ` · counted ${r.last_counted.slice(5).replace("-", "/")}${r.counted_by ? ` by ${r.counted_by}` : ""}` : ""}
+                    {r.lots ? ` · ${r.lots.length} ${r.lots.length === 1 ? "lot" : "lots"}` : r.last_counted ? ` · counted ${r.last_counted.slice(5).replace("-", "/")}${r.counted_by ? ` by ${r.counted_by}` : ""}` : ""}
                   </span>
                 </span>
                 <span className="num">{q2(r.on_hand)}</span>
                 <span className="num faint">{r.pending ? q2(r.pending) : "–"}</span>
                 <span className={`num avail ${reorderNow(r) ? "warn" : r.label === "out" ? "out" : ""}`}>{q2(r.net)}</span>
               </summary>
+              {r.lots ? (
+                <div className="inv-form" style={{ display: "block" }}>
+                  {r.lots.length ? (
+                    <table className="lot-table">
+                      <thead>
+                        <tr><th>Lot #</th><th>Use by</th><th className="num">Left</th><th className="num">Reserved</th><th className="num">Available</th></tr>
+                      </thead>
+                      <tbody>
+                        {r.lots.map((l) => (
+                          <tr key={l.id} className={l.expired ? "exp" : ""}>
+                            <td>{l.lot_no || "(no lot #)"}</td>
+                            <td>{md(l.use_by)}{l.expired ? " · expired" : l.exp ? "" : l.use_by ? " *" : ""}</td>
+                            <td className="num">{q2(l.remaining)}</td>
+                            <td className="num">{l.held ? q2(l.held) : "–"}</td>
+                            <td className="num"><b>{q2(l.available)}</b></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="small muted" style={{ margin: 0 }}>No lots on the spreadsheet yet.</p>
+                  )}
+                  <p className="lot-note">
+                    Counted by lot. Change quantities on the FOAM LOTS tab of the {sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener noreferrer">spreadsheet</a> : "spreadsheet"}; the app adds pickups to Shipped Out.
+                    {r.lots.some((l) => !l.exp && l.use_by) ? " * No Exp date: 12 months after Mfg." : ""}
+                  </p>
+                </div>
+              ) : (
               <form action={action} className="inv-form">
                 <input type="hidden" name="branch" value={branch} />
                 <input type="hidden" name="product" value={r.product_id} />
@@ -112,6 +143,7 @@ export function InventoryList({
                 </label>
                 <Submit className="btn sm" pendingText="Saving…">Save</Submit>
               </form>
+              )}
             </details>
           ))}
         </div>

@@ -88,6 +88,29 @@ export class Workbook {
     return { top, left, values: r.values ?? [], formulas: r.formulas ?? [] };
   }
 
+  /** Adds a tab at the end of the workbook. */
+  async addSheet(name: string) {
+    await graph(`${this.base}/worksheets/add`, { method: "POST", body: { name }, headers: this.headers });
+  }
+
+  /** Looks: PATCH a range's format ("" = columnWidth, wrapText, alignment), "/font" or "/fill". Never fatal. */
+  async format(sheet: string, address: string, part: "" | "/font" | "/fill", body: Record<string, unknown>) {
+    try {
+      await graph(`${this.base}/worksheets(${quote(sheet)})/range(address='${address}')/format${part}`, { method: "PATCH", body, headers: this.headers });
+    } catch {
+      // only looks
+    }
+  }
+
+  /** Keeps the top rows in view while scrolling. Never fatal. */
+  async freezeRows(sheet: string, count: number) {
+    try {
+      await graph(`${this.base}/worksheets(${quote(sheet)})/freezePanes/freezeRows`, { method: "POST", body: { count }, headers: this.headers });
+    } catch {
+      // only looks
+    }
+  }
+
   /** Writes a block of cells starting at (row, col). Values are entered as if typed. */
   async write(sheet: string, row: number, col: number, values: unknown[][]) {
     const width = Math.max(...values.map((v) => v.length));

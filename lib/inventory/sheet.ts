@@ -74,8 +74,8 @@ export function rangeStart(address: string): { top: number; left: number } {
   return m ? { top: Number(m[2]), left: colNumber(m[1]) } : { top: 1, left: 1 };
 }
 
-const at = (g: Grid, row: number, col: number) => g.values[row - g.top]?.[col - g.left];
-const formulaAt = (g: Grid, row: number, col: number) => {
+export const at = (g: Grid, row: number, col: number) => g.values[row - g.top]?.[col - g.left];
+export const formulaAt = (g: Grid, row: number, col: number) => {
   const f = g.formulas[row - g.top]?.[col - g.left];
   return typeof f === "string" && f.startsWith("=");
 };
@@ -214,6 +214,8 @@ export type PendingRow = {
   po: string;
   closed: string | null;
   notes: string;
+  /** The lot in the Notes ("[Lot PA86002836]"), "" for "[Lot -]", null when there's none. */
+  lot: string | null;
 };
 
 export type PendingSheet = {
@@ -224,6 +226,8 @@ export type PendingSheet = {
   free: number[];
   /** Columns the app may write: known columns that don't hold formulas. */
   writable: PendingCol[];
+  /** Last row of the table (where the line formulas stop). */
+  end: number;
 };
 
 export function statusKind(v: unknown): StatusKind {
@@ -287,9 +291,26 @@ export function parsePendingSheet(g: Grid): PendingSheet {
       po: cellText(get("po")),
       closed: cellDate(get("closed")),
       notes: cellText(get("notes")),
+      lot: lotInNotes(cellText(get("notes"))),
     });
   }
-  return { headerRow: h.row, cols: c, rows, free, writable: known.filter((k) => !formulaCols.has(k)) };
+  return { headerRow: h.row, cols: c, rows, free, writable: known.filter((k) => !formulaCols.has(k)), end };
+}
+
+// Spray foam lines name their lot in the Notes, so FOAM LOTS can add up what each lot has waiting.
+const LOT_TAG = /\[Lot ([^\]]*)\]/i;
+const NO_LOT_TAG = /\s*\[No lot picked yet\]/gi;
+export const lotTag = (lot: string | null | undefined) => (lot === null || lot === undefined ? "[No lot picked yet]" : `[Lot ${lot.trim() || "-"}]`);
+export function lotInNotes(notes: string): string | null {
+  const m = LOT_TAG.exec(notes);
+  if (!m) return null;
+  const v = m[1].trim();
+  return v === "-" ? "" : v;
+}
+/** The Notes with this lot's tag (any other lot tag replaced). */
+export function withLotTag(notes: string, lot: string | null | undefined): string {
+  const rest = notes.replace(/\s*\[Lot [^\]]*\]/gi, "").replace(NO_LOT_TAG, "").trim();
+  return `${rest ? `${rest} · ` : ""}${lotTag(lot)}`.replace(/ · · /g, " · ");
 }
 
 /** Lines typed straight into PENDING ORDERS are recognised again by what's in them. */

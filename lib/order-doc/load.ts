@@ -2,10 +2,35 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Branch, Order } from "@/lib/types";
 import { docState, type DocCompany, type DocItem, type OrderDoc } from "@/lib/order-doc/types";
-import { foamOf } from "@/lib/order-doc/loads";
+import { foamOf, type LotPick } from "@/lib/order-doc/loads";
+
+/**
+ * Brand and lot for each line of an order, by order item. Only AMBIT staff can read these (row-level
+ * security returns nothing to anyone else). Cancelled picks are left out.
+ */
+export async function orderPicks(supabase: SupabaseClient, orderId: string): Promise<Map<number, LotPick[]>> {
+  const { data, error } = await supabase
+    .from("inventory_lines")
+    .select("id, order_item_id, sku, qty, state, lot_id, lot_no, lot:inventory_lots(exp, use_by)")
+    .eq("order_id", orderId)
+    .neq("state", "cancelled")
+    .order("id");
+  const out = new Map<number, LotPick[]>();
+  if (error || !data) return out;
+  type Row = { id: number; order_item_id: number; sku: string; qty: number; state: string; lot_id: number | null; lot_no: string | null; lot: { exp: string | null; use_by: string | null } | null };
+  for (const r of data as unknown as Row[]) {
+    const p: LotPick = { id: r.id, qty: Number(r.qty), sku: r.sku, lot_id: r.lot_id, lot_no: r.lot_no, exp: r.lot?.exp ?? null, use_by: r.lot?.use_by ?? null, state: r.state };
+    out.set(r.order_item_id, [...(out.get(r.order_item_id) ?? []), p]);
+  }
+  return out;
+}
+
+/** Only lines filled from lots (or from another brand) are worth showing. */
+export const showsPicks = (itemSku: string, picks: LotPick[] | undefined) =>
+  Boolean(picks?.length && picks.some((p) => p.lot_no !== null || p.sku.toUpperCase() !== itemSku.toUpperCase()));
 
 /** Loads an order the signed-in person is allowed to see (row-level security decides). */
-export async function loadOrderDoc(supabase: SupabaseClient, id: string): Promise<OrderDoc | null> {
+export async function loadOrderDoc(supabase: SupabaseClient, id: string, opts: { picks?: boolean } = {}): Promise<OrderDoc | null> {
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) return null;
   const [{ data: items }, { data: branch }, { data: company }] = await Promise.all([
@@ -17,9 +42,13 @@ export async function loadOrderDoc(supabase: SupabaseClient, id: string): Promis
       ? supabase.from("companies").select("contact_name, phone, email, bill_address").eq("id", order.company_id).maybeSingle<DocCompany>()
       : Promise.resolve({ data: null }),
   ]);
+  const picks = opts.picks ? await orderPicks(supabase, id) : null;
   return {
     order,
-    items: ((items ?? []) as unknown as (DocItem & { product?: { category_id: string | null } | null })[]).map(({ product, ...i }) => ({ ...i, foam: foamOf(i, product?.category_id) })),
+    items: ((items ?? []) as unknown as (DocItem & { product?: { category_id: string | null } | null })[]).map(({ product, ...i }) => {
+      const p = picks?.get(Number(i.id));
+      return { ...i, foam: foamOf(i, product?.category_id), ...(p && showsPicks(i.sku, p) ? { picks: p } : {}) };
+    }),
     branch: (branch as Branch | null) ?? null,
     company: (company as DocCompany | null) ?? null,
     state: docState(order),
