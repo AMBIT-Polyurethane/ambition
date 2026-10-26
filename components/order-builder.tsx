@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, MapPin, Minus, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, MapPin, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, type Cart } from "@/lib/cart";
 import { money } from "@/lib/format";
@@ -173,6 +173,8 @@ export function OrderBuilder(props: Props) {
   const [step, setStep] = useState<"location" | "catalog" | "review">(isEmployee ? "location" : "catalog");
   const [cat, setCat] = useState("all");
   const [q, setQ] = useState(props.initialSearch ?? "");
+  // Staff: show only what's available (in stock, not reserved) at the location, when it has live stock.
+  const [onlyAvail, setOnlyAvail] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [zoom, setZoom] = useState<CatalogProduct | null>(null);
 
@@ -294,11 +296,16 @@ export function OrderBuilder(props: Props) {
   const hasTbd = lines.some((l) => !l.p.cp && l.p.list_price === null);
 
   const needle = q.trim().toLowerCase();
+  const canFilterAvail = isEmployee && !!stockHere && Object.keys(stockHere).length > 0;
+  const isAvail = (id: string) => (stockHere?.[id]?.net ?? 0) > 0;
+  const availFilter = canFilterAvail && onlyAvail;
   const shown = products.filter(
     (p) =>
       (cat === "all" || p.category_id === cat) &&
+      (!availFilter || isAvail(p.id)) &&
       (!needle || `${p.name} ${p.sku} ${p.description ?? ""}`.toLowerCase().includes(needle)),
   );
+  const availCount = canFilterAvail ? products.filter((p) => isAvail(p.id)).length : 0;
 
   const submit = () => {
     setError(null);
@@ -629,6 +636,19 @@ export function OrderBuilder(props: Props) {
           <Search size={18} />
           <input className="input" type="search" placeholder="Search products or SKU" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search products" />
         </div>
+        {canFilterAvail ? (
+          <button
+            type="button"
+            className={`avail-toggle${onlyAvail ? " on" : ""}`}
+            aria-pressed={onlyAvail}
+            onClick={() => setOnlyAvail((v) => !v)}
+            title={`Only products with stock available at ${branch?.name ?? "this location"}`}
+          >
+            {onlyAvail ? <Check size={16} strokeWidth={2.6} /> : <Filter size={16} />}
+            <span className="grow">{onlyAvail ? "Showing available products only" : "Filter available products"}</span>
+            <span className="avail-count">{availCount}</span>
+          </button>
+        ) : null}
         <div className="chips" role="tablist" aria-label="Categories">
           <button type="button" role="tab" aria-selected={cat === "all"} className={`chip${cat === "all" ? " on" : ""}`} onClick={() => setCat("all")}>All</button>
           {categories.map((c) => (
@@ -642,7 +662,13 @@ export function OrderBuilder(props: Props) {
       {notice ? <div className="alert info">{notice}</div> : null}
 
       {shown.length === 0 ? (
-        <div className="card muted small center">{products.length === 0 ? "The catalog is empty. An admin can import products in Admin → Products." : "No products match your search."}</div>
+        <div className="card muted small center">
+          {products.length === 0
+            ? "The catalog is empty. An admin can import products in Admin → Products."
+            : availFilter
+              ? <>Nothing available at {branch?.name ?? "this location"} matches. <button type="button" className="linkbtn" onClick={() => setOnlyAvail(false)}>Show all products</button></>
+              : "No products match your search."}
+        </div>
       ) : (
         <div className="list">
           {shown.map((p) => {

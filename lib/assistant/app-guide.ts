@@ -50,7 +50,7 @@ const SECTIONS: Section[] = [
     body: `[Order](/order) → "Order for a customer":
 1. "Which location?": pick the AMBIT location it ships from or is picked up at.
 2. Pick the customer: type part of the name to search AMBIT's customer list (imported from QuickBooks). New customer? Use "Add new customer"; accounting is emailed to set them up in QuickBooks.
-3. Add items; the shipping address can be changed ("Use address on file" or type a new one). Staff see the exact number available at locations with live inventory.
+3. Add items ("Filter available products" under the search box shows only what's in stock and not reserved at that location; it appears for locations with live inventory). The shipping address can be changed ("Use address on file" or type a new one). Staff see the exact number available at locations with live inventory.
 4. Review and send. The customer gets an email to approve the order (once app email is set up). If they approved by phone or in person, use "Customer approved by phone or in person?" and record who approved it and how. "Resend approval email" sends it again.
 5. After approval the order and its PDF ("THIS IS NOT AN INVOICE") go to orders@ambitpu.com.`,
   },
