@@ -1,7 +1,7 @@
 import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { claude, costCents, photoBlocks } from "@/lib/ai/claude";
+import { costCents, fillForm, photoBlocks } from "@/lib/ai/claude";
 import { loadAiSettings } from "@/lib/assistant/settings";
 import { todayCentral } from "@/lib/sale";
 import type { Branch } from "@/lib/types";
@@ -67,10 +67,10 @@ function matchBranch(branches: Branch[], hint: string | null | undefined): strin
   return null;
 }
 
-const TOOL: Anthropic.Messages.Tool = {
+const FORM = {
   name: "record_order",
   description: "Record the order exactly as it was asked for, matched to AMBIT's catalog.",
-  input_schema: {
+  schema: {
     type: "object",
     properties: {
       customer: {
@@ -107,7 +107,7 @@ const TOOL: Anthropic.Messages.Tool = {
       questions: { type: "string", description: "Anything unclear that staff should ask the customer" },
     },
     required: ["items"],
-  },
+  } as Record<string, unknown>,
 };
 
 export type ReadResult = {
@@ -147,7 +147,7 @@ export async function readOrder(opts: { supabase: SupabaseClient; uid: string; t
   const system: Anthropic.Messages.TextBlockParam[] = [
     {
       type: "text",
-      text: `You read orders sent to AMBIT Polyurethane (spray foam chemicals, insulation and supplies) by text, email or handwritten note, and record them with the record_order tool, matched to AMBIT's catalog below.
+      text: `You read orders sent to AMBIT Polyurethane (spray foam chemicals, insulation and supplies) by text, email or handwritten note, and record them (customer, location, delivery, dates, PO, items) matched to AMBIT's catalog below.
 Rules:
 - One item per product asked for. Copy each line as written into "raw".
 - Pick the catalog ref only when you're confident it's the same product (brand, R-value, size, thickness, A-side/B-side all matter). Spray foam is sold in sets (an A side and a B side); "2 sets of 5.0" means 2 of AMBI-SEAL 5.0 sets if the catalog sells sets. If two catalog items could fit, pick the likeliest, set confidence "medium" and say what to check in "note". If nothing fits, leave ref empty and confidence "low".
@@ -168,16 +168,8 @@ ${catalog}`,
     { type: "text", text: opts.text.trim() ? `The order:\n"""\n${opts.text.trim().slice(0, 12000)}\n"""` : "The order is in the photo(s)." },
   ];
 
-  const res = await claude().messages.create({
-    model,
-    max_tokens: 3000,
-    system,
-    tools: [TOOL],
-    tool_choice: { type: "tool", name: "record_order" },
-    messages: [{ role: "user", content }],
-  });
-  const use = res.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use");
-  const out = (use?.input ?? {}) as {
+  const { data: raw, usage } = await fillForm<Record<string, unknown>>({ model, maxTokens: 8000, system, content, ...FORM });
+  const out = (raw ?? {}) as {
     customer?: { name?: string; account_no?: string; contact?: string; phone?: string; email?: string };
     location?: string;
     delivery?: string;
@@ -222,6 +214,6 @@ ${catalog}`,
     items,
     questions: out.questions?.trim() || null,
     model,
-    cost_cents: costCents(model, res.usage),
+    cost_cents: costCents(model, usage),
   };
 }

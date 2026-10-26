@@ -1,7 +1,6 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { claude, costCents } from "@/lib/ai/claude";
+import { costCents, fillForm } from "@/lib/ai/claude";
 import { loadAiSettings } from "@/lib/assistant/settings";
 import { SYMPTOMS } from "@/lib/complaints";
 import { todayCentral } from "@/lib/sale";
@@ -9,10 +8,10 @@ import { todayCentral } from "@/lib/sale";
 // Fills in a complaint report from an Ask AMBIT conversation (what people said, and what Ask AMBIT saw
 // in their photos). Only what was actually said goes in; blanks stay blank for the person to finish.
 
-const TOOL: Anthropic.Messages.Tool = {
+const FORM = {
   name: "fill_report",
   description: "Fill in the AMBIT complaint report with only what the conversation says.",
-  input_schema: {
+  schema: {
     type: "object",
     properties: {
       company_name: { type: "string", description: "Contractor or customer company" },
@@ -40,7 +39,7 @@ const TOOL: Anthropic.Messages.Tool = {
         description: "What Ask AMBIT saw in the photos and what AMBIT teaching (name the TSBs) says about it, and what's still needed. Plain, factual, no conclusions about fault.",
       },
     },
-  },
+  } as Record<string, unknown>,
 };
 
 export type ComplaintFill = Record<string, string | string[] | null> & { symptoms?: string[] };
@@ -48,21 +47,19 @@ export type ComplaintFill = Record<string, string | string[] | null> & { symptom
 export async function fillFromConversation(supabase: SupabaseClient, transcript: string): Promise<{ fill: ComplaintFill; cost: number }> {
   const settings = await loadAiSettings(supabase);
   const model = settings?.model ?? "claude-sonnet-5-5";
-  const res = await claude().messages.create({
+  const { data, usage } = await fillForm<Record<string, unknown>>({
     model,
-    max_tokens: 2000,
-    system: `You fill in AMBIT Polyurethane's spray foam complaint report from a conversation with Ask AMBIT. Use only what the conversation says; leave anything not stated empty. Don't guess lot numbers, dates or temperatures. Today is ${todayCentral()}.`,
-    tools: [TOOL],
-    tool_choice: { type: "tool", name: "fill_report" },
-    messages: [{ role: "user", content: `The conversation:\n"""\n${transcript.slice(0, 30000)}\n"""` }],
+    maxTokens: 6000,
+    system: `You fill in AMBIT Polyurethane's spray foam complaint report from a conversation with Ask AMBIT. Use only what the conversation says; leave anything not stated empty (an empty string). Don't guess lot numbers, dates or temperatures. Today is ${todayCentral()}.`,
+    content: `The conversation:\n"""\n${transcript.slice(0, 30000)}\n"""`,
+    ...FORM,
   });
-  const use = res.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use");
-  const raw = (use?.input ?? {}) as Record<string, unknown>;
+  const raw = (data ?? {}) as Record<string, unknown>;
   const fill: ComplaintFill = {};
   for (const [k, v] of Object.entries(raw)) {
     if (k === "symptoms") fill.symptoms = Array.isArray(v) ? v.map(String).filter((x) => SYMPTOMS.some((s) => s.id === x)) : [];
     else if (typeof v === "string" && v.trim()) fill[k] = v.trim().slice(0, k === "ai_notes" || k === "description" ? 6000 : 300);
   }
   if (fill.date_sprayed && !/^\d{4}-\d{2}-\d{2}$/.test(String(fill.date_sprayed))) delete fill.date_sprayed;
-  return { fill, cost: costCents(model, res.usage) };
+  return { fill, cost: costCents(model, usage) };
 }
