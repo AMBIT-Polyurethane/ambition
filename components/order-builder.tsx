@@ -554,7 +554,7 @@ export function OrderBuilder(props: Props) {
         <section className="section">
           <div className="grid2">
             <label className="field">
-              <span className="label">PO number</span>
+              <span className="label">Customer PO #</span>
               <input className="input" value={po} onChange={(e) => setPo(e.target.value)} placeholder="Optional" />
             </label>
             <label className="field">

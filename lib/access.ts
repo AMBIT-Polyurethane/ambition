@@ -12,7 +12,7 @@ export const PERMS = [
   { key: "spray_log", label: "Spray job data log", hint: "" },
   { key: "complaints", label: "Customer complaints", hint: "" },
   { key: "inventory", label: "Inventory", hint: "Counts and stock updates" },
-  { key: "order_desk", label: "Order desk", hint: "Enter PO #s, schedule delivery and pickup" },
+  { key: "order_desk", label: "Order desk", hint: "Enter Sales Order #s, schedule delivery and pickup" },
   { key: "credit_check", label: "Credit check", hint: "Release orders or put them on hold" },
   { key: "takeoff", label: "Takeoff", hint: "Measure plans: areas, walls and counts" },
 ] as const;

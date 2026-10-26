@@ -286,6 +286,14 @@ Orders move: customer approval → CRM enters the AMBIT PO # → Accounting rele
 hold) → CRM sets the delivery or pickup date and the customer is emailed → marked delivered / picked up.
 Each step shows on the order page for whoever's job it is, and in Order desk (home screen) with counts.
 
+
+**Sales Order #** is what the order desk enters after approval (the column is still `ambit_po`); the customer's own
+number is "Customer PO #". **Cancel:** open the order → "Cancel this order" with a reason (admins, the order desk,
+or whoever placed it until it has a Sales Order #; `order_cancel`), which releases its stock and marks the inventory
+sheet line Cancelled. **Delete:** admins only, cancelled orders only (`order_delete`). **Spray foam by the drum:**
+ISO and every resin are drums (0022); the order page, the PDF, the approval page and the emails list each resin with
+the ISO drums that go with it, a dark line between those groups (`lib/order-doc/loads.ts`). Needs
+`supabase/migrations/0022_sales_order_cancel_drums.sql`.
 ### Price request approvals
 
 Admins: Home → Price approvals. Waiting requests first; each opens as a clean form with requested vs approved

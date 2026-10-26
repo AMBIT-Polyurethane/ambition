@@ -4,6 +4,8 @@ import QRCode from "qrcode";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, qtyText } from "@/lib/format";
 import { LOGO_ASPECT, LOGO_PNG } from "@/lib/order-doc/logo";
 import { awaitingCustomer, type OrderDoc } from "@/lib/order-doc/types";
+import { foamLoads, splitNote } from "@/lib/order-doc/loads";
+import { plural } from "@/lib/format";
 
 // The printed AMBIT order: white, one Letter page for most orders, more pages when it needs them.
 // Same layout as the approved sample (AMBIT Order Document - Samples.pdf).
@@ -60,6 +62,8 @@ const s = StyleSheet.create({
   cPrice: { width: 72, textAlign: "right" },
   cAmt: { width: 68, textAlign: "right", fontFamily: "Helvetica-Bold" },
   acct: { fontFamily: "Helvetica-Bold", fontSize: 7.2, color: GRAY },
+  loadBreak: { borderTopWidth: 1.8, borderTopColor: INK },
+  splitNote: { fontSize: 7, color: GRAY, marginTop: 1 },
   below: { flexDirection: "row", marginTop: 11, alignItems: "flex-start", fontSize: 8.6, lineHeight: 1.35 },
   notes: { flex: 1, marginRight: 22 },
   totals: { width: 205 },
@@ -112,7 +116,7 @@ function Rec({ rows }: { rows: [string, string][] }) {
 }
 
 function OfficeBox({ pickup, order: o }: { pickup: boolean; order: OrderDoc["order"] }) {
-  // Lines the app already knows (PO #, credit release, scheduled date) come filled in; the rest are for pen.
+  // Lines the app already knows (Sales Order #, credit release, scheduled date) come filled in; the rest are for pen.
   const Line = ({ label, value }: { label: string; value?: string | null }) => (
     <View style={s.line}>
       <Text style={s.lineL}>{label}</Text>
@@ -131,7 +135,7 @@ function OfficeBox({ pickup, order: o }: { pickup: boolean; order: OrderDoc["ord
   return (
     <View style={[s.box, { flex: 1, marginLeft: 14 }]}>
       <View style={s.h3}><Text style={s.h3t}>FOR AMBIT USE</Text></View>
-      <Two a="AMBIT PO #" b="Credit OK" av={o.ambit_po} bv={credit} />
+      <Two a="Sales Order #" b="Credit OK" av={o.ambit_po} bv={credit} />
       <Two a={pickup ? "Pickup date" : "Delivery date"} b="By" av={o.scheduled_for ? dateShort(o.scheduled_for) : null} bv={o.scheduled_by_name} />
       <Two a="Picked by" b="Date" />
       <Two a="Checked by" b="Date" />
@@ -290,6 +294,10 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
   const acct = doc.items.filter((i) => i.customer_priced);
   const tbd = doc.items.filter((i) => !i.customer_priced && i.line_total === null);
   const subtotal = Number(o.est_subtotal ?? 0);
+  // Spray foam lines grouped by load (ISO with its resin), a dark line between groups.
+  const groups = foamLoads(doc.items);
+  let counter = 0;
+  const rows = groups.flatMap((g, gi) => g.rows.map((row, ri) => ({ row, it: row.item, n: ++counter, first: gi > 0 && ri === 0 })));
 
   const facts: [string, string, number][] = [
     ["ORDER DATE", dateShort(o.created_at), 1],
@@ -376,12 +384,15 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
           <Text style={[s.th, s.cPrice]}>UNIT PRICE</Text>
           <Text style={[s.th, s.cAmt]}>AMOUNT</Text>
         </View>
-        {doc.items.map((it, i) => (
-          <View key={it.id ?? i} style={[s.tr, i % 2 ? { backgroundColor: ZEBRA } : {}]} wrap={false}>
-            <Text style={[s.td, s.cN]}>{i + 1}</Text>
+        {rows.map(({ row, n, first, it }) => (
+          <View key={`${it.id ?? n}-${n}`} style={[s.tr, n % 2 === 0 ? { backgroundColor: ZEBRA } : {}, first ? s.loadBreak : {}]} wrap={false}>
+            <Text style={[s.td, s.cN]}>{n}</Text>
             <Text style={[s.td, s.cSku, s.skuText]}>{it.sku}</Text>
-            <Text style={[s.td, s.cDesc, { fontFamily: "Helvetica-Bold" }]}>{it.name}</Text>
-            <Text style={[s.td, s.cQty]}>{qtyText(Number(it.qty), it.unit)}</Text>
+            <View style={[s.td, s.cDesc]}>
+              <Text style={{ fontFamily: "Helvetica-Bold" }}>{it.name}</Text>
+              {splitNote(row, plural(it.unit, 2)) ? <Text style={s.splitNote}>{splitNote(row, plural(it.unit, 2))}</Text> : null}
+            </View>
+            <Text style={[s.td, s.cQty]}>{qtyText(row.qty, it.unit)}</Text>
             {it.customer_priced ? (
               <>
                 <Text style={[s.td, s.cPrice, s.acct]}>Account pricing</Text>
@@ -395,7 +406,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
             ) : (
               <>
                 <Text style={[s.td, s.cPrice]}>{money(it.unit_price)}</Text>
-                <Text style={[s.td, s.cAmt]}>{money(it.line_total)}</Text>
+                <Text style={[s.td, s.cAmt]}>{money(row.qty === Number(it.qty) ? it.line_total : Number(it.unit_price ?? 0) * row.qty)}</Text>
               </>
             )}
           </View>

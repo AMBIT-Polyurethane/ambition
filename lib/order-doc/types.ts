@@ -1,9 +1,10 @@
 import type { Branch, Order, OrderItem } from "@/lib/types";
+import type { FoamSide } from "@/lib/order-doc/loads";
 
 /** Where an order stands from the customer's point of view. */
 export type DocState = "pending" | "approved" | "changes_requested" | "expired" | "cancelled" | "closed";
 
-export type DocItem = Pick<OrderItem, "id" | "sku" | "name" | "unit" | "qty" | "unit_price" | "customer_priced" | "line_total">;
+export type DocItem = Pick<OrderItem, "id" | "sku" | "name" | "unit" | "qty" | "unit_price" | "customer_priced" | "line_total"> & { foam?: FoamSide };
 
 export type DocCompany = {
   contact_name: string | null;

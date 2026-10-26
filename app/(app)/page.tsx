@@ -230,7 +230,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Link>
       ) : null}
 
-      {/* Smart reorder: "You usually order 4 sets of AMBI-SEAL every 3 weeks." */}
+      {/* Smart reorder: "You usually order 4 drums of AMBI-SEAL 5.0 every 3 weeks." */}
       {nudge ? (
         <section className="smart-card">
           <span className="eyebrow" style={{ display: "flex", gap: 6, alignItems: "center" }}><RefreshCw size={14} /> Time to reorder?</span>

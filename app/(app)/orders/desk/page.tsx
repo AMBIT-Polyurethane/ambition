@@ -57,7 +57,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
     <main className="shell">
       <TopBar title="Order desk" back="/" />
       <p className="small muted" style={{ margin: 0 }}>
-        Order placed → customer approves → CRM adds the AMBIT PO # → accounting checks credit → CRM sets the date and the customer is emailed.
+        Order placed → customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date and the customer is emailed.
       </p>
 
       {setupMissing ? (

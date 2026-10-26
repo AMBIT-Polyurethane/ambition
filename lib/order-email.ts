@@ -1,5 +1,6 @@
 import "server-only";
-import { DELIVERY_LABEL, dateShort, dateTime, escapeHtml as h, firstName, money, orderNo, qtyText } from "@/lib/format";
+import { DELIVERY_LABEL, dateShort, dateTime, escapeHtml as h, firstName, money, orderNo, plural, qtyText } from "@/lib/format";
+import { foamLoads, splitNote } from "@/lib/order-doc/loads";
 import { wrapEmail } from "@/lib/email";
 import type { OrderDoc } from "@/lib/order-doc/types";
 
@@ -27,20 +28,24 @@ export function approvalText(doc: OrderDoc): string | null {
 }
 
 function itemRows(doc: OrderDoc, withSku = true): string {
-  return doc.items
-    .map((i) => {
+  // Spray foam grouped by load (ISO with its resin), with a dark line between groups, like the PDF.
+  return foamLoads(doc.items)
+    .flatMap((g, gi) => g.rows.map((row, ri) => ({ row, i: row.item, brk: gi > 0 && ri === 0 })))
+    .map(({ row, i, brk }) => {
       const price = i.customer_priced
         ? `<span style="color:#b42318;font-weight:700;">Account pricing</span>`
         : i.unit_price === null
           ? `<span style="color:#71717a;">Price TBD</span>`
           : `${money(i.unit_price)} / ${h(i.unit)}`;
-      const total = i.line_total === null ? "" : money(i.line_total);
+      const total = i.line_total === null ? "" : money(row.qty === Number(i.qty) ? i.line_total : Number(i.unit_price ?? 0) * row.qty);
+      const note = splitNote(row, plural(i.unit, 2));
+      const top = brk ? "border-top:2px solid #18181b;" : "";
       return `<tr>
-${withSku ? `<td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:12px;color:#71717a;">${h(i.sku)}</td>` : ""}
-<td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:14px;font-weight:600;">${h(i.name)}</td>
-<td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:14px;text-align:right;white-space:nowrap;">${h(qtyText(Number(i.qty), i.unit))}</td>
-<td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:13px;text-align:right;white-space:nowrap;">${price}</td>
-<td style="padding:10px 8px;border-bottom:1px solid #eee;font-size:14px;text-align:right;white-space:nowrap;">${total}</td></tr>`;
+${withSku ? `<td style="padding:10px 8px;border-bottom:1px solid #eee;${top}font-size:12px;color:#71717a;">${h(i.sku)}</td>` : ""}
+<td style="padding:10px 8px;border-bottom:1px solid #eee;${top}font-size:14px;font-weight:600;">${h(i.name)}${note ? `<div style="font-size:12px;font-weight:400;color:#71717a;margin-top:2px;">${h(note)}</div>` : ""}</td>
+<td style="padding:10px 8px;border-bottom:1px solid #eee;${top}font-size:14px;text-align:right;white-space:nowrap;">${h(qtyText(row.qty, i.unit))}</td>
+<td style="padding:10px 8px;border-bottom:1px solid #eee;${top}font-size:13px;text-align:right;white-space:nowrap;">${price}</td>
+<td style="padding:10px 8px;border-bottom:1px solid #eee;${top}font-size:14px;text-align:right;white-space:nowrap;">${total}</td></tr>`;
     })
     .join("");
 }
@@ -195,14 +200,14 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string) {
   const no = orderNo(o.order_no);
   const who = o.account_no ? `${o.company_name} (${o.account_no})` : o.company_name;
   const head = {
-    credit_needed: { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered AMBIT PO # ${o.ambit_po ?? ""}. Check for credit holds, then release the order or put it on hold.` },
+    credit_needed: { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Sales Order # ${o.ambit_po ?? ""}. Check for credit holds, then release the order or put it on hold.` },
     credit_hold: { eyebrow: "ON CREDIT HOLD", subject: `On credit hold · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} put this order on hold: ${o.credit_note ?? ""}` },
     ready_to_schedule: { eyebrow: "READY TO SCHEDULE", subject: `Ready to schedule · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} released this order. Set the ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date and the customer is emailed.` },
   }[kind];
   const rows: [string, string][] = [
     ["Order", no],
     ["Customer", who],
-    ["AMBIT PO #", o.ambit_po ?? "-"],
+    ["Sales Order #", o.ambit_po ?? "-"],
     ["Customer PO", o.po_number ?? "-"],
     ["Delivery", whereText(doc)],
     ["Needed by", o.needed_by ? dateShort(o.needed_by) : "-"],

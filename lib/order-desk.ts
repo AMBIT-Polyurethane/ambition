@@ -1,11 +1,11 @@
 import type { Order, OrderStage } from "@/lib/types";
 
 // The order desk: where each order sits after it's placed, and who moves it on.
-//   customer approval -> AMBIT PO # (CRM) -> credit check (Accounting) -> scheduled (CRM) -> completed
+//   customer approval -> Sales Order # (CRM) -> credit check (Accounting) -> scheduled (CRM) -> completed
 
 export const STAGES: Record<OrderStage, { label: string; short: string; pill: string }> = {
   customer: { label: "Waiting on the customer", short: "With customer", pill: "pill warn" },
-  needs_po: { label: "Needs AMBIT PO #", short: "Needs PO", pill: "pill" },
+  needs_po: { label: "Needs Sales Order #", short: "Needs Sales Order #", pill: "pill" },
   credit: { label: "Waiting on credit check", short: "Credit check", pill: "pill warn" },
   hold: { label: "On credit hold", short: "On hold", pill: "pill" },
   schedule: { label: "Released, needs a date", short: "To schedule", pill: "pill warn" },

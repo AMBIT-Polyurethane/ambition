@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { Check, CircleAlert, CircleCheck, FileDown, MailCheck, RefreshCw } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
-import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, qtyText } from "@/lib/format";
+import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
+import { foamLoads, foamOf, splitNote } from "@/lib/order-doc/loads";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
-import { customerDecision, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
+import { cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard } from "@/components/order-desk-card";
 import { can } from "@/lib/access";
@@ -32,13 +33,16 @@ export default async function OrderDetailPage({
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) notFound();
   const [{ data: items }, { data: branch }, { data: company }] = await Promise.all([
-    supabase.from("order_items").select("*, product:products(image_url)").eq("order_id", id).order("id"),
+    supabase.from("order_items").select("*, product:products(image_url, category_id)").eq("order_id", id).order("id"),
     order.branch_id ? supabase.from("branches").select("*").eq("id", order.branch_id).maybeSingle<Branch>() : Promise.resolve({ data: null }),
     emp && order.company_id
       ? supabase.from("companies").select("email, contact_name").eq("id", order.company_id).maybeSingle<Pick<Company, "email" | "contact_name">>()
       : Promise.resolve({ data: null }),
   ]);
-  const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null } | null })[];
+  const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
+  // Spray foam grouped by load (ISO with the resin it goes with), like the printed order.
+  const groups = foamLoads(lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) })));
+  const shownStock = new Set<number>();
   // Staff: the customer's sales-tax exemption (an expired certificate holds the order at the credit check).
   const tax = emp && order.company_id && stageOf(order) !== "completed" && stageOf(order) !== "cancelled" ? await companyTax(supabase, order.company_id) : null;
   // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
@@ -151,7 +155,7 @@ export default async function OrderDetailPage({
           {order.scheduled_for && stageOf(order) !== "cancelled" ? (
             <><dt>{order.delivery_method === "pickup" ? "Pickup" : "Delivery"}</dt><dd>{dateShort(order.scheduled_for)}{order.schedule_note ? `\n${order.schedule_note}` : ""}</dd></>
           ) : null}
-          {emp && order.ambit_po ? (<><dt>AMBIT PO #</dt><dd>{order.ambit_po}</dd></>) : null}
+          {emp && order.ambit_po ? (<><dt>Sales Order #</dt><dd>{order.ambit_po}</dd></>) : null}
           {emp && order.tax_note ? (<><dt>Sales tax</dt><dd style={{ color: "var(--warn-text)", fontWeight: 700 }}>{order.tax_note}</dd></>) : null}
           {state === "approved" ? (
             <>
@@ -185,31 +189,37 @@ export default async function OrderDetailPage({
       <section className="section">
         <div className="eyebrow">{lines.length} {lines.length === 1 ? "item" : "items"}</div>
         <div className="list">
-          {lines.map((l) => (
-            <div key={l.id} className="product">
-              {l.product?.image_url ? <img className="thumb sm" src={l.product.image_url} alt="" loading="lazy" /> : null}
-              <div className="grow">
-                <div className="name">{l.name}</div>
-                <div className="desc">{l.sku} · {qtyText(l.qty, l.unit)}</div>
-                {(() => {
-                  const n = stockNote(l.id);
-                  return n ? <div className={`stock-tag ${n.cls}`}>{n.text}</div> : null;
-                })()}
-              </div>
-              <div style={{ textAlign: "right" }}>
-                {l.customer_priced ? (
-                  <span className="cp-tag">Customer pricing</span>
-                ) : l.line_total !== null ? (
-                  <>
-                    <div style={{ fontWeight: 800 }}>{money(l.line_total)}</div>
-                    <div className="tiny faint">{money(l.unit_price)} / {l.unit}</div>
-                  </>
-                ) : (
-                  <span className="tiny faint">On invoice</span>
-                )}
-              </div>
-            </div>
-          ))}
+          {groups.flatMap((g, gi) =>
+            g.rows.map((row, ri) => {
+              const l = row.item;
+              const note = splitNote(row, plural(l.unit, 2));
+              const stock = shownStock.has(l.id) ? null : stockNote(l.id);
+              shownStock.add(l.id);
+              return (
+                <div key={`${l.id}-${gi}-${ri}`} className={`product${gi > 0 && ri === 0 ? " load-break" : ""}`}>
+                  {l.product?.image_url ? <img className="thumb sm" src={l.product.image_url} alt="" loading="lazy" /> : null}
+                  <div className="grow">
+                    <div className="name">{l.name}</div>
+                    <div className="desc">{l.sku} · {qtyText(row.qty, l.unit)}</div>
+                    {note ? <div className="tiny faint">{note}</div> : null}
+                    {stock ? <div className={`stock-tag ${stock.cls}`}>{stock.text}</div> : null}
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    {l.customer_priced ? (
+                      <span className="cp-tag">Customer pricing</span>
+                    ) : l.line_total !== null ? (
+                      <>
+                        <div style={{ fontWeight: 800 }}>{money(row.qty === Number(l.qty) ? l.line_total : Number(l.unit_price ?? 0) * row.qty)}</div>
+                        <div className="tiny faint">{money(l.unit_price)} / {l.unit}</div>
+                      </>
+                    ) : (
+                      <span className="tiny faint">On invoice</span>
+                    )}
+                  </div>
+                </div>
+              );
+            }),
+          )}
           <div className="row between" style={{ padding: "14px 16px" }}>
             <span className="muted small">Estimated list-price subtotal</span>
             <b>{money(order.est_subtotal)}</b>
@@ -318,6 +328,51 @@ export default async function OrderDetailPage({
               </form>
             </div>
           )}
+        </section>
+      ) : null}
+
+      {/* Cancel (admins, the order desk, or whoever placed it until it has a Sales Order #) and delete (admins). */}
+      {emp && order.status !== "cancelled" && order.status !== "completed" &&
+      (profile.role === "admin" || can(profile, "order_desk") || (order.placed_by === profile.id && !order.ambit_po)) ? (
+        <section className="section">
+          <details className="danger-zone">
+            <summary>Cancel this order</summary>
+            <form action={cancelOrder} className="col" style={{ gap: 10, marginTop: 10 }}>
+              <input type="hidden" name="id" value={order.id} />
+              <label className="field">
+                <span className="label">Why is it cancelled?</span>
+                <input className="input" name="reason" required minLength={3} maxLength={500} placeholder="Customer called to cancel / Entered twice / Test order" />
+              </label>
+              <p className="tiny faint" style={{ margin: 0 }}>
+                Its stock is released and the line on the inventory sheet is marked Cancelled. The order stays in the Orders list as Cancelled{profile.role === "admin" ? ", and you can delete it after that" : ""}.
+              </p>
+              <Submit className="btn sm danger" pendingText="Cancelling…">Cancel order</Submit>
+            </form>
+          </details>
+        </section>
+      ) : null}
+      {order.status === "cancelled" ? (
+        <section className="section">
+          <div className="alert warn small">
+            <span>
+              <b>Cancelled</b>
+              {order.cancelled_by_name ? ` by ${order.cancelled_by_name}` : ""}
+              {order.cancelled_at ? ` · ${dateTime(order.cancelled_at)}` : ""}
+              {order.cancel_reason ? ` · ${order.cancel_reason}` : ""}
+            </span>
+          </div>
+          {profile.role === "admin" ? (
+            <details className="danger-zone">
+              <summary>Delete this order for good</summary>
+              <form action={deleteOrder} className="col" style={{ gap: 10, marginTop: 10 }}>
+                <input type="hidden" name="id" value={order.id} />
+                <label className="check small">
+                  <input type="checkbox" name="sure" /> I understand {orderNo(order.order_no)} and its items are removed from the app permanently. This can&apos;t be undone.
+                </label>
+                <Submit className="btn sm danger" pendingText="Deleting…">Delete order</Submit>
+              </form>
+            </details>
+          ) : null}
         </section>
       ) : null}
     </main>

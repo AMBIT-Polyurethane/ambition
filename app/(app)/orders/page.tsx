@@ -37,7 +37,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   if (filter === "approval") query = query.in("approval_status", ["pending", "changes_requested"]).neq("status", "cancelled");
   if (q) {
     const n = Number(q.replace(/\D/g, ""));
-    query = n ? query.or(`order_no.eq.${n},po_number.ilike.%${q}%`) : query.or(`company_name.ilike.%${q}%,po_number.ilike.%${q}%`);
+    query = n ? query.or(`order_no.eq.${n},po_number.ilike.%${q}%,ambit_po.ilike.%${q}%`) : query.or(`company_name.ilike.%${q}%,po_number.ilike.%${q}%,ambit_po.ilike.%${q}%`);
   }
   const { data } = await query;
   const orders = (data ?? []) as Order[];
@@ -49,11 +49,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         back="/"
         right={emp && (can(profile, "order_desk") || can(profile, "credit_check")) ? <Link href="/orders/desk" className="btn sm dark">Order desk</Link> : null}
       />
+      {sp.msg ? <div className="alert ok small" role="status">{sp.msg}</div> : null}
       {emp ? (
         <>
           <form className="search" action="/orders">
             <input type="hidden" name="status" value={filter} />
-            <input className="input" name="q" defaultValue={q} placeholder="Search customer, order # or PO" aria-label="Search orders" style={{ paddingLeft: 16 }} />
+            <input className="input" name="q" defaultValue={q} placeholder="Search customer, order #, PO or Sales Order #" aria-label="Search orders" style={{ paddingLeft: 16 }} />
           </form>
           <div className="chips">
             {FILTERS.map(([id, label]) => (

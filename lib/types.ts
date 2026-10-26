@@ -116,6 +116,9 @@ export type Order = {
   // Order desk (migration 0011)
   stage?: OrderStage;
   ambit_po?: string | null;
+  cancel_reason?: string | null;
+  cancelled_by_name?: string | null;
+  cancelled_at?: string | null;
   po_by_name?: string | null;
   po_at?: string | null;
   credit_status?: "pending" | "approved" | "hold" | null;

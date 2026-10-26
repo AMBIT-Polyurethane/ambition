@@ -28,7 +28,7 @@ const SECTIONS: Section[] = [
 - Locations with live inventory show In stock / Low stock / Ships from supplier on each item.
 - On the review screen choose pickup at an AMBIT location, delivery to a job site, or drop ship; add a "Needed by" date, your PO number and "Notes for AMBIT"; then send it. You'll be asked to approve the order in the app ("Approve order") so AMBIT knows it's final.
 - Home has "Reorder", which starts a new order with the same items as your last one.
-- Smart reorder: once you've ordered something a few times, Home shows a "Time to reorder?" card, e.g. "You usually order 4 sets of AMBI-SEAL 5.0 every 3 weeks. Reorder for Thursday?". "Reorder for …" opens an order with just the items that are due and the Needed-by date filled in; "Everything I usually order" adds all your regular items. Check the quantities, then send it as usual.
+- Smart reorder: once you've ordered something a few times, Home shows a "Time to reorder?" card, e.g. "You usually order 4 drums of AMBI-SEAL 5.0 every 3 weeks. Reorder for Thursday?". "Reorder for …" opens an order with just the items that are due and the Needed-by date filled in; "Everything I usually order" adds all your regular items. Check the quantities, then send it as usual.
 - There's no online payment; AMBIT invoices as usual.`,
   },
   {
@@ -74,7 +74,7 @@ const SECTIONS: Section[] = [
     who: "staff",
     anyPerm: ["ordering", "order_desk", "credit_check", "inventory"],
     title: "Orders and the order desk (staff)",
-    body: `[Orders](/orders) lists orders. Each order moves: customer approval → CRM enters the AMBIT PO # → Accounting releases it (or puts it on credit hold) → CRM sets the delivery or pickup date and the customer is emailed → marked delivered / picked up. Each step shows on the order page for whoever's job it is. [Order desk](/orders/desk) shows what's waiting on you, with counts.`,
+    body: `[Orders](/orders) lists orders. Spray foam is ordered by the drum (ISO A-side and each resin B-side separately); on the order and the printed order form, each resin is shown with the ISO drums that go with it, with a dark line between those groups (e.g. 6 ISO + 4 AMBI-SEAL 5.0 + 2 AMBI-TITE 204 shows as 4 ISO with the 5.0, then 2 ISO with the 204). To cancel an order: open it, then "Cancel this order" at the bottom and give a reason (admins and the order desk; whoever placed it can cancel until it has a Sales Order #); its stock is released. Admins can then "Delete this order for good". Each order moves: customer approval → CRM enters the Sales Order # → Accounting releases it (or puts it on credit hold) → CRM sets the delivery or pickup date and the customer is emailed → marked delivered / picked up. Each step shows on the order page for whoever's job it is. [Order desk](/orders/desk) shows what's waiting on you, with counts.`,
   },
   {
     who: "staff",

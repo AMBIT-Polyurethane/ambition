@@ -34,7 +34,7 @@ export function OrderDeskCard({ order, desk, credit, warehouse, tax }: { order: 
     },
     {
       key: "po",
-      title: "AMBIT PO #",
+      title: "Sales Order #",
       done: Boolean(o.ambit_po),
       current: st === "needs_po",
       detail: o.ambit_po ? <><b>{o.ambit_po}</b> · {o.po_by_name} · {dateTime(o.po_at)}</> : null,
@@ -42,8 +42,8 @@ export function OrderDeskCard({ order, desk, credit, warehouse, tax }: { order: 
         desk && st !== "customer" && st !== "completed" ? (
           <form action={setOrderPo} className="row" style={{ gap: 8 }}>
             <input type="hidden" name="id" value={o.id} />
-            <input className="input sm grow" name="po" required defaultValue={o.ambit_po ?? ""} placeholder="AMBIT PO #" aria-label="AMBIT PO number" />
-            <Submit className="btn sm" pendingText="Saving…">{o.ambit_po ? "Change" : "Save PO #"}</Submit>
+            <input className="input sm grow" name="po" required defaultValue={o.ambit_po ?? ""} placeholder="Sales Order #" aria-label="Sales Order number" />
+            <Submit className="btn sm" pendingText="Saving…">{o.ambit_po ? "Change" : "Save Sales Order #"}</Submit>
           </form>
         ) : null,
     },

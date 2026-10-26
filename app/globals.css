@@ -1450,3 +1450,9 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .ops-ic { flex: none; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: rgba(2, 132, 199, 0.16); color: #38bdf8; }
 .ops-card.soon .ops-ic { background: var(--s2); color: var(--text3); }
 .ops-card .chev { margin-top: 12px; color: var(--text3); }
+
+/* Order lines: a dark line between spray foam loads (ISO with its resin) */
+.list .product.load-break { border-top: 2px solid var(--text2); }
+/* Cancel / delete */
+.danger-zone { border: 1px solid rgba(227, 53, 39, 0.35); border-radius: var(--radius); padding: 12px 14px; background: var(--s1); }
+.danger-zone > summary { cursor: pointer; font-weight: 700; font-size: 14px; color: var(--red-text); }

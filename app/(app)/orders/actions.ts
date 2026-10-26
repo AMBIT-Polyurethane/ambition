@@ -84,7 +84,7 @@ export async function customerDecision(form: FormData) {
 // ------------------------------------------------------------------ order desk
 // The database checks who may do each step (Admin > Accounts boxes); these just call it and send the emails.
 
-/** CRM: AMBIT's PO number. The order moves on to the credit check. */
+/** CRM: AMBIT's Sales Order number. The order moves on to the credit check. */
 export async function setOrderPo(form: FormData) {
   const s = await getSession();
   if (!s?.profile) return;
@@ -95,7 +95,7 @@ export async function setOrderPo(form: FormData) {
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "PO entered");
   if (!before?.credit_status) await sendDeskNotice(s.supabase, id, "credit_needed");
-  back(id, "msg", before?.credit_status ? `PO # changed to ${po}.` : `PO # ${po} saved. Accounting has been asked for the credit check.`);
+  back(id, "msg", before?.credit_status ? `Sales Order # changed to ${po}.` : `Sales Order # ${po} saved. Accounting has been asked for the credit check.`);
 }
 
 /** Accounting: release the order, or put it on hold (with a reason). */
@@ -150,3 +150,29 @@ export async function completeOrder(form: FormData) {
   await kickForOrder(s.supabase, id, "order completed");
   back(id, "msg", "Marked complete.");
 }
+
+/** Cancel an order with a reason. Its stock is released and the inventory sheet line is marked Cancelled. */
+export async function cancelOrder(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  const { error } = await s.supabase.rpc("order_cancel", { p_order: id, p_reason: reason });
+  if (error) back(id, "err", error.message);
+  await kickForOrder(s.supabase, id, "order cancelled");
+  back(id, "msg", "Order cancelled. Its stock is released.");
+}
+
+/** Admins: delete a cancelled order for good (test orders, mistakes). */
+export async function deleteOrder(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || s.profile.role !== "admin") return;
+  const id = String(form.get("id") ?? "");
+  if (form.get("sure") !== "on") back(id, "err", "Tick the box to confirm, then delete.");
+  const { data: no, error } = await s.supabase.rpc("order_delete", { p_order: id });
+  if (error) back(id, "err", error.message);
+  revalidatePath("/orders");
+  revalidatePath("/orders/desk");
+  redirect(`/orders?msg=${encodeURIComponent(`${no} was deleted.`)}`);
+}
+

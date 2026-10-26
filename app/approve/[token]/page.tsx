@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { CircleAlert, CircleCheck, Clock, FileDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { docFromJson } from "@/lib/order-doc/load";
-import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, qtyText } from "@/lib/format";
+import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
+import { foamLoads, splitNote } from "@/lib/order-doc/loads";
 import { ApproveForm } from "./approve-form";
 
 // The link is the key: keep it out of search engines and out of Referer headers.
@@ -78,18 +79,19 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
       <section className="section">
         <div className="eyebrow">{doc.items.length} {doc.items.length === 1 ? "item" : "items"}</div>
         <div className="list">
-          {doc.items.map((i) => (
-            <div key={i.id} className="product">
+          {foamLoads(doc.items).flatMap((g, gi) => g.rows.map((row, ri) => ({ row, i: row.item, gi, ri }))).map(({ row, i, gi, ri }) => (
+            <div key={`${i.id}-${gi}-${ri}`} className={`product${gi > 0 && ri === 0 ? " load-break" : ""}`}>
               <div className="grow">
                 <div className="name">{i.name}</div>
-                <div className="desc">{i.sku} · <b>{qtyText(Number(i.qty), i.unit)}</b></div>
+                <div className="desc">{i.sku} · <b>{qtyText(row.qty, i.unit)}</b></div>
+                {splitNote(row, plural(i.unit, 2)) ? <div className="tiny faint">{splitNote(row, plural(i.unit, 2))}</div> : null}
               </div>
               <div style={{ textAlign: "right" }}>
                 {i.customer_priced ? (
                   <span className="cp-tag">Account pricing</span>
                 ) : i.line_total !== null ? (
                   <>
-                    <div style={{ fontWeight: 800 }}>{money(i.line_total)}</div>
+                    <div style={{ fontWeight: 800 }}>{money(row.qty === Number(i.qty) ? i.line_total : Number(i.unit_price ?? 0) * row.qty)}</div>
                     <div className="tiny faint">{money(i.unit_price)} / {i.unit}</div>
                   </>
                 ) : (

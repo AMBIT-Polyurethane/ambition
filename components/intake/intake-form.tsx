@@ -61,7 +61,7 @@ export function IntakeForm({ ready }: { ready: boolean }) {
           rows={8}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={"Paste a text or email, for example:\nHey it's Mike w/ Lopez. Need 4 sets 5.0 and 2 sets 204 for pickup OKC Thursday, PO 7781. Also 10 bags R13x15."}
+          placeholder={"Paste a text or email, for example:\nHey it's Mike w/ Lopez. Need 6 ISO, 4 drums 5.0 and 2 drums 204 for pickup OKC Thursday, PO 7781. Also 10 bags R13x15."}
           disabled={!!busy}
         />
       </label>

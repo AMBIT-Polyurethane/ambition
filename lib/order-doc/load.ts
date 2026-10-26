@@ -2,13 +2,14 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Branch, Order } from "@/lib/types";
 import { docState, type DocCompany, type DocItem, type OrderDoc } from "@/lib/order-doc/types";
+import { foamOf } from "@/lib/order-doc/loads";
 
 /** Loads an order the signed-in person is allowed to see (row-level security decides). */
 export async function loadOrderDoc(supabase: SupabaseClient, id: string): Promise<OrderDoc | null> {
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) return null;
   const [{ data: items }, { data: branch }, { data: company }] = await Promise.all([
-    supabase.from("order_items").select("id, sku, name, unit, qty, unit_price, customer_priced, line_total").eq("order_id", id).order("id"),
+    supabase.from("order_items").select("id, sku, name, unit, qty, unit_price, customer_priced, line_total, product:products(category_id)").eq("order_id", id).order("id"),
     order.branch_id
       ? supabase.from("branches").select("*").eq("id", order.branch_id).maybeSingle<Branch>()
       : Promise.resolve({ data: null }),
@@ -18,7 +19,7 @@ export async function loadOrderDoc(supabase: SupabaseClient, id: string): Promis
   ]);
   return {
     order,
-    items: (items ?? []) as DocItem[],
+    items: ((items ?? []) as unknown as (DocItem & { product?: { category_id: string | null } | null })[]).map(({ product, ...i }) => ({ ...i, foam: foamOf(i, product?.category_id) })),
     branch: (branch as Branch | null) ?? null,
     company: (company as DocCompany | null) ?? null,
     state: docState(order),
