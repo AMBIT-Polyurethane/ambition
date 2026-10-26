@@ -126,6 +126,7 @@ export type PlaceOrderInput = {
   companyId: string; // employees only; "__other" = not in list
   customerName: string;
   approvalEmail?: string; // employees only: where the customer's approval link goes
+  draftId?: string; // an AI order intake draft this order came from
 };
 
 /** sent = went to orders@ (or saved, if email is off); approval = emailed to the customer to approve first. */
@@ -175,6 +176,9 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   if (error || !id) return { ok: false, error: error?.message ?? "Something went wrong. Please try again." };
 
   const orderId = id as string;
+  if (emp && input.draftId && UUID.test(input.draftId)) {
+    await s.supabase.from("order_drafts").update({ status: "sent", order_id: orderId, updated_at: new Date().toISOString() }).eq("id", input.draftId);
+  }
   revalidatePath("/");
   revalidatePath("/orders");
   // Branches with a live inventory sheet: the order's lines go onto PENDING ORDERS right away.

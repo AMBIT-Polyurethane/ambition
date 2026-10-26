@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, ChevronRight, Plus, RefreshCw, Sparkles, UserCheck } from "lucide-react";
+import { Bell, CalendarClock, ChevronRight, Landmark, Plus, RefreshCw, Sparkles, UserCheck } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { firstName, greeting, initials, orderNo, dateShort } from "@/lib/format";
 import { Icon } from "@/components/icons";
@@ -12,6 +12,8 @@ import { homeApps } from "@/lib/home-apps-server";
 import { homePromos } from "@/lib/promos";
 import { PromoBanner } from "@/components/promo-banner";
 import { reorderCount } from "@/lib/inventory/view";
+import { customersDue, reorderNudge } from "@/lib/reorder";
+import { companyTax, taxCounts, taxOverview } from "@/lib/tax-server";
 import type { Course, DocumentRow, Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -83,10 +85,28 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     homePromos(supabase, profile),
   ]);
 
+  // Smart reorder and sales-tax certificates (migration 0021). Each one quietly shows nothing if it isn't set up yet.
+  const myCompany = !emp ? profile.company_id : null;
+  const [nudge, myTax, due, taxRows] = await Promise.all([
+    myCompany ? reorderNudge(supabase, myCompany).catch(() => null) : null,
+    myCompany ? companyTax(supabase, myCompany).catch(() => null) : null,
+    emp && can(profile, "ordering") ? customersDue(supabase, 200).catch(() => null) : null,
+    emp && (credit || admin) ? taxOverview(supabase).catch(() => null) : null,
+  ]);
+  const tax = taxRows ? taxCounts(taxRows) : null;
+  const taxWork = tax ? tax.expired + tax.soon + tax.pending : 0;
+  const weekday = (iso: string) => {
+    const d = new Date(iso + "T12:00:00Z");
+    const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    return iso === tomorrow ? "tomorrow" : d.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+  };
+
   const apps = arrangeApps(
     await homeApps(supabase, profile, {
       desk: needPo + toSchedule + needCredit,
       credit: waitingApps,
+      tax: taxWork,
+      due: due?.length ?? 0,
       inventory: emp && can(profile, "inventory") ? await reorderCount(supabase, profile.branch_id) : 0,
     }),
     parseLayout(profile.home_apps),
@@ -152,6 +172,79 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <span className="grow"><b>{noRole}</b> staff {noRole === 1 ? "account needs" : "accounts need"} a job role</span>
           <ChevronRight size={18} />
         </Link>
+      ) : null}
+
+      {myTax && (myTax.state === "expiring" || myTax.state === "expired" || myTax.state === "missing" || myTax.state === "pending") ? (
+        <Link href="/profile#tax" className={`home-alert ${myTax.state === "expiring" || myTax.state === "pending" ? "warn" : "err"}`}>
+          <span className="ic"><Landmark size={19} /></span>
+          <span className="grow col tight">
+            <span className="t">
+              {myTax.state === "expiring"
+                ? `Your sales-tax exemption certificate expires in ${myTax.days_left} day${myTax.days_left === 1 ? "" : "s"}`
+                : myTax.state === "expired"
+                  ? "Your sales-tax exemption certificate has expired"
+                  : myTax.state === "pending"
+                    ? "AMBIT Accounting is checking your new certificate"
+                    : "We need your sales-tax exemption certificate"}
+            </span>
+            <span className="s">
+              {myTax.state === "pending"
+                ? "Nothing to do. Orders wait at credit check until it's verified."
+                : myTax.state === "expiring"
+                  ? "Upload the renewed one so your orders stay tax-exempt."
+                  : "Upload a current one, or orders are held at credit check (or sales tax is charged)."}
+            </span>
+          </span>
+          <ChevronRight size={18} />
+        </Link>
+      ) : null}
+      {taxWork > 0 && tax ? (
+        <Link href="/tax" className={`home-alert ${tax.expired ? "err" : "warn"}`}>
+          <span className="ic"><Landmark size={19} /></span>
+          <span className="grow col tight">
+            <span className="t">Sales-tax certificates need attention</span>
+            <span className="s">
+              {[
+                tax.expired ? `${tax.expired} expired or missing` : "",
+                tax.soon ? `${tax.soon} expiring within 30 days` : "",
+                tax.pending ? `${tax.pending} waiting for you to verify` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </span>
+          <ChevronRight size={18} />
+        </Link>
+      ) : null}
+      {due?.length ? (
+        <Link href="/orders/due" className="home-alert">
+          <span className="ic"><CalendarClock size={19} /></span>
+          <span className="grow col tight">
+            <span className="t">{due.length} customer{due.length === 1 ? " is" : "s are"} overdue to order</span>
+            <span className="s">
+              {due.slice(0, 3).map((c) => c.company_name).join(", ")}
+              {due.length > 3 ? ` and ${due.length - 3} more` : ""}
+            </span>
+          </span>
+          <ChevronRight size={18} />
+        </Link>
+      ) : null}
+
+      {/* Smart reorder: "You usually order 4 sets of AMBI-SEAL every 3 weeks." */}
+      {nudge ? (
+        <section className="smart-card">
+          <span className="eyebrow" style={{ display: "flex", gap: 6, alignItems: "center" }}><RefreshCw size={14} /> Time to reorder?</span>
+          <p>
+            {nudge.text} Reorder for {weekday(nudge.date)}?
+          </p>
+          {nudge.others.length ? (
+            <span className="small muted">Also about due: {nudge.others.slice(0, 4).map((o) => o.name).join(", ")}</span>
+          ) : null}
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <Link href="/order?smart=1" className="btn sm dark"><RefreshCw size={15} /> Reorder for {weekday(nudge.date)}</Link>
+            <Link href="/order?smart=all" className="btn sm">Everything I usually order</Link>
+          </div>
+        </section>
       ) : null}
 
       <PromoBanner slides={promos} />

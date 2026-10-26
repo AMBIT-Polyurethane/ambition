@@ -4,11 +4,12 @@ import { completeOrder, creditDecision, resendScheduledEmail, scheduleOrder, set
 import { dateShort, dateTime } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
 import type { Order } from "@/lib/types";
+import { TAX_STATE, taxLine, type TaxInfo } from "@/lib/tax";
 
 type Step = { key: string; title: string; done: boolean; current: boolean; detail?: React.ReactNode; action?: React.ReactNode };
 
 /** Staff view of where the order is and the next step, for whoever's job it is. */
-export function OrderDeskCard({ order, desk, credit, warehouse }: { order: Order; desk: boolean; credit: boolean; warehouse: boolean }) {
+export function OrderDeskCard({ order, desk, credit, warehouse, tax }: { order: Order; desk: boolean; credit: boolean; warehouse: boolean; tax?: TaxInfo | null }) {
   const st = stageOf(order);
   if (!st || st === "cancelled") return null;
   const o = order;
@@ -65,7 +66,16 @@ export function OrderDeskCard({ order, desk, credit, warehouse }: { order: Order
             <form action={creditDecision} className="col" style={{ gap: 6 }}>
               <input type="hidden" name="id" value={o.id} />
               <input type="hidden" name="decision" value="approve" />
-              <span className="tiny faint">Check the account for credit holds first.</span>
+              {tax && TAX_STATE[tax.state].blocks ? (
+                <>
+                  <span className="small" style={{ color: "var(--err-text)", fontWeight: 700 }}>{taxLine(tax, dateShort)}. Verify a current certificate under Tax certificates first, or:</span>
+                  <label className="check small">
+                    <input type="checkbox" name="charge_tax" /> Charge sales tax on this order instead
+                  </label>
+                </>
+              ) : (
+                <span className="tiny faint">Check the account for credit holds first.</span>
+              )}
               <Submit className="btn sm block" pendingText="Releasing…">Release order</Submit>
             </form>
             {st !== "hold" ? (

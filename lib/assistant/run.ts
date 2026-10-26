@@ -1,7 +1,8 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { KINDS, NO_SOURCE_MARK, modelInfo, type AiSettings, type AiSource } from "@/lib/assistant/config";
+import { COMPLAINT_MARK, KINDS, NO_SOURCE_MARK, modelInfo, type AiSettings, type AiSource } from "@/lib/assistant/config";
+import { photoBlocks } from "@/lib/ai/claude";
 import { systemPrompt } from "@/lib/assistant/policy";
 import type { Profile } from "@/lib/types";
 
@@ -28,12 +29,13 @@ type Hit = {
 
 type Ref = { title: string; kind: string; href: string; page: number | null; site?: string | null };
 
-export type HistoryRow = { role: "user" | "assistant" | "expert"; body: string; author_name?: string | null };
+export type HistoryRow = { role: "user" | "assistant" | "expert"; body: string; author_name?: string | null; images?: string[] | null };
 
 export type Answer = {
   body: string;
   sources: AiSource[];
   noSource: boolean;
+  complaint: boolean;
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -72,6 +74,7 @@ function historyMessages(rows: HistoryRow[]): Msg[] {
   for (const r of rows.slice(-14)) {
     const role = r.role === "user" ? "user" : "assistant";
     let text = r.body.replace(/⟦[\d,\s]+⟧/g, "").trim();
+    if (r.images?.length) text = `[${r.images.length} photo${r.images.length > 1 ? "s" : ""} attached]\n${text}`;
     if (r.role === "expert") text = `Answer from AMBIT's expert${r.author_name ? ` (${r.author_name})` : ""}:\n${text}`;
     if (!text) continue;
     const last = out[out.length - 1];
@@ -100,6 +103,7 @@ export async function runAnswer(opts: {
   settings: AiSettings;
   history: HistoryRow[];
   question: string;
+  photos?: string[];
   emit: Emit;
 }): Promise<Answer> {
   const { supabase, profile, settings, question, emit } = opts;
@@ -114,7 +118,9 @@ export async function runAnswer(opts: {
   const prevUser = String([...hist].reverse().find((h) => h.role === "user")?.content ?? "").slice(0, 300);
   const firstQuery = question.length < 80 && prevUser ? `${question} ${prevUser}` : question;
   emit({ t: "status", text: "Searching AMBIT knowledge…" });
-  const first = await search(supabase, firstQuery, null, refs, 8);
+  const first = await search(supabase, firstQuery || "spray foam problem", null, refs, 8);
+  const pics = opts.photos?.length ? await photoBlocks(supabase, opts.photos, opts.profile.id) : [];
+  if (opts.photos?.length && !pics.length) throw new Error("Couldn't read the photos. Try adding them again.");
 
   const searchTool: Anthropic.Messages.Tool = {
     name: "search_knowledge",
@@ -144,7 +150,7 @@ export async function runAnswer(opts: {
 
   let messages: Msg[] = [
     ...hist,
-    { role: "user", content: [...first, { type: "text", text: question }] },
+    { role: "user", content: [...pics, ...first, { type: "text", text: question || "What do you see in these photos?" }] },
   ];
 
   const kept: { blocks: Block[]; final: boolean }[] = [];
@@ -269,7 +275,8 @@ export async function runAnswer(opts: {
     if (!round.final) body += "\n\n";
   }
   const noSource = body.includes(NO_SOURCE_MARK);
-  body = body.split(NO_SOURCE_MARK).join("").replace(/\n{3,}/g, "\n\n").trim();
+  const complaint = body.includes(COMPLAINT_MARK);
+  body = body.split(NO_SOURCE_MARK).join("").split(COMPLAINT_MARK).join("").replace(/\n{3,}/g, "\n\n").trim();
   if (!body) body = "I couldn't put an answer together for that. Try asking it a different way.";
 
   const costCents =
@@ -279,6 +286,7 @@ export async function runAnswer(opts: {
     body,
     sources: sources.map(({ n, title, kind, href, page, site, quote }) => ({ n, title, kind, href, page: page ?? null, site: site ?? null, quote: quote ?? null })),
     noSource,
+    complaint,
     model: model.id,
     inputTokens: inputTokens + cacheWrite + cacheRead,
     outputTokens,

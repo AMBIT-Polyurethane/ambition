@@ -1,7 +1,8 @@
 import {
   Award, BookOpen, Boxes, Building2, ClipboardList, Cylinder, FileText, GraduationCap, Hammer, Headset,
   Layers, Link as LinkIcon, MapPin, Megaphone, Newspaper, Package, Phone, Plane, CirclePlay, ShieldCheck,
-  ShoppingCart, Tag, TriangleAlert, Users, Video, Wrench, Calendar, Mail, CreditCard, ClipboardCheck, Truck, Droplet, Receipt, Ruler, Sparkles, type LucideIcon,
+  ShoppingCart, Tag, TriangleAlert, Users, Video, Wrench, Calendar, Mail, CreditCard, ClipboardCheck, Truck, Droplet, Receipt, Ruler, Sparkles,
+  Landmark, ClipboardPaste, MessageSquareWarning, CalendarClock, type LucideIcon,
 } from "lucide-react";
 
 export const ICONS: Record<string, LucideIcon> = {
@@ -40,6 +41,10 @@ export const ICONS: Record<string, LucideIcon> = {
   receipt: Receipt,
   ruler: Ruler,
   spark: Sparkles,
+  tax: Landmark,
+  intake: ClipboardPaste,
+  complaint: MessageSquareWarning,
+  due: CalendarClock,
 };
 
 export const ICON_NAMES = Object.keys(ICONS);

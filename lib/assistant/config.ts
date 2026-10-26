@@ -108,6 +108,7 @@ export type AiSource = {
 export type AiPart = { text: string; cites: number[] };
 
 export const NO_SOURCE_MARK = "[[NO_SOURCE]]";
+export const COMPLAINT_MARK = "[[COMPLAINT]]";
 
 /** Splits text (a PDF page, a note) into search-sized pieces at paragraph or sentence breaks. */
 export function chunkText(text: string, size = 1100): string[] {

@@ -28,7 +28,15 @@ const SECTIONS: Section[] = [
 - Locations with live inventory show In stock / Low stock / Ships from supplier on each item.
 - On the review screen choose pickup at an AMBIT location, delivery to a job site, or drop ship; add a "Needed by" date, your PO number and "Notes for AMBIT"; then send it. You'll be asked to approve the order in the app ("Approve order") so AMBIT knows it's final.
 - Home has "Reorder", which starts a new order with the same items as your last one.
+- Smart reorder: once you've ordered something a few times, Home shows a "Time to reorder?" card, e.g. "You usually order 4 sets of AMBI-SEAL 5.0 every 3 weeks. Reorder for Thursday?". "Reorder for …" opens an order with just the items that are due and the Needed-by date filled in; "Everything I usually order" adds all your regular items. Check the quantities, then send it as usual.
 - There's no online payment; AMBIT invoices as usual.`,
+  },
+  {
+    who: "customer",
+    title: "Sales-tax exemption certificate (contractors)",
+    body: `If your company buys tax-exempt, AMBIT needs a current exemption or resale certificate on file. [Profile](/profile#tax) → "Sales-tax exemption": upload a photo or PDF of the certificate, pick the state and type, and enter its expiration date ("Doesn't expire" if it has none). AMBIT Accounting verifies it; until then it shows "Waiting for Accounting to verify".
+- Home shows a reminder 60 and 30 days before it expires, and AMBIT emails a reminder too (once app email is set up). Upload the renewed one before the date.
+- If the certificate has expired or isn't on file, new orders wait at AMBIT's credit check until a current one is verified, or Accounting can charge sales tax on that order instead.`,
   },
   {
     who: "customer",
@@ -48,9 +56,34 @@ const SECTIONS: Section[] = [
   },
   {
     who: "staff",
+    perm: "ordering",
+    title: "Paste an order: AI order intake (staff)",
+    body: `[Paste an order](/order/intake) (also the "Paste an order" Home tile, and the "Got the order in a text, email or note?" link at the top of Order): paste a customer's texted or emailed order, or tap "Take photo" / "Add photos" for a handwritten one or a screenshot, then "Read the order".
+- AMBIT Intelligence reads it, matches each line to an AMBIT product, guesses the customer and location, and builds a draft. Each line shows how sure it is (green = sure, amber = check it, red = no match). Tap a product to pick a different one; change quantities; pick the customer, location, delivery, PO and dates.
+- Questions it couldn't settle (e.g. "Which gun cleaner?") show at the top.
+- "Open in Order to finish" carries everything into the normal order review screen; send it there exactly like any order (the customer still approves it). "Save draft" keeps it for later in "Recent drafts"; "Discard" throws it away.
+- Always check the draft against the original before sending: the AI can misread handwriting.`,
+  },
+  {
+    who: "staff",
+    perm: "ordering",
+    title: "Customers due to order (sales reps and CRM)",
+    body: `[Due to order](/orders/due) (Home tile, and a "customers are overdue to order" card on Home) lists customers with at least 3 orders whose usual time between orders has passed by a good margin, most overdue first: how often they usually order, their last order, and how many days past usual they are. Tap the phone icon to call, or "Start order" to open an order for them with their usual items already in it.`,
+  },
+  {
+    who: "staff",
     anyPerm: ["ordering", "order_desk", "credit_check", "inventory"],
     title: "Orders and the order desk (staff)",
     body: `[Orders](/orders) lists orders. Each order moves: customer approval → CRM enters the AMBIT PO # → Accounting releases it (or puts it on credit hold) → CRM sets the delivery or pickup date and the customer is emailed → marked delivered / picked up. Each step shows on the order page for whoever's job it is. [Order desk](/orders/desk) shows what's waiting on you, with counts.`,
+  },
+  {
+    who: "staff",
+    perm: "credit_check",
+    title: "Sales-tax exemption certificates (Accounting)",
+    body: `[Tax certificates](/tax) (Home tile and left menu) lists every customer marked tax-exempt with the state of their certificate: Certificate current, Expires soon (within 60 days), Certificate expired, No certificate on file, or Waiting for Accounting to verify. Filters and search at the top; Home shows a card when any need attention.
+- Open a customer to mark them tax-exempt (or not), add a certificate (photo or PDF, state, type, number, expiration date) or verify / turn down one the contractor uploaded. Certificates Accounting adds are verified right away.
+- Reminder emails go to the customer 60 and 30 days before expiry and when it expires, with Accounting copied (once app email is set up).
+- An order from a tax-exempt customer whose certificate is expired, missing or unverified is held at credit check: "Release" is blocked unless you tick "Charge sales tax on this order instead", which is noted on the order.`,
   },
   {
     who: "staff",
@@ -125,12 +158,24 @@ Reading plans: sheet numbers start with a letter for the discipline (A architect
 - Customers (companies), Products (CSV import, sale prices with an end date, square feet per bag for batts), Docs & bulletins, Links (Home-screen form tiles), Home banner (promo slides), Branches, Academy.
 - Forms hub: every Jotform form; credit applications and account setup forms wait for approval with credit limit, terms and a note; any submission prints as a PDF.
 - Expense reports: every employee's month. Inventory: the Microsoft connection and each location's spreadsheet.
-- Ask AMBIT: teach the assistant (TSBs, teaching notes, documents), answer questions sent to AMBIT's expert, review conversations, and settings (who can use it, model, approved websites, daily limits).`,
+- Ask AMBIT: teach the assistant (TSBs, teaching notes, documents), answer questions sent to AMBIT's expert, review conversations, and settings (who can use it, model, approved websites, daily limits).
+- Tax certificates and Complaint reports also have their own tiles and menu items.`,
   },
   {
     who: "all",
     title: "Ask AMBIT (this assistant)",
-    body: `[Ask AMBIT](/assistant) answers questions about AMBIT products, building science as AMBIT teaches it, building codes (IECC, IRC, IBC), HVAC design (ACCA, ASHRAE) and how to use this app. Numbered sources under each answer open the document or website it came from. Thumbs up / down tells AMBIT whether an answer helped. When there's no approved source for a question, "Send to AMBIT's expert" sends it to AMBIT; the answer comes back in the same conversation. There's a daily question limit.`,
+    body: `[Ask AMBIT](/assistant) answers questions about AMBIT products, building science as AMBIT teaches it, building codes (IECC, IRC, IBC), HVAC design (ACCA, ASHRAE) and how to use this app. Numbered sources under each answer open the document or website it came from. Thumbs up / down tells AMBIT whether an answer helped. When there's no approved source for a question, "Send to AMBIT's expert" sends it to AMBIT; the answer comes back in the same conversation. There's a daily question limit.
+- Photos: tap the camera button left of the question box to take a photo or pick up to 4 from the phone. Good for foam problems (shrinkage, cracking, separation, voids, discoloration): Ask AMBIT compares what it sees with AMBIT's TSBs and asks for whatever details are missing (product, lot numbers, temperatures, thickness).
+- When it looks like a product problem, the answer shows "Start a complaint report": it opens a complaint report with the photos and details from the conversation already filled in.`,
+  },
+  {
+    who: "all",
+    title: "Complaint reports",
+    body: `[Complaint reports](/complaints) (shows on Home once you've started one; AMBIT's complaints team always sees it). The quickest way to start one is photos in Ask AMBIT, then "Start a complaint report"; or tap "New report by hand".
+- Fill in who and where, product and lot numbers (A and B), date sprayed, where and how thick, substrate and conditions, rig settings, what's wrong (tick the symptoms) and a description. Add more photos with "Take photo" or "Add photos". "Save" keeps the draft.
+- "Submit to AMBIT" sends it: it gets a number (CCR-2026-###) and AMBIT is notified. Product and what's wrong are required.
+- AMBIT reviews it; the status changes to "AMBIT is reviewing" then "Closed", and AMBIT's review shows on the report.
+- "Print" opens a printable copy; use "Print / save PDF".`,
   },
   {
     who: "all",

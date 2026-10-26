@@ -12,6 +12,8 @@ import { OrderDeskCard } from "@/components/order-desk-card";
 import { can } from "@/lib/access";
 import { STAGES, customerProgress, stageOf } from "@/lib/order-desk";
 import type { Branch, Company, Order, OrderItem } from "@/lib/types";
+import { companyTax } from "@/lib/tax-server";
+import { TAX_STATE, taxLine } from "@/lib/tax";
 
 export const metadata = { title: "Order" };
 
@@ -37,6 +39,8 @@ export default async function OrderDetailPage({
       : Promise.resolve({ data: null }),
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null } | null })[];
+  // Staff: the customer's sales-tax exemption (an expired certificate holds the order at the credit check).
+  const tax = emp && order.company_id && stageOf(order) !== "completed" && stageOf(order) !== "cancelled" ? await companyTax(supabase, order.company_id) : null;
   // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
   const { data: invRows } = emp
     ? await supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id)
@@ -148,6 +152,7 @@ export default async function OrderDetailPage({
             <><dt>{order.delivery_method === "pickup" ? "Pickup" : "Delivery"}</dt><dd>{dateShort(order.scheduled_for)}{order.schedule_note ? `\n${order.schedule_note}` : ""}</dd></>
           ) : null}
           {emp && order.ambit_po ? (<><dt>AMBIT PO #</dt><dd>{order.ambit_po}</dd></>) : null}
+          {emp && order.tax_note ? (<><dt>Sales tax</dt><dd style={{ color: "var(--warn-text)", fontWeight: 700 }}>{order.tax_note}</dd></>) : null}
           {state === "approved" ? (
             <>
               <dt>Approved</dt>
@@ -166,7 +171,16 @@ export default async function OrderDetailPage({
         </dl>
       </section>
 
-      {emp ? <OrderDeskCard order={order} desk={can(profile, "order_desk")} credit={can(profile, "credit_check")} warehouse={can(profile, "inventory")} /> : null}
+      {emp && tax && (TAX_STATE[tax.state].blocks || tax.state === "expiring") ? (
+        <div className={`alert ${TAX_STATE[tax.state].blocks ? "err" : "warn"} small`} role="status">
+          <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
+          <span>
+            {taxLine(tax, dateShort)}.{TAX_STATE[tax.state].blocks ? " Accounting can't release this order until a current certificate is verified, or they choose to charge sales tax." : ""}
+            {can(profile, "credit_check") && order.company_id ? <> <Link href={`/tax/${order.company_id}`}>Tax certificates</Link></> : null}
+          </span>
+        </div>
+      ) : null}
+      {emp ? <OrderDeskCard order={order} desk={can(profile, "order_desk")} credit={can(profile, "credit_check")} warehouse={can(profile, "inventory")} tax={tax} /> : null}
 
       <section className="section">
         <div className="eyebrow">{lines.length} {lines.length === 1 ? "item" : "items"}</div>

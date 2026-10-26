@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, CircleAlert, MapPin, Minus, Plus, Search, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, MapPin, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, type Cart } from "@/lib/cart";
 import { money } from "@/lib/format";
@@ -65,6 +66,8 @@ type Props = {
   reorder: Cart | null;
   reorderNo: number | null;
   reorderCompany: string | null;
+  /** A draft from AI order intake (or smart reorder), opened to check and send. */
+  draft?: OrderDraft | null;
   /** Opens the catalog already searched (the Home banner sends people to one product). */
   initialSearch?: string;
   stock?: StockMap;
@@ -146,6 +149,19 @@ function SqftBox({ p, qty, onQty }: { p: CatalogProduct; qty: number; onQty: (n:
   );
 }
 
+export type OrderDraft = {
+  id: string | null;
+  source: "intake" | "smart";
+  companyId: string | null;
+  branchId: string | null;
+  delivery: "pickup" | "jobsite" | "dropship" | null;
+  address: string | null;
+  po: string | null;
+  neededBy: string | null;
+  notes: string | null;
+  items: Cart;
+};
+
 export function OrderBuilder(props: Props) {
   const { products, categories, branches, companies, isEmployee, approvals, me } = props;
   const router = useRouter();
@@ -167,7 +183,8 @@ export function OrderBuilder(props: Props) {
   const [po, setPo] = useState("");
   const [neededBy, setNeededBy] = useState("");
   const [notes, setNotes] = useState("");
-  const [companyId, setCompanyId] = useState(props.reorderCompany ?? "");
+  const [companyId, setCompanyId] = useState(props.draft?.companyId ?? props.reorderCompany ?? "");
+  const [draftId] = useState(props.draft?.source === "intake" ? props.draft.id : null);
   const [customerList, setCustomerList] = useState<OrderCustomer[]>(companies ?? []);
   const [autoAddress, setAutoAddress] = useState("");
   const [approvalEmail, setApprovalEmail] = useState("");
@@ -177,7 +194,33 @@ export function OrderBuilder(props: Props) {
 
   // Load the saved cart (or the order being repeated) once.
   useEffect(() => {
-    if (props.reorder) {
+    if (props.draft) {
+      const d = props.draft;
+      const fresh: Cart = {};
+      let missing = 0;
+      for (const [id, n] of Object.entries(d.items)) {
+        if (byId.has(id) && n > 0) fresh[id] = n;
+        else missing++;
+      }
+      setCart(fresh);
+      writeCart(fresh);
+      if (d.delivery) setDelivery(d.delivery);
+      if (d.branchId && branches.some((b) => b.id === d.branchId)) setBranchId(d.branchId);
+      if (d.address) setAddress(d.address);
+      if (d.po) setPo(d.po);
+      if (d.neededBy) setNeededBy(d.neededBy);
+      if (d.notes) setNotes(d.notes);
+      setNotice(
+        (d.source === "intake"
+          ? "Loaded from AI order intake. Check the customer, items and delivery, then send."
+          : "Your usual items are in the cart. Check the quantities and the date, then send.") +
+          (missing ? ` ${missing} item${missing > 1 ? "s are" : " is"} no longer in the catalog.` : ""),
+      );
+      if (isEmployee && (d.branchId || d.delivery === "dropship")) setStep("review");
+      // Smart reorder for a contractor: one tap from Home straight to the review screen.
+      if (!isEmployee && d.source === "smart" && Object.keys(fresh).length) setStep("review");
+      router.replace("/order");
+    } else if (props.reorder) {
       const fresh: Cart = {};
       let missing = 0;
       for (const [id, n] of Object.entries(props.reorder)) {
@@ -271,6 +314,7 @@ export function OrderBuilder(props: Props) {
         companyId: isEmployee ? companyId : "",
         customerName: "",
         approvalEmail: isEmployee && approvals ? approvalEmail : "",
+        draftId: draftId ?? undefined,
       });
       if (res.ok) {
         writeCart({});
@@ -314,6 +358,14 @@ export function OrderBuilder(props: Props) {
         <header className="topbar">
           <h1 className="title" style={{ margin: 0 }}>Order for a customer</h1>
         </header>
+        {isEmployee ? <Link href="/order/intake" className="home-alert">
+          <span className="ic"><ClipboardPaste size={19} /></span>
+          <span className="grow col tight">
+            <span className="t">Got the order in a text, email or note?</span>
+            <span className="s">Paste it or snap a photo and AMBIT Intelligence builds the order for you to check.</span>
+          </span>
+          <ChevronRight size={18} />
+        </Link> : null}
         <section className="section">
           <div className="h2">Which location?</div>
           <p className="muted small" style={{ margin: 0 }}>Pick the AMBIT location this order will be picked up from or shipped from.</p>
@@ -380,6 +432,8 @@ export function OrderBuilder(props: Props) {
             <div className="muted">{me.name}</div>
           </div>
         )}
+
+        {notice ? <div className="alert info small">{notice}</div> : null}
 
         <section className="section">
           <div className="row between">

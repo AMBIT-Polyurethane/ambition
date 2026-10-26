@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
-import { OrderBuilder, type CatalogProduct, type StockMap } from "@/components/order-builder";
+import { OrderBuilder, type CatalogProduct, type OrderDraft, type StockMap } from "@/components/order-builder";
 import { approvalsEnabled } from "@/lib/order-send";
 import { saleOn, todayCentral } from "@/lib/sale";
 import type { OrderCustomer } from "@/lib/customers";
+import { smartDraft } from "@/lib/reorder";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
 export const metadata = { title: "Order" };
@@ -81,6 +82,33 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
     ? Object.fromEntries(reorderData.order_items.filter((i) => i.product_id).map((i) => [i.product_id as string, Number(i.qty)]))
     : null;
 
+  // A draft from AI order intake (staff), or this customer's usual items (smart reorder).
+  let draft: OrderDraft | null = null;
+  if (emp && sp.draft && /^[0-9a-f-]{36}$/i.test(sp.draft)) {
+    const { data: d } = await supabase.from("order_drafts").select("*").eq("id", sp.draft).maybeSingle();
+    if (d && d.status !== "sent") {
+      const items: Record<string, number> = {};
+      for (const it of (d.items ?? []) as { product_id: string | null; qty: number }[]) {
+        if (it.product_id && Number(it.qty) > 0) items[it.product_id] = (items[it.product_id] ?? 0) + Number(it.qty);
+      }
+      draft = {
+        id: d.id,
+        source: "intake",
+        companyId: d.company_id,
+        branchId: d.branch_id,
+        delivery: d.delivery_method,
+        address: d.ship_address,
+        po: d.po_number,
+        neededBy: d.needed_by,
+        notes: d.notes,
+        items,
+      };
+    }
+  } else if (sp.smart) {
+    const company = emp ? (sp.company && /^[0-9a-f-]{36}$/i.test(sp.company) ? sp.company : null) : profile.company_id;
+    if (company) draft = await smartDraft(supabase, company, sp.smart === "all", emp);
+  }
+
   return (
     <OrderBuilder
       products={catalog}
@@ -103,6 +131,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
         defaultBranch: profile.company?.default_branch_id ?? profile.branch_id ?? null,
       }}
       reorder={reorder}
+      draft={draft}
       reorderNo={reorderData?.order_no ?? null}
       reorderCompany={reorderData?.company_id ?? null}
       initialSearch={sp.q ?? ""}

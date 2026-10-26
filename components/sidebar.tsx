@@ -10,6 +10,8 @@ import {
   FileText,
   GraduationCap,
   House,
+  Landmark,
+  MessageSquareWarning,
   Receipt,
   Ruler,
   ShieldCheck,
@@ -42,6 +44,8 @@ const ICONS = {
   docs: FileText,
   academy: GraduationCap,
   directory: Users,
+  tax: Landmark,
+  complaints: MessageSquareWarning,
   admin: ShieldCheck,
   profile: User,
 } satisfies Record<string, LucideIcon>;

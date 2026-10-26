@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
+  Camera,
   Check,
+  ClipboardList,
   Copy,
   ExternalLink,
   Globe,
@@ -22,6 +25,8 @@ import { BrandImg } from "@/components/brand";
 import { Markdown } from "@/components/assistant/markdown";
 import { kindInfo, NO_SOURCE_MARK, type AiSource } from "@/lib/assistant/config";
 import { deleteThread, markThreadRead, rateAnswer, sendToExpert } from "@/app/(app)/assistant/actions";
+import { startComplaint } from "@/app/(app)/complaints/actions";
+import { uploadPhotos, type Uploaded } from "@/lib/photo-upload";
 
 export type ChatThread = { id: string; title: string; unread: boolean; updated_at: string };
 export type ChatMessage = {
@@ -34,7 +39,13 @@ export type ChatMessage = {
   author_name?: string | null;
   created_at?: string;
   streaming?: boolean;
+  /** Photo links to show (local previews while sending, signed links from history). */
+  images?: string[] | null;
+  /** Ask AMBIT thinks this is a product problem worth a complaint report. */
+  complaint?: boolean;
 };
+
+const MAX_PHOTOS = 4;
 
 const SUGGEST_STAFF = [
   "How do I send my expense report to Corporate?",
@@ -86,6 +97,9 @@ export function AssistantChat(props: {
   const [error, setError] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [pics, setPics] = useState<Uploaded[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -115,25 +129,48 @@ export function AssistantChat(props: {
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   };
 
+  const addPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const room = MAX_PHOTOS - pics.length;
+    if (room <= 0) {
+      setError(`Up to ${MAX_PHOTOS} photos per question.`);
+      return;
+    }
+    setError("");
+    setUploading(true);
+    const up = await uploadPhotos(Array.from(files).slice(0, room), "ask");
+    if (files.length > room) up.errors.push(`Only ${MAX_PHOTOS} photos fit in one question.`);
+    if (up.errors.length) setError(up.errors.join(" "));
+    setPics((p) => [...p, ...up.ok].slice(0, MAX_PHOTOS));
+    if (picker.current) picker.current.value = "";
+    setUploading(false);
+  };
+
   const ask = useCallback(
     async (q: string) => {
+      const sending = pics;
       const question = q.trim();
-      if (!question || busy) return;
+      if ((!question && !sending.length) || busy || uploading) return;
       setError("");
       setBusy(true);
-      setStatus("Searching AMBIT knowledge…");
+      setStatus(sending.length ? `Looking at your photo${sending.length > 1 ? "s" : ""}…` : "Searching AMBIT knowledge…");
       setText("");
+      setPics([]);
       requestAnimationFrame(grow);
       stick.current = true;
       const tmp = `tmp-${Date.now()}`;
-      setMessages((m) => [...m, { id: tmp, role: "user", body: question }, { id: "draft", role: "assistant", body: "", streaming: true }]);
+      setMessages((m) => [
+        ...m,
+        { id: tmp, role: "user", body: question, images: sending.map((p) => p.url) },
+        { id: "draft", role: "assistant", body: "", streaming: true },
+      ]);
 
       let res: Response;
       try {
         res = await fetch("/api/assistant", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ thread: threadId, text: question }),
+          body: JSON.stringify({ thread: threadId, text: question, images: sending.map((p) => p.path) }),
         });
       } catch {
         res = new Response(JSON.stringify({ error: "No connection. Check your signal and try again." }), { status: 0 });
@@ -143,6 +180,7 @@ export function AssistantChat(props: {
         setError(j?.error ?? "Something went wrong. Try again.");
         setMessages((m) => m.filter((x) => x.id !== "draft" && x.id !== tmp));
         setText(question);
+        setPics(sending);
         setBusy(false);
         setStatus("");
         return;
@@ -159,7 +197,7 @@ export function AssistantChat(props: {
           setThreadId(id);
           setThreads((ts) => {
             const rest = ts.filter((t) => t.id !== id);
-            const mine = ts.find((t) => t.id === id) ?? { id, title: question.slice(0, 80), unread: false, updated_at: new Date().toISOString() };
+            const mine = ts.find((t) => t.id === id) ?? { id, title: (question || "Photo question").slice(0, 80), unread: false, updated_at: new Date().toISOString() };
             return [{ ...mine, updated_at: new Date().toISOString() }, ...rest];
           });
           if (!threadId) window.history.replaceState(null, "", `/assistant?t=${id}`);
@@ -200,13 +238,14 @@ export function AssistantChat(props: {
       setBusy(false);
       setStatus("");
     },
-    [busy, threadId],
+    [busy, threadId, pics, uploading],
   );
 
   const newChat = () => {
     setThreadId(null);
     setMessages([]);
     setError("");
+    setPics([]);
     setShowHistory(false);
     window.history.replaceState(null, "", "/assistant");
     setTimeout(() => box.current?.focus(), 50);
@@ -306,6 +345,7 @@ export function AssistantChat(props: {
               <MessageView
                 key={m.id}
                 m={m}
+                threadId={threadId}
                 sentStatus={sent[String(m.id)]}
                 onSent={(id) => setSent((s) => ({ ...s, [String(id)]: "open" }))}
                 onRated={(id, r) => setMessages((ms) => ms.map((x) => (x.id === id ? { ...x, rating: r } : x)))}
@@ -332,13 +372,42 @@ export function AssistantChat(props: {
             ask(text);
           }}
         >
+          {pics.length || uploading ? (
+            <div className="ai-pics">
+              {pics.map((p, i) => (
+                <div key={p.path} className="photo-thumb">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.url} alt={`Photo ${i + 1}`} />
+                  <button type="button" aria-label="Remove photo" onClick={() => setPics((ps) => ps.filter((x) => x.path !== p.path))}>
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+              {uploading ? (
+                <div className="photo-thumb wait" aria-label="Adding photo">
+                  <LoaderCircle size={18} className="spin" />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="ai-compose-box">
+            <button
+              type="button"
+              className="ai-cam"
+              onClick={() => picker.current?.click()}
+              disabled={!props.configured || busy || uploading || pics.length >= MAX_PHOTOS}
+              aria-label="Add photos"
+              title="Add photos (camera or library)"
+            >
+              <Camera size={19} />
+            </button>
+            <input ref={picker} type="file" accept="image/*" multiple hidden onChange={(e) => addPhotos(e.target.files)} />
             <textarea
               ref={box}
               value={text}
               rows={1}
               maxLength={4000}
-              placeholder={props.configured ? "Ask AMBIT a question…" : "Ask AMBIT isn't connected yet"}
+              placeholder={!props.configured ? "Ask AMBIT isn't connected yet" : pics.length ? "What should Ask AMBIT look at? (optional)" : "Ask AMBIT a question…"}
               disabled={!props.configured}
               onChange={(e) => {
                 setText(e.target.value);
@@ -352,12 +421,12 @@ export function AssistantChat(props: {
               }}
               aria-label="Your question"
             />
-            <button type="submit" className="ai-send" disabled={!text.trim() || busy || !props.configured} aria-label="Send">
+            <button type="submit" className="ai-send" disabled={(!text.trim() && !pics.length) || busy || uploading || !props.configured} aria-label="Send">
               {busy ? <LoaderCircle size={18} className="spin" /> : <ArrowUp size={19} strokeWidth={2.4} />}
             </button>
           </div>
           <p className="ai-fine">
-            Uses only AMBIT-approved sources. Codes vary by location: confirm with your building department.
+            Uses only AMBIT-approved sources. Tap the camera to show Ask AMBIT a foam problem. Codes vary by location: confirm with your building department.
             {left != null && left <= 10 ? ` ${Math.max(left, 0)} question${left === 1 ? "" : "s"} left today.` : ""}
           </p>
         </form>
@@ -369,11 +438,13 @@ export function AssistantChat(props: {
 
 function MessageView({
   m,
+  threadId,
   sentStatus,
   onSent,
   onRated,
 }: {
   m: ChatMessage;
+  threadId: string | null;
   sentStatus?: string;
   onSent: (id: number | string) => void;
   onRated: (id: number | string, r: number | null) => void;
@@ -383,15 +454,40 @@ function MessageView({
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [flash, setFlash] = useState<number | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startErr, setStartErr] = useState("");
+  const router = useRouter();
   const saved = typeof m.id === "number";
 
   if (m.role === "user") {
     return (
       <div className="ai-msg user">
-        <div className="ai-bubble">{m.body}</div>
+        {m.images?.length ? (
+          <div className="ai-msg-pics">
+            {m.images.map((u, i) => (
+              <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="photo-thumb">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={u} alt={`Photo ${i + 1}`} />
+              </a>
+            ))}
+          </div>
+        ) : null}
+        {m.body ? <div className="ai-bubble">{m.body}</div> : null}
       </div>
     );
   }
+
+  const report = async () => {
+    if (!threadId || starting) return;
+    setStarting(true);
+    setStartErr("");
+    const r = await startComplaint(threadId);
+    if (r.id) router.push(`/complaints/${r.id}`);
+    else {
+      setStartErr(r.error ?? "Couldn't start the report.");
+      setStarting(false);
+    }
+  };
 
   if (m.role === "expert") {
     return (
@@ -470,6 +566,15 @@ function MessageView({
                 <button type="button" className="btn sm" onClick={toExpert} disabled={sending}>
                   {sending ? <LoaderCircle size={15} className="spin" /> : <Send size={15} />} Send to AMBIT&apos;s expert
                 </button>
+              </div>
+            ) : null}
+            {m.complaint && threadId ? (
+              <div className="ai-nosrc ai-ccr">
+                <span>Want AMBIT to look into this? Ask AMBIT can start a complaint report with these photos and details already filled in. You check it, then submit.</span>
+                <button type="button" className="btn sm dark" onClick={report} disabled={starting}>
+                  {starting ? <LoaderCircle size={15} className="spin" /> : <ClipboardList size={15} />} {starting ? "Filling it in…" : "Start a complaint report"}
+                </button>
+                {startErr ? <span className="small" style={{ color: "var(--red)" }}>{startErr}</span> : null}
               </div>
             ) : null}
             {sentStatus ? (

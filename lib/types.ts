@@ -79,6 +79,7 @@ export type Product = {
 
 export type Order = {
   id: string;
+  tax_note?: string | null;
   order_no: number;
   placed_by: string | null;
   company_id: string | null;

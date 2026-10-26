@@ -105,7 +105,8 @@ export async function creditDecision(form: FormData) {
   const id = String(form.get("id") ?? "");
   const approve = String(form.get("decision") ?? "") === "approve";
   const note = String(form.get("note") ?? "").trim();
-  const { error } = await s.supabase.rpc("order_credit_decision", { p_order: id, p_approve: approve, p_note: note || null });
+  const chargeTax = form.get("charge_tax") === "on";
+  const { error } = await s.supabase.rpc("order_credit_decision", { p_order: id, p_approve: approve, p_note: note || null, p_charge_tax: chargeTax });
   if (error) back(id, "err", error.message);
   await sendDeskNotice(s.supabase, id, approve ? "ready_to_schedule" : "credit_hold");
   back(id, "msg", approve ? "Released. The order desk can schedule it now." : "Put on credit hold. The rep and the order desk were told.");

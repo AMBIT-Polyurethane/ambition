@@ -132,6 +132,53 @@ Settings, and foam-industry sites can't be added there.
   text can't be used. How the app works for the assistant: `lib/assistant/app-guide.ts` (each person only gets the
   sections they can use; update it when screens change).
 
+### AI order intake (staff)
+
+Order → "Got the order in a text, email or note?" (or the "Paste an order" Home tile, `/order/intake`). Paste a
+texted or emailed order, or snap / pick photos of a handwritten one (up to 4), then "Read the order". Claude
+(`lib/intake/read.ts`, forced `record_order` tool) matches each line to AMBIT's catalog and guesses the customer
+(`matchCustomers`), location, delivery, PO and date. The draft (`order_drafts`) shows each line as Sure / Check /
+Not matched with a product picker; "Open in Order to finish" loads it into the normal order review (`/order?draft=`),
+where it's sent like any order (customer approval still applies). Photos are made smaller on the phone and saved in
+the private `photos` bucket under the person's own folder.
+
+### Photos in Ask AMBIT and complaint reports
+
+The camera button in Ask AMBIT adds up to 4 photos to a question (`photos/<user>/ask/`). Claude sees them next to
+AMBIT's TSBs; when it looks like a product problem the answer ends with `[[COMPLAINT]]` (stripped) and shows "Start a
+complaint report". That calls `startComplaint`, which fills the report from the conversation
+(`lib/complaints-ai.ts`, forced `fill_report` tool; only what was said) and attaches the photos.
+
+Complaint reports (`/complaints`, `complaint_reports`): who/where, product and lots, conditions, symptoms,
+description, Ask AMBIT's notes, photos. "Submit to AMBIT" numbers it (CCR-2026-005 onward; 001–004 were filed before
+the app, `complaint_submit`) and emails `ADMIN_NOTIFY_EMAIL`. The complaints team (the "Customer complaints" box) and
+admins see all reports, set Reviewing / Closed and write AMBIT's review; others see their own. Print / save PDF:
+`/complaints/<id>/report`.
+
+### Smart reorder and customers due
+
+`reorder_suggestions(company)` works out each product's usual quantity and days between orders (2+ orders).
+Contractors get a Home card when something is due within a week: "You usually order 4 drums of AMBI-SEAL 5.0 Resin
+every 3 weeks. Reorder for Tuesday?" → `/order?smart=1` opens the review with those items and the date (at least 2
+working days out). "Everything I usually order" is `/order?smart=all`. Staff with ordering get "Due to order"
+(`/orders/due`, `customers_due`): customers with 3+ orders who are well past their usual rhythm (more than 1.25× and
+5+ days), with a call button and "Start order" (their usual items).
+
+### Sales-tax exemption certificates
+
+`companies.tax_exempt` plus `tax_certificates` (file in the private `tax-certs` bucket). State per customer
+(`company_tax_state`): Not tax-exempt, Certificate current, Expires soon (≤ 60 days), Expired, No certificate on file,
+Waiting to verify. Accounting (the "Credit check" box) and admins: `/tax` and `/tax/<company>` (mark exempt, add and
+verify certificates; their own uploads are verified at once). Contractors: Profile → Sales-tax exemption (upload goes
+to Accounting to verify; `ACCOUNTING_EMAIL` is emailed). Home warns contractors at 60 and 30 days and Accounting when
+any need attention. **Orders:** for a customer marked tax-exempt whose certificate is expired, missing or unverified,
+`order_credit_decision` refuses to release unless Accounting ticks "Charge sales tax on this order instead" (saved in
+`orders.tax_note` and shown on the order). **Reminder emails:** daily Vercel cron `/api/tax/reminders` (13:35 UTC)
+sends each certificate's 60-day, 30-day and expired reminder once, Accounting copied; nothing is sent until app email
+is set up (without customer email it goes to Accounting only).
+
+Needs `supabase/migrations/0021_intake_photos_reorder_tax.sql`.
+
 ### Live inventory (Oklahoma City first)
 
 Each location keeps its stock in its Excel workbook in OneDrive / SharePoint (tabs COUNT SHEET and PENDING ORDERS).

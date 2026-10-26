@@ -16,14 +16,17 @@ export async function POST(request: Request) {
   if (!s?.profile || s.profile.status !== "active") return json(401, { error: "Sign in to use Ask AMBIT." });
   const { supabase, profile } = s;
 
-  let input: { thread?: unknown; text?: unknown };
+  let input: { thread?: unknown; text?: unknown; images?: unknown };
   try {
     input = await request.json();
   } catch {
     return json(400, { error: "Bad request." });
   }
   const question = String(input.text ?? "").trim().slice(0, 4000);
-  if (!question) return json(400, { error: "Type a question first." });
+  const photos = (Array.isArray(input.images) ? input.images : [])
+    .filter((p): p is string => typeof p === "string" && p.startsWith(`${profile.id}/`) && !p.includes(".."))
+    .slice(0, 4);
+  if (!question && !photos.length) return json(400, { error: "Type a question first." });
 
   const settings = await loadAiSettings(supabase);
   if (!settings) return json(503, { error: "Ask AMBIT isn't set up yet (an admin needs to run supabase/migrations/0020_assistant.sql)." });
@@ -37,7 +40,7 @@ export async function POST(request: Request) {
     const { data: t } = await supabase.from("ai_threads").select("id").eq("id", threadId).eq("user_id", profile.id).maybeSingle();
     if (!t) threadId = null;
     else {
-      const { data: rows } = await supabase.from("ai_messages").select("role, body, author_name").eq("thread_id", threadId).order("id");
+      const { data: rows } = await supabase.from("ai_messages").select("role, body, author_name, images").eq("thread_id", threadId).order("id");
       history = (rows ?? []) as HistoryRow[];
     }
   }
@@ -49,12 +52,12 @@ export async function POST(request: Request) {
   }
 
   if (!threadId) {
-    const title = question.replace(/\s+/g, " ").slice(0, 80);
+    const title = (question || "Photo question").replace(/\s+/g, " ").slice(0, 80);
     const { data: t, error } = await supabase.from("ai_threads").insert({ user_id: profile.id, title }).select("id").single();
     if (error || !t) return json(500, { error: "Couldn't start the conversation." });
     threadId = t.id as string;
   }
-  await supabase.from("ai_messages").insert({ thread_id: threadId, user_id: profile.id, role: "user", body: question });
+  await supabase.from("ai_messages").insert({ thread_id: threadId, user_id: profile.id, role: "user", body: question, images: photos.length ? photos : null });
 
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
       };
       emit({ t: "thread", id: threadId, left });
       try {
-        const a = await runAnswer({ supabase, profile, settings, history, question, emit });
+        const a = await runAnswer({ supabase, profile, settings, history, question, photos, emit });
         const { data: saved } = await supabase
           .from("ai_messages")
           .insert({
@@ -76,6 +79,7 @@ export async function POST(request: Request) {
             body: a.body,
             sources: a.sources,
             no_source: a.noSource,
+            parts: a.complaint ? { complaint: true } : null,
             model: a.model,
             input_tokens: a.inputTokens,
             output_tokens: a.outputTokens,
@@ -90,7 +94,7 @@ export async function POST(request: Request) {
         ]);
         emit({
           t: "done",
-          message: { id: saved?.id ?? null, role: "assistant", body: a.body, sources: a.sources, no_source: a.noSource, created_at: saved?.created_at ?? new Date().toISOString() },
+          message: { id: saved?.id ?? null, role: "assistant", body: a.body, sources: a.sources, no_source: a.noSource, complaint: a.complaint, created_at: saved?.created_at ?? new Date().toISOString() },
         });
       } catch (e) {
         console.error("Ask AMBIT failed", (e as { cause?: unknown })?.cause ?? e);

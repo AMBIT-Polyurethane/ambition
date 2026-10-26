@@ -36,14 +36,23 @@ export default async function AssistantPage({ searchParams }: { searchParams: Pr
   const [{ data: threadRows }, msgRes, qRes, { data: usage }] = await Promise.all([
     supabase.from("ai_threads").select("id, title, unread, updated_at").eq("user_id", profile.id).order("updated_at", { ascending: false }).limit(50),
     threadId
-      ? supabase.from("ai_messages").select("id, role, body, sources, no_source, rating, author_name, created_at").eq("thread_id", threadId).order("id")
-      : Promise.resolve({ data: [] as ChatMessage[] }),
+      ? supabase.from("ai_messages").select("id, role, body, sources, no_source, rating, author_name, created_at, images, parts").eq("thread_id", threadId).order("id")
+      : Promise.resolve({ data: [] }),
     threadId ? supabase.from("ai_questions").select("message_id, status").eq("thread_id", threadId) : Promise.resolve({ data: [] }),
     supabase.from("ai_usage").select("questions").eq("user_id", profile.id).eq("day", today).maybeSingle(),
   ]);
   const threads = (threadRows ?? []) as ChatThread[];
   const known = threadId && threads.some((t) => t.id === threadId) ? threadId : null;
-  const messages = known ? ((msgRes.data ?? []) as ChatMessage[]) : [];
+  type Row = Omit<ChatMessage, "images" | "complaint"> & { images: string[] | null; parts: { complaint?: boolean } | null };
+  const rows = known ? ((msgRes.data ?? []) as Row[]) : [];
+  // Photo links last an hour; reopening the conversation makes fresh ones.
+  const paths = rows.flatMap((r) => r.images ?? []);
+  const signed = paths.length ? (await supabase.storage.from("photos").createSignedUrls(paths, 60 * 60)).data ?? [] : [];
+  const messages: ChatMessage[] = rows.map(({ images, parts, ...r }) => ({
+    ...r,
+    images: images?.map((p) => signed.find((x) => x.path === p)?.signedUrl).filter((u): u is string => !!u) ?? null,
+    complaint: !!parts?.complaint,
+  }));
   const sent: Record<string, string> = {};
   for (const q of (qRes.data ?? []) as { message_id: number | null; status: string }[]) if (q.message_id) sent[String(q.message_id)] = q.status;
   const limit = staff ? settings.daily_limit_staff : settings.daily_limit_customer;

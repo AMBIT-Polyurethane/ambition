@@ -19,15 +19,28 @@ export async function homeApps(
   const links = ((data ?? []) as LinkRow[]).filter((l) => !emp || !l.perm || can(profile, l.perm as Perm));
   const ai = await assistantAccess(supabase, profile);
   const ask: HomeApp | false = ai.on && { key: "ask", label: "Ask AMBIT", href: "/assistant", icon: "spark", color: APP_COLOR.fuchsia, badge: ai.unread || undefined };
+  // Complaint reports: the AMBIT team always; anyone else once they've started one (from Ask AMBIT photos).
+  const ccrTeam = emp && (can(profile, "complaints") || profile.role === "admin");
+  const ccrMine = ccrTeam
+    ? 0
+    : await Promise.resolve(supabase.from("complaint_reports").select("id", { count: "exact", head: true }).eq("created_by", profile.id)).then(
+        (r) => r.count ?? 0,
+        () => 0,
+      );
+  const complaints: HomeApp | false = (ccrTeam || ccrMine > 0) && { key: "complaints", label: ccrTeam ? "Complaints" : "My complaints", href: "/complaints", icon: "complaint", color: APP_COLOR.rose };
 
   const apps: (HomeApp | false)[] = emp
     ? [
         ask,
         can(profile, "ordering") && { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
+        can(profile, "ordering") && { key: "intake", label: "Paste an order", href: "/order/intake", icon: "intake", color: APP_COLOR.fuchsia },
+        can(profile, "ordering") && { key: "due", label: "Due to order", href: "/orders/due", icon: "due", color: APP_COLOR.steel },
         seesOrders(profile) && { key: "orders", label: "Orders", href: "/orders", icon: "clipboard", color: APP_COLOR.slate },
         (can(profile, "order_desk") || can(profile, "credit_check")) && { key: "desk", label: "Order desk", href: "/orders/desk", icon: "truck", color: APP_COLOR.orange },
         can(profile, "takeoff") && { key: "takeoff", label: "Takeoff", href: "/takeoff", icon: "ruler", color: APP_COLOR.sky },
         can(profile, "inventory") && { key: "inventory", label: "Inventory", href: "/inventory", icon: "boxes", color: APP_COLOR.cyan },
+        (can(profile, "credit_check") || profile.role === "admin") && { key: "tax", label: "Tax certificates", href: "/tax", icon: "tax", color: APP_COLOR.emerald },
+        complaints,
         can(profile, "prf_approve") && { key: "prices", label: "Price approvals", href: "/price-requests/approvals", icon: "tag", color: APP_COLOR.amber },
         can(profile, "price_requests") && { key: "prf", label: "My price requests", href: "/price-requests", icon: "tag", color: "#CA8A04" },
         { key: "expenses", label: "Expenses", href: "/expenses", icon: "receipt", color: APP_COLOR.emerald },
@@ -43,6 +56,7 @@ export async function homeApps(
         { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
         ask,
         { key: "orders", label: "My orders", href: "/orders", icon: "clipboard", color: APP_COLOR.slate },
+        complaints,
         { key: "tsb", label: "Bulletins", href: "/docs?type=tsb", icon: "bulletin", color: APP_COLOR.blue },
         { key: "docs", label: "Product docs", href: "/docs", icon: "docs", color: APP_COLOR.teal },
         { key: "academy", label: "Academy", href: "/academy", icon: "academy", color: APP_COLOR.violet },
