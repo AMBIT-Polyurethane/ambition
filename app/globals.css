@@ -800,6 +800,31 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
   .promo .pt { font-size: 23px; }
   .promo .txt { padding: 22px 0 22px 24px; }
 }
+/* Computers: slides keep their phone shape, two side by side (three on wide screens), with arrows. */
+.promo-nav { display: none; }
+@media (min-width: 1024px) {
+  .promo-wrap { position: relative; }
+  .promo-track { margin: 0; padding: 0; scroll-padding: 0; gap: 16px; }
+  .promo-cell { flex-basis: calc((100% - 16px) / 2); }
+  .promo-nav {
+    display: grid; place-items: center; position: absolute; z-index: 4; top: 106px; transform: translateY(-50%);
+    width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--s1); color: var(--text);
+    box-shadow: var(--shadow); cursor: pointer; opacity: 0; transition: opacity 0.2s ease;
+  }
+  .promo-nav.prev { left: -20px; }
+  .promo-nav.next { right: -20px; }
+  .promo-wrap:hover .promo-nav, .promo-nav:focus-visible { opacity: 1; }
+  .promo-nav:hover { background: var(--s2); }
+}
+@media (min-width: 1300px) {
+  .promo-cell { flex-basis: calc((100% - 32px) / 3); }
+}
+/* A slide that's phone-sized on a computer keeps the phone's text size, so titles fit. */
+.promo-cell { container-type: inline-size; }
+@container (max-width: 400px) {
+  .promo .pt { font-size: 20px; }
+  .promo .txt { padding: 18px 0 18px 20px; }
+}
 .price .sale-tag { display: inline-block; vertical-align: 1px; margin-right: 6px; font-size: 10px; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; background: var(--red); border-radius: 5px; padding: 3px 6px; }
 .price .was { margin-left: 6px; font-size: 0.86em; font-weight: 600; color: var(--text3); }
 .iconbtn.sm { width: 34px; height: 34px; }

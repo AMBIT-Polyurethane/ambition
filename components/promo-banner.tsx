@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import { money } from "@/lib/format";
 import { themeOf, type PromoSlide } from "@/lib/promo-themes";
 
 // The banner at the top of Home. Slides move on their own every few seconds and stop
-// for a while whenever someone swipes, taps or points at them.
+// for a while whenever someone swipes, taps or points at them. Phones show one slide at a time;
+// computers show two or three side by side (globals.css, "Home banner") with arrows to move along.
 
 const EVERY_MS = 5000;
 const HOLD_MS = 9000;
@@ -111,8 +112,25 @@ export function PromoBanner({ slides }: { slides: PromoSlide[] }) {
   const holdUntil = useRef(0);
   const hovering = useRef(false);
   const [at, setAt] = useState(0);
+  // How many slides fit side by side (1 on a phone, 2 or 3 on a computer), and so the last
+  // position the row can scroll to.
+  const [perView, setPerView] = useState(1);
+  const last = Math.max(0, slides.length - perView);
+  const lastRef = useRef(last);
+  lastRef.current = last;
 
   const kids = () => Array.from(track.current?.children ?? []) as HTMLElement[];
+  const nearest = () => {
+    const el = track.current;
+    const k = kids();
+    if (!el || !k.length) return 0;
+    const x = el.scrollLeft;
+    let best = 0;
+    k.forEach((c, i) => {
+      if (Math.abs(c.offsetLeft - k[0].offsetLeft - x) < Math.abs(k[best].offsetLeft - k[0].offsetLeft - x)) best = i;
+    });
+    return Math.min(best, lastRef.current);
+  };
   const go = useCallback((i: number, smooth = true) => {
     const el = track.current;
     const k = kids();
@@ -124,6 +142,23 @@ export function PromoBanner({ slides }: { slides: PromoSlide[] }) {
     holdUntil.current = Date.now() + HOLD_MS;
   };
 
+  // How many fit, measured again whenever the window changes size.
+  useEffect(() => {
+    const el = track.current;
+    if (!el) return;
+    const measure = () => {
+      const first = el.firstElementChild as HTMLElement | null;
+      if (!first) return;
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+      const w = first.getBoundingClientRect().width;
+      setPerView(w > 0 ? Math.max(1, Math.round((el.clientWidth + gap) / (w + gap))) : 1);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [slides.length]);
+
   // Which slide is showing (for the dots).
   useEffect(() => {
     const el = track.current;
@@ -131,42 +166,34 @@ export function PromoBanner({ slides }: { slides: PromoSlide[] }) {
     let raf = 0;
     const onScroll = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const k = kids();
-        if (!k.length) return;
-        const x = el.scrollLeft;
-        let best = 0;
-        k.forEach((c, i) => {
-          if (Math.abs(c.offsetLeft - k[0].offsetLeft - x) < Math.abs(k[best].offsetLeft - k[0].offsetLeft - x)) best = i;
-        });
-        setAt(best);
-      });
+      raf = requestAnimationFrame(() => setAt(nearest()));
     };
+    onScroll();
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       el.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [perView]);
 
-  // Move to the next slide every few seconds (not for people who turned off motion on their phone).
+  // Move along one slide every few seconds, back to the start after the last one (not for people
+  // who turned off motion on their phone, and not when every slide already fits on screen).
   useEffect(() => {
-    if (slides.length < 2) return;
+    if (last < 1) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => {
       if (document.hidden || hovering.current || Date.now() < holdUntil.current) return;
-      const el = track.current;
-      if (!el) return;
-      const k = kids();
-      const x = el.scrollLeft;
-      let cur = 0;
-      k.forEach((c, i) => {
-        if (Math.abs(c.offsetLeft - k[0].offsetLeft - x) < Math.abs(k[cur].offsetLeft - k[0].offsetLeft - x)) cur = i;
-      });
-      go((cur + 1) % k.length);
+      const cur = nearest();
+      go(cur >= lastRef.current ? 0 : cur + 1);
     }, EVERY_MS);
     return () => window.clearInterval(timer);
-  }, [slides.length, go]);
+  }, [last, go]);
+
+  const step = (d: number) => {
+    hold();
+    const cur = nearest();
+    go(d > 0 ? (cur >= last ? 0 : cur + 1) : cur <= 0 ? last : cur - 1);
+  };
 
   if (!slides.length) return null;
   return (
@@ -190,9 +217,19 @@ export function PromoBanner({ slides }: { slides: PromoSlide[] }) {
           </div>
         ))}
       </div>
-      {slides.length > 1 ? (
+      {last > 0 ? (
+        <>
+          <button type="button" className="promo-nav prev" aria-label="Previous" onClick={() => step(-1)}>
+            <ChevronLeft size={20} strokeWidth={2.4} />
+          </button>
+          <button type="button" className="promo-nav next" aria-label="Next" onClick={() => step(1)}>
+            <ChevronRight size={20} strokeWidth={2.4} />
+          </button>
+        </>
+      ) : null}
+      {last > 0 ? (
         <div className="promo-dots" role="tablist" aria-label="Choose a slide">
-          {slides.map((s, i) => (
+          {slides.slice(0, last + 1).map((s, i) => (
             <button
               key={s.id}
               type="button"
