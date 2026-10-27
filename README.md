@@ -306,6 +306,12 @@ sheet line Cancelled. **Delete:** admins only, cancelled orders only (`order_del
 ISO and every resin are drums (0022); the order page, the PDF, the approval page and the emails list each resin with
 the ISO drums that go with it, a dark line between those groups (`lib/order-doc/loads.ts`). Needs
 `supabase/migrations/0022_sales_order_cancel_drums.sql`.
+
+Dashboard at the top of the Order Desk (`components/desk-dashboard.tsx`, data from `order_desk_stats(p_days, p_branch)` in
+`0024_order_desk_dashboard.sql`, one call): filters for time range and location (they also scope the order lists),
+tiles, open orders by status (donut), orders placed per day/week, open orders by location, typical time per step
+(median) and the orders waiting longest. Colors per status are fixed (validated for both themes); every chart has a
+"Show the numbers" table and hover/focus tooltips.
 ### Price request approvals
 
 Admins: Home → Price approvals. Waiting requests first; each opens as a clean form with requested vs approved

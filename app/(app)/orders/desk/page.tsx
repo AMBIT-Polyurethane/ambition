@@ -5,6 +5,8 @@ import { can } from "@/lib/access";
 import { dateShort, money, orderNo } from "@/lib/format";
 import { STAGES } from "@/lib/order-desk";
 import { Empty, TopBar } from "@/components/ui";
+import { DeskDashboard } from "@/components/desk-dashboard";
+import { RANGES, type DeskStats, type RangeKey } from "@/lib/desk-stats";
 import type { Branch, Order, OrderStage } from "@/lib/types";
 
 export const metadata = { title: "Order desk" };
@@ -30,10 +32,24 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
   const credit = can(profile, "credit_check");
   const tabs = TABS.filter((t) => t.who === "both" || (t.who === "desk" ? desk : credit));
 
-  const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+  // Filters at the top scope the dashboard and the lists below: time range and location.
+  const range = (RANGES.find((r) => r.key === sp.r)?.key ?? "30") as RangeKey;
+  const { data: branchRows } = await supabase.from("branches").select("id, name, state, sort").order("sort");
+  const branchList = ((branchRows ?? []) as (Branch & { sort: number })[]);
+  const branchId = sp.b === "dropship" || branchList.some((b) => b.id === sp.b) ? sp.b! : null;
+  const days = RANGES.find((r) => r.key === range)!.days;
+  const { data: statsData, error: statsError } = await supabase.rpc("order_desk_stats", { p_days: days, p_branch: branchId });
+  const stats = statsError ? null : (statsData as DeskStats);
+  const since = stats?.since ?? new Date(Date.now() - 30 * 86400_000).toISOString();
+  // A Supabase query narrowed to the chosen location.
+  const where = <T,>(q: T): T => {
+    const b = q as unknown as { eq: (c: string, v: string) => unknown; is: (c: string, v: null) => unknown };
+    return (branchId === "dropship" ? b.is("branch_id", null) : branchId ? b.eq("branch_id", branchId) : q) as T;
+  };
+
   const counts = await Promise.all(
     tabs.map((t) => {
-      let q = supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", t.stage);
+      let q = where(supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", t.stage));
       if (t.stage === "completed") q = q.gte("completed_at", since);
       return Promise.resolve(q).then((r) => (r.error ? -1 : r.count ?? 0));
     }),
@@ -44,21 +60,40 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
 
   let rows: Order[] = [];
   if (!setupMissing) {
-    let q = supabase.from("orders").select("*").eq("stage", tab.stage).limit(200);
+    let q = where(supabase.from("orders").select("*").eq("stage", tab.stage)).limit(200);
     if (tab.stage === "completed") q = q.gte("completed_at", since).order("completed_at", { ascending: false });
     else if (tab.stage === "scheduled") q = q.order("scheduled_for", { ascending: true });
     else q = q.order("created_at", { ascending: true }); // oldest waiting first
     rows = ((await q).data ?? []) as Order[];
   }
-  const { data: branchRows } = await supabase.from("branches").select("id, name, state");
-  const branches = new Map(((branchRows ?? []) as Branch[]).map((b) => [b.id, b]));
+  const branches = new Map(branchList.map((b) => [b.id, b]));
+  const keep = (t: string) => {
+    const q = new URLSearchParams();
+    if (range !== "30") q.set("r", range);
+    if (branchId) q.set("b", branchId);
+    q.set("tab", t);
+    return `/orders/desk?${q.toString()}`;
+  };
+  const rangeLabel = range === "year" ? "this year" : `last ${range} days`;
 
   return (
-    <main className="shell">
+    <main className="shell wide">
       <TopBar title="Order desk" back="/" />
       <p className="small muted" style={{ margin: 0 }}>
         Order placed → customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date and the customer is emailed.
       </p>
+
+      {stats ? (
+        <DeskDashboard
+          stats={stats}
+          range={range}
+          branch={branchId}
+          tab={sp.tab ?? null}
+          branches={branchList.map((b) => ({ id: b.id, name: b.name }))}
+        />
+      ) : !setupMissing ? (
+        <div className="alert warn small">The dashboard needs database update 0024. Ask an admin to run it in Supabase; the order lists below still work.</div>
+      ) : null}
 
       {setupMissing ? (
         <div className="alert warn">The order desk needs the database update for roles and the order desk (0011). Ask an admin to run it in Supabase.</div>
@@ -66,13 +101,17 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
         <>
           <div className="chips" style={{ flexWrap: "wrap" }}>
             {tabs.map((t, i) => (
-              <Link key={t.stage} href={`/orders/desk?tab=${t.stage}`} className={`chip${tab.stage === t.stage ? " on" : ""}`}>
+              <Link key={t.stage} href={keep(t.stage)} scroll={false} className={`chip${tab.stage === t.stage ? " on" : ""}`}>
                 {STAGES[t.stage].short}
                 {counts[i] > 0 ? ` · ${counts[i]}` : ""}
               </Link>
             ))}
           </div>
-          <div className="eyebrow">{STAGES[tab.stage].label}{tab.stage === "completed" ? " · last 30 days" : ""}</div>
+          <div className="eyebrow" id="queue">
+            {STAGES[tab.stage].label}
+            {tab.stage === "completed" ? ` · ${rangeLabel}` : ""}
+            {branchId ? ` · ${branchId === "dropship" ? "Drop ship" : branches.get(branchId)?.name ?? branchId}` : ""}
+          </div>
 
           {rows.length === 0 ? (
             <Empty icon="clipboard" title="Nothing here right now" />
@@ -89,7 +128,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
                         {o.scheduled_for && (tab.stage === "scheduled" || tab.stage === "completed") ? <span className="pill ok">{dateShort(o.scheduled_for)}</span> : null}
                       </div>
                       <div className="s ellipsis">
-                        {[where, o.ambit_po ? `AMBIT PO ${o.ambit_po}` : null, o.po_number ? `Cust. PO ${o.po_number}` : null].filter(Boolean).join(" · ")}
+                        {[where, o.ambit_po ? `Sales Order # ${o.ambit_po}` : null, o.po_number ? `Cust. PO ${o.po_number}` : null].filter(Boolean).join(" · ")}
                       </div>
                       {tab.stage === "hold" && o.credit_note ? <div className="tiny red ellipsis">Hold: {o.credit_note}</div> : null}
                       <div className="tiny faint">

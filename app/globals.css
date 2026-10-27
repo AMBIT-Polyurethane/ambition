@@ -1480,3 +1480,96 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .avail-toggle.on { border-color: rgba(63, 185, 80, 0.55); background: var(--ok-soft); color: var(--ok-text); }
 .avail-count { min-width: 26px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--s2); color: var(--text2); font-size: 12px; font-weight: 800; display: grid; place-items: center; }
 .avail-toggle.on .avail-count { background: rgba(63, 185, 80, 0.22); color: var(--ok-text); }
+
+/* ---- Order desk dashboard: status colors keep their slot everywhere (validated for both themes) */
+.dash {
+  position: relative; display: flex; flex-direction: column; gap: 12px;
+  --dc1: #3987e5; --dc2: #d95926; --dc3: #199e70; --dc4: #c98500; --dc5: #d55181; --dc6: #008300;
+  --st-warn: #fab219; --st-crit: #d03b3b;
+}
+:root[data-theme="light"] .dash { --dc1: #2a78d6; --dc2: #eb6834; --dc3: #1baf7a; --dc4: #eda100; --dc5: #e87ba4; --dc6: #008300; }
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .dash { --dc1: #2a78d6; --dc2: #eb6834; --dc3: #1baf7a; --dc4: #eda100; --dc5: #e87ba4; --dc6: #008300; }
+}
+.dash-filters { display: flex; flex-direction: column; gap: 8px; }
+.dash-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dash-tile { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); color: inherit; text-decoration: none; min-width: 0; }
+.dash-tile .l { font-size: 12px; font-weight: 700; color: var(--text2); }
+.dash-tile .v { font-size: 28px; font-weight: 800; line-height: 1.15; display: flex; align-items: center; gap: 6px; }
+.dash-tile .s { font-size: 11.5px; color: var(--text3); }
+.dash-tile.big { grid-column: 1 / -1; }
+.dash-tile.big .v { font-size: 48px; line-height: 1.05; }
+.dash-tile.warn .v svg { color: var(--st-warn); flex: none; }
+a.dash-tile:hover { border-color: var(--line-hover); }
+.dash-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.dash-card { background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; min-width: 0; scroll-margin-top: 80px; }
+.dash-card h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.dash-card .sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.dash-empty { margin: 0; font-size: 13px; color: var(--text3); }
+.ddonut-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.ddonut { flex: none; overflow: visible; }
+.ddonut a { outline: none; }
+.ddonut a circle { transition: opacity 0.15s; }
+.ddonut a:hover circle, .ddonut a:focus-visible circle { opacity: 0.78; }
+.dn-v { font-size: 30px; font-weight: 800; fill: var(--text); font-family: var(--font); }
+.dn-l { font-size: 12px; fill: var(--text3); font-family: var(--font); }
+.dash-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 190px; }
+.dash-legend a, .dash-legend.inline li { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 13px; }
+.dash-legend a:hover, .dash-legend a.on { background: var(--s2); }
+.dash-legend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.dash-legend .nm { flex: 1; color: var(--text2); }
+.dash-legend b { font-variant-numeric: tabular-nums; }
+.dash-legend .pc { width: 38px; text-align: right; color: var(--text3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.dash-legend.inline { flex: none; flex-direction: row; flex-wrap: wrap; gap: 4px 14px; }
+.dash-nums { margin-top: auto; }
+.dash-legend.inline li { padding: 0; font-size: 12px; }
+.dcols { position: relative; height: 200px; }
+.dcols-grid { position: absolute; left: 0; right: 0; top: 6px; bottom: 22px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.dcols-grid .gl { border-top: 1px solid var(--line); position: relative; height: 0; }
+.dcols-grid .gl span { position: absolute; left: 0; top: -15px; font-size: 10.5px; color: var(--text3); font-variant-numeric: tabular-nums; }
+.dcols-plot { position: absolute; left: 26px; right: 0; top: 6px; bottom: 0; display: flex; align-items: stretch; gap: 2px; }
+.dcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; padding-bottom: 22px; min-width: 0; outline: none; border-radius: 6px; }
+.dcol .bar { width: min(24px, 82%); background: var(--dc1); border-radius: 4px 4px 0 0; }
+.dcol:hover, .dcol:focus-visible { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.dcol .xl { position: absolute; bottom: 3px; font-size: 10.5px; color: var(--text3); white-space: nowrap; }
+.dhbars { display: flex; flex-direction: column; gap: 10px; }
+.dhbar { display: grid; grid-template-columns: 104px minmax(0, 1fr); align-items: center; gap: 10px; }
+.dhbars.steps .dhbar { grid-template-columns: 124px minmax(0, 1fr); }
+.dhbar .hl { font-size: 12.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dhbar .track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dhbar .fill { display: flex; gap: 2px; height: 18px; min-width: 6px; }
+.dhbar .dseg { height: 100%; min-width: 4px; flex-basis: 0; outline: none; }
+.dhbar .dseg:last-child { border-radius: 0 4px 4px 0; }
+.dhbar .dseg:hover, .dhbar .dseg:focus-visible, .dhbar .fill.one:hover, .dhbar .fill.one:focus-visible { filter: brightness(1.18); }
+.dhbar .fill.one { background: var(--dc1); border-radius: 0 4px 4px 0; outline: none; }
+.dhbar .tot { font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dhbar .none { font-size: 12px; color: var(--text3); }
+.dwait ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; }
+.dwait li a { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who age" "what age"; gap: 1px 10px; padding: 8px 6px; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+.dwait li:first-child a { border-top: 0; }
+.dwait li a:hover { background: var(--s2); border-radius: 8px; }
+.dwait .who { grid-area: who; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dwait .who b { margin-right: 4px; }
+.dwait .what { grid-area: what; font-size: 12px; color: var(--text3); display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dwait .what i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.dwait .age { grid-area: age; align-self: center; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 750; padding: 3px 9px; border-radius: 999px; background: var(--s2); color: var(--text2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dwait .age.warn, .dwait .age.crit { color: var(--text); }
+.dwait .age.warn { box-shadow: inset 0 0 0 1.5px var(--st-warn); }
+.dwait .age.warn svg { color: var(--st-warn); }
+.dwait .age.crit { box-shadow: inset 0 0 0 1.5px var(--st-crit); }
+.dwait .age.crit svg { color: var(--st-crit); }
+.dash-nums summary { font-size: 12px; color: var(--text3); cursor: pointer; width: fit-content; }
+.dash-nums .tbl-wrap { overflow-x: auto; margin-top: 8px; }
+.dash-nums table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.dash-nums th { text-align: left; color: var(--text3); font-weight: 700; padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.dash-nums td { padding: 4px 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.dash-tip { position: absolute; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none; z-index: 20; background: var(--s3); border: 1px solid var(--line-hover); border-radius: 8px; padding: 6px 10px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 1px; max-width: 240px; }
+.dash-tip b { font-size: 13px; color: var(--text); white-space: nowrap; }
+.dash-tip span { font-size: 11.5px; color: var(--text2); }
+@media (min-width: 900px) {
+  .dash-filters { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+  .dash-filters .chips { flex-wrap: wrap; overflow: visible; }
+  .dash-tiles { grid-template-columns: 1.25fr repeat(4, minmax(0, 1fr)); }
+  .dash-tile.big { grid-column: auto; }
+  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
