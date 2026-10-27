@@ -76,6 +76,18 @@ export async function saveUser(form: FormData) {
     if (accessError && !/admin_set_access|could not find the function|schema cache/i.test(accessError.message)) {
       redirect(back("error=" + encodeURIComponent(accessError.message)));
     }
+    // Monthly sales goal for their Home screen (blank = none).
+    if (form.has("monthly_goal")) {
+      const raw = s(form, "monthly_goal").replace(/[$,\s]/g, "");
+      const goal = raw === "" ? null : Number(raw);
+      if (goal !== null && (!Number.isFinite(goal) || goal < 0)) redirect(back("error=" + encodeURIComponent("The monthly sales goal should be a dollar amount, like 50000.")));
+      if (goal !== (before.monthly_goal == null ? null : Number(before.monthly_goal))) {
+        const { error: goalError } = await supabase.rpc("admin_set_goal", { p_user: userId, p_goal: goal });
+        if (goalError && !/admin_set_goal|could not find the function|schema cache/i.test(goalError.message)) {
+          redirect(back("error=" + encodeURIComponent(goalError.message)));
+        }
+      }
+    }
   }
 
   if (before.status !== "active" && status === "active") {

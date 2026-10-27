@@ -9,7 +9,7 @@ import { readCart, writeCart, readOrderBranch, writeOrderBranch, type Cart } fro
 import { money } from "@/lib/format";
 import { customerDetails, placeOrder } from "@/app/(app)/order/actions";
 import { CustomerPicker } from "@/components/customer-picker";
-import { addressOnFile, type OrderCustomer } from "@/lib/customers";
+import { addressOnFile, unpackCustomer, type OrderCustomer, type PackedCustomer } from "@/lib/customers";
 import { bagsFor, parseSqft, sqftText } from "@/lib/sqft";
 import type { Branch, Category } from "@/lib/types";
 
@@ -53,7 +53,8 @@ type Props = {
   products: CatalogProduct[];
   categories: Category[];
   branches: Branch[];
-  companies: OrderCustomer[] | null;
+  /** Staff: every customer, packed small (see lib/customers). */
+  companies: PackedCustomer[] | null;
   isEmployee: boolean;
   /** Staff orders go to the customer to approve before AMBIT orders gets them. */
   approvals: boolean;
@@ -188,7 +189,7 @@ export function OrderBuilder(props: Props) {
   const [notes, setNotes] = useState("");
   const [companyId, setCompanyId] = useState(props.draft?.companyId ?? props.reorderCompany ?? "");
   const [draftId] = useState(props.draft?.source === "intake" ? props.draft.id : null);
-  const [customerList, setCustomerList] = useState<OrderCustomer[]>(companies ?? []);
+  const [customerList, setCustomerList] = useState<OrderCustomer[]>(() => (companies ?? []).map(unpackCustomer));
   const [autoAddress, setAutoAddress] = useState("");
   const [approvalEmail, setApprovalEmail] = useState("");
   const [autoEmail, setAutoEmail] = useState("");

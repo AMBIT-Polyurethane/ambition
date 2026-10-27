@@ -40,3 +40,32 @@ export function matchCustomers<T extends OrderCustomer>(list: T[], query: string
   });
   return { shown: hits.slice(0, limit), more: Math.max(0, hits.length - limit) };
 }
+
+/** The order screen's customer list, packed small: [id, name, account #, contact, city, state, home branch, new]. */
+export type PackedCustomer = [string, string, string | null, string | null, string | null, string | null, string | null, 0 | 1];
+
+export const packCustomer = (c: Pick<OrderCustomer, "id" | "name" | "account_no" | "contact_name" | "city" | "state" | "default_branch_id" | "needs_qb_setup">): PackedCustomer => [
+  c.id,
+  c.name,
+  c.account_no ?? null,
+  c.contact_name ?? null,
+  c.city ?? null,
+  c.state ?? null,
+  c.default_branch_id ?? null,
+  c.needs_qb_setup ? 1 : 0,
+];
+
+export const unpackCustomer = (r: PackedCustomer): OrderCustomer => ({
+  id: r[0],
+  name: r[1],
+  account_no: r[2],
+  contact_name: r[3],
+  city: r[4],
+  state: r[5],
+  default_branch_id: r[6],
+  needs_qb_setup: r[7] === 1,
+  phone: null,
+  email: null,
+  bill_address: null,
+  ship_address: null,
+});

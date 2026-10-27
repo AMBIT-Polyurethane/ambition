@@ -6,6 +6,7 @@ import { msConnection, msReady } from "@/lib/microsoft";
 import { todayCentral } from "@/lib/sale";
 import { resolveFile, Workbook } from "@/lib/inventory/workbook";
 import { LOTS_TAB, countSheetTotal, lotFormulas, lotRange, newLotsTab, parseLotsSheet, type DbLot, type LotCol, type LotsSheet, type PendingRef } from "@/lib/inventory/lots";
+import { at as at_ } from "@/lib/inventory/sheet";
 import {
   STATUS,
   STOCK_MARK,
@@ -718,12 +719,15 @@ type Lots = {
   skuKeys: Set<string>;
   /** Shipped Out on the sheet right now, per lot id. */
   sheetOut: Map<number, number>;
+  /** Adj and Shipped In on the sheet right now, per lot id (for changes made in the app). */
+  sheetAdj: Map<number, number>;
+  sheetIn: Map<number, number>;
   pendRef: PendingRef;
   /** The tab was added on this run. */
   created: boolean;
 };
 
-type DbLotRow = DbLot & { branch_id: string; on_sheet: boolean; sheet_row: number | null; sheet_pending: number; remaining: number };
+type DbLotRow = DbLot & { branch_id: string; on_sheet: boolean; sheet_row: number | null; sheet_pending: number; remaining: number; add_to_sheet?: boolean; starting: number; label: string | null; notes: string | null };
 
 /** Reads FOAM LOTS into the app (adding the tab first if the branch has lots but no tab yet). */
 async function syncLotsIn(
@@ -743,7 +747,7 @@ async function syncLotsIn(
   const pc = pend.cols;
   const pendRef: PendingRef =
     pc.qty && pc.sku && pc.notes && pc.status ? { tab: pendTab, first: pend.headerRow + 1, last: Math.max(pend.end, pend.headerRow + 1), qty: pc.qty, sku: pc.sku, notes: pc.notes, status: pc.status } : null;
-  const out: Lots = { tab: null, sheet: null, ids: new Map(), products: new Set(), skuKeys: new Set(), sheetOut: new Map(), pendRef, created: false };
+  const out: Lots = { tab: null, sheet: null, ids: new Map(), products: new Set(), skuKeys: new Set(), sheetOut: new Map(), sheetAdj: new Map(), sheetIn: new Map(), pendRef, created: false };
 
   const { data: lotData, error } = await db.from("inventory_lots").select("*").eq("branch_id", branch).order("sort").order("id").range(0, 4999);
   if (error) throw new Error(`Couldn't read foam lots: ${error.message}`);
@@ -784,8 +788,14 @@ async function syncLotsIn(
     }
   }
 
-  const sheet = parseLotsSheet(await wb.used(tab));
+  let lotsGrid = await wb.used(tab);
+  let sheet = parseLotsSheet(lotsGrid);
   if (!sheet) throw new Error(`The ${tab} tab has no header row with SKU, Lot #, Starting Qty and Shipped Out.`);
+  // Lots received in the app (Expected deliveries → Received) get their row on the tab first.
+  if (await addReceivedLots(db, wb, tab, lotsGrid, sheet, dbLots.filter((l) => l.add_to_sheet), prod, pendRef, log)) {
+    lotsGrid = await wb.used(tab);
+    sheet = parseLotsSheet(lotsGrid)!;
+  }
   out.tab = tab;
   out.sheet = sheet;
   const issues: string[] = sheet.dupes.map((d) => `${d} is on ${tab} twice (only the first row counts)`);
@@ -848,6 +858,8 @@ async function syncLotsIn(
     }
     out.ids.set(`${r.key}|${r.lotKey}`, id);
     out.sheetOut.set(id, r.out);
+    out.sheetAdj.set(id, r.adj);
+    out.sheetIn.set(id, r.in);
   }
 
   // ---- lots taken off the sheet
@@ -855,7 +867,7 @@ async function syncLotsIn(
   const pickedFrom = new Map<number, number>();
   for (const p of (openPicks ?? []) as { lot_id: number; qty: number }[]) pickedFrom.set(p.lot_id, (pickedFrom.get(p.lot_id) ?? 0) + Number(p.qty));
   for (const l of dbLots) {
-    if (matched.has(l.id) || !l.on_sheet) continue;
+    if (matched.has(l.id) || !l.on_sheet || l.add_to_sheet) continue;
     await db.from("inventory_lots").update({ on_sheet: false, sheet_row: null, updated_at: new Date().toISOString() }).eq("id", l.id);
     const held = pickedFrom.get(l.id);
     log(
@@ -885,14 +897,97 @@ async function syncLotsIn(
   return out;
 }
 
+/**
+ * Lots received in the app (Expected deliveries → Received): each gets a row on FOAM LOTS inside its product's
+ * block (just above that block's last row, so the group's totals take it in), with its SKU, lot #, dates and
+ * Starting Qty. Only the tab's own columns move down. Gives back how many rows went in.
+ */
+async function addReceivedLots(
+  db: SupabaseClient,
+  wb: Workbook,
+  tab: string,
+  g: Grid,
+  sheet: LotsSheet,
+  fresh: DbLotRow[],
+  prod: Map<string, { id: string; sku: string; name: string; pick_rank: number }>,
+  pendRef: PendingRef,
+  log: (kind: string, message: string, sku?: string | null, before?: number | null, after?: number | null, by?: string) => void,
+): Promise<number> {
+  if (!fresh.length) return 0;
+  const c = sheet.cols;
+  const width = Math.max(...(Object.values(c).filter(Boolean) as number[]));
+  let added = 0;
+  // Bottom of the tab first, so the rows above keep their numbers.
+  const plan = fresh
+    .map((l) => {
+      const key = l.sku.toUpperCase();
+      const same = sheet.rows.filter((r) => r.key === key);
+      const kin = same.length
+        ? same
+        : sheet.rows.filter((r) => key.startsWith(`${r.key}-`) || r.key.startsWith(`${key}-`) || r.key.split("-")[0] === key.split("-")[0]);
+      return { l, at: kin.length ? kin[kin.length - 1].row : null, sameSku: same.length > 0 };
+    })
+    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  for (const { l, at, sameSku } of plan) {
+    if (!at) {
+      log("error", `Lot ${l.lot_no} of ${l.sku} was received in the app but has no group on ${tab}. Add its row there (SKU, Lot #, dates, Starting Qty ${String(r2(Number(l.starting)))}).`, l.sku, null, null, "AMBIT A.I.");
+      await db.from("inventory_lots").update({ add_to_sheet: false, notes: "Add this lot's row on FOAM LOTS by hand" }).eq("id", l.id);
+      continue;
+    }
+    const range = lotRange(sheet);
+    const f = lotFormulas(c, at, { first: range.first, last: range.last + 1 }, pendRef);
+    const cells: unknown[] = [];
+    for (let col = 1; col <= width; col++) {
+      const k = (Object.keys(c) as LotCol[]).find((x) => c[x] === col);
+      const val =
+        k === "category" ? at_(g, at, col) ?? ""
+        : k === "label" ? (sameSku ? String(at_(g, at, col) ?? "").trim() : "") || l.label || prod.get(l.product_id)?.name || l.sku
+        : k === "sku" ? l.sku
+        : k === "lot" ? l.lot_no
+        : k === "mfg" ? (l.mfg ? sheetDate(l.mfg) : "")
+        : k === "exp" ? (l.exp ? sheetDate(l.exp) : "")
+        : k === "starting" ? r2(Number(l.starting))
+        : k === "out" ? 0
+        : k === "notes" ? l.notes ?? ""
+        : k && f[k] ? f[k]
+        : "";
+      cells.push(val);
+    }
+    await wb.insertDown(tab, `A${at}:${colLetter(width)}${at}`);
+    await wb.write(tab, at, 1, [cells]);
+    await db.from("inventory_lots").update({ add_to_sheet: false, on_sheet: true, sheet_row: at, updated_at: new Date().toISOString() }).eq("id", l.id);
+    log("sheet", `Lot ${l.lot_no} of ${l.sku} (received in the app, ${String(r2(Number(l.starting)))}) added to ${tab}.`, l.sku, null, r2(Number(l.starting)), "AMBIT A.I.");
+    added++;
+  }
+  return added;
+}
+
 /** Pickups made in the app onto Shipped Out, what lines typed into PENDING ORDERS hold per lot, and the totals. */
 async function syncLotsOut(db: SupabaseClient, wb: Workbook, branch: string, lots: Lots, lotReserved: Map<number, number>, sum: SyncSummary) {
   if (!lots.products.size) return;
-  const { data } = await db.from("inventory_lots").select("id, shipped_out, out_unsynced, sheet_row, sheet_pending, on_sheet").eq("branch_id", branch).range(0, 4999);
+  const { data } = await db
+    .from("inventory_lots")
+    .select("id, shipped_out, out_unsynced, adj, adj_unsynced, shipped_in, in_unsynced, sheet_row, sheet_pending, on_sheet")
+    .eq("branch_id", branch)
+    .range(0, 4999);
   const outCol = lots.sheet?.cols.out;
-  for (const l of (data ?? []) as { id: number; shipped_out: number; out_unsynced: number; sheet_row: number | null; sheet_pending: number; on_sheet: boolean }[]) {
+  type Row = { id: number; shipped_out: number; out_unsynced: number; adj: number; adj_unsynced: number; shipped_in: number; in_unsynced: number; sheet_row: number | null; sheet_pending: number; on_sheet: boolean };
+  for (const l of (data ?? []) as Row[]) {
     const held = r2(lotReserved.get(l.id) ?? 0);
     if (!same(held, num(l.sheet_pending))) await db.from("inventory_lots").update({ sheet_pending: held }).eq("id", l.id);
+    // Approved count differences into Adj, and stock received in the app into Shipped In.
+    if (l.on_sheet && l.sheet_row && lots.tab) {
+      for (const [col, key, unsynced, sheetNow] of [
+        [lots.sheet?.cols.adj, "adj", l.adj_unsynced, lots.sheetAdj.get(l.id) ?? Number(l.adj)],
+        [lots.sheet?.cols.in, "in", l.in_unsynced, lots.sheetIn.get(l.id) ?? Number(l.shipped_in)],
+      ] as [number | undefined, string, number, number][]) {
+        const w = r2(Number(unsynced ?? 0));
+        if (!w || !col) continue;
+        await wb.write(lots.tab, l.sheet_row, col, [[r2(sheetNow + w)]]);
+        await db.rpc("inventory_lot_fold", { p_lot: l.id, p_col: key, p_sheet: sheetNow, p_written: w });
+        sum.to_sheet++;
+      }
+    }
     const add = r2(Number(l.out_unsynced));
     if (!add || !l.on_sheet || !l.sheet_row || !lots.tab || !outCol) continue;
     const now = lots.sheetOut.get(l.id) ?? Number(l.shipped_out);

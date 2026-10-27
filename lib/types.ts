@@ -43,6 +43,7 @@ export type Profile = {
   perms?: string[] | null;
   /** The person's own home-screen app layout (migration 0014). */
   home_apps?: unknown;
+  monthly_goal?: number | null; // Sales widget goal, set by an admin (0027)
 };
 
 export type Branch = {

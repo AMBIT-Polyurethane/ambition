@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { CircleAlert, CircleCheck, ExternalLink, RefreshCw } from "lucide-react";
+import { CircleAlert, CircleCheck, ClipboardCheck, ExternalLink, ListChecks, RefreshCw, Truck } from "lucide-react";
+import { todayCentral } from "@/lib/sale";
 import { requirePerm } from "@/lib/session";
 import { TopBar, Empty } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -39,7 +40,16 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   const sheet = live.find((s) => s.branch_id === sp.b) ?? live.find((s) => s.branch_id === profile.branch_id) ?? live[0];
   const branch = sheet.branch_id;
-  const rows = await branchStock(supabase, branch);
+  const today = todayCentral();
+  const [rows, spotRes, incomingRes, recRes] = await Promise.all([
+    branchStock(supabase, branch),
+    supabase.from("inventory_counts").select("id", { count: "exact", head: true }).eq("branch_id", branch).eq("kind", "spot").eq("status", "open").lt("day", today),
+    supabase.from("inbound_deliveries").select("id", { count: "exact", head: true }).eq("branch_id", branch).eq("status", "expected"),
+    supabase.from("inventory_counts").select("id").eq("branch_id", branch).eq("kind", "reconcile").eq("status", "open").limit(1),
+  ]);
+  const spotMissed = spotRes.count ?? 0;
+  const incoming = incomingRes.count ?? 0;
+  const openRec = (recRes.data ?? []).length > 0;
   const reorder = rows.filter(needsReorder).length;
   const reserved = rows.filter((r) => r.pending > 0).length;
   const uncounted = rows.filter((r) => r.on_hand === null).length;
@@ -72,6 +82,32 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       {sp.err ? (
         <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div>
       ) : null}
+
+      {/* Counting and receiving */}
+      <div className="inv-tools">
+        <Link href={`/inventory/spot?b=${branch}`} className="inv-tool">
+          <ClipboardCheck size={20} />
+          <span className="grow">
+            <b>Spot check</b>
+            <span className="tiny faint">{spotMissed ? "Missed days to count" : "Today's item to count"}</span>
+          </span>
+          {spotMissed ? <span className="dot-badge static">{spotMissed}</span> : null}
+        </Link>
+        <Link href={`/inventory/incoming?b=${branch}`} className="inv-tool">
+          <Truck size={20} />
+          <span className="grow">
+            <b>Incoming deliveries</b>
+            <span className="tiny faint">{incoming ? `${incoming} on the way` : "Add a truck that's coming"}</span>
+          </span>
+        </Link>
+        <Link href={`/inventory/counts?b=${branch}`} className="inv-tool">
+          <ListChecks size={20} />
+          <span className="grow">
+            <b>Perform Inventory Reconciliation</b>
+            <span className="tiny faint">{openRec ? "Counting in progress: carry on" : "Quarterly full count, approved by an admin"}</span>
+          </span>
+        </Link>
+      </div>
 
       <section className="card col inv-head">
         <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}>

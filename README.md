@@ -236,6 +236,28 @@ Project Settings → API Keys → Secret keys), redeploy, and in the app Admin �
 `CRON_SECRET` (Vercel sends it with the timer; then nobody else can start a sync). Needs
 `supabase/migrations/0018_inventory.sql`.
 
+### Home widgets, spot checks, reconciliation, incoming deliveries
+
+`components/home-widgets.tsx` (data in `lib/widgets.ts`, `widgetsFor()` decides who gets what) puts a few cards under
+the greeting, each in its own `Suspense` so Home never waits on them: warehouse (`job_role = warehouse`): Daily spot
+check + This week (`components/week-calendar.tsx`: pickups, deliveries, incoming trucks for 7 days, late ones on
+today); order desk: queue + This week; credit approvals: credit / hold / tax; sales reps (`deskAccess = mine`): Your
+month vs. last month and `profiles.monthly_goal` (Admin → Accounts); admins: Waiting on you, Sales (this month by
+location and top products, app orders at list price) and Inventory movement (units ordered last 30 days vs. the 30
+before, spot checks per location).
+
+`0027_home_widgets_counts_incoming.sql`:
+- **Spot checks** (`inventory_counts.kind = 'spot'`): `spot_check_ensure(branch)` assigns one random stocked item per
+  weekday per location (none repeats within a `cycle`; then the next cycle starts), back-filling missed weekdays (up to
+  21 days). `count_line_save` saves a blind count; a match closes it (`matched`), a difference makes it `submitted`.
+- **Reconciliation** (`kind = 'reconcile'`, `/inventory/counts`): `count_start_reconcile` lists every item (foam by
+  lot), counts save as typed, `count_submit`, then an admin `count_review`s. Approving adds each difference (counted − what
+  the app had when it was counted, so pickups since then still count) to `inventory.on_hand` (+ Last Counted / Counted
+  By) or to the lot's `adj_unsynced`, which the sync adds to Adj on FOAM LOTS.
+- **Expected deliveries** (`inbound_deliveries` / `inbound_lines`, `/inventory/incoming`): `inbound_receive` adds
+  non-lot items to `on_hand`; foam needs a lot #: an existing lot gets `in_unsynced` (→ Shipped In), a new lot is
+  inserted with `add_to_sheet` and the sync inserts its FOAM LOTS row at the end of that SKU's block (`addReceivedLots`).
+
 ### Customer approval
 
 Orders AMBIT staff place for a customer are emailed to the customer first, with a secure link (valid 7 days)

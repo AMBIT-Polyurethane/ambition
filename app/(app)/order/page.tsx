@@ -4,7 +4,7 @@ import { can } from "@/lib/access";
 import { OrderBuilder, type CatalogProduct, type OrderDraft, type StockMap } from "@/components/order-builder";
 import { approvalsEnabled } from "@/lib/order-send";
 import { saleOn, todayCentral } from "@/lib/sale";
-import type { OrderCustomer } from "@/lib/customers";
+import { packCustomer } from "@/lib/customers";
 import { smartDraft } from "@/lib/reorder";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
@@ -124,7 +124,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       products={catalog}
       categories={cats.filter((c) => catalog.some((p) => p.category_id === c.id))}
       branches={(branches ?? []) as Branch[]}
-      companies={emp ? ((companiesRes.data ?? []) as Company[]).map(toOrderCustomer) : null}
+      companies={emp ? ((companiesRes.data ?? []) as Company[]).map((c) => packCustomer({ ...c, contact_name: c.contact_name ?? null, city: c.city ?? null, state: c.state ?? null, needs_qb_setup: c.needs_qb_setup ?? false })) : null}
       isEmployee={emp}
       approvals={emp && approvalsEnabled()}
       me={{
@@ -148,21 +148,4 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       stock={stock}
     />
   );
-}
-
-function toOrderCustomer(c: Company): OrderCustomer {
-  return {
-    id: c.id,
-    name: c.name,
-    account_no: c.account_no,
-    default_branch_id: c.default_branch_id,
-    contact_name: c.contact_name ?? null,
-    phone: null,
-    email: null,
-    city: c.city ?? null,
-    state: c.state ?? null,
-    bill_address: null,
-    ship_address: null,
-    needs_qb_setup: c.needs_qb_setup ?? false,
-  };
 }

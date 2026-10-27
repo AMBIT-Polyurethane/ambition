@@ -15,6 +15,8 @@ import { PromoBanner } from "@/components/promo-banner";
 import { reorderCount } from "@/lib/inventory/view";
 import { customersDue, reorderNudge } from "@/lib/reorder";
 import { companyTax, taxCounts, taxOverview } from "@/lib/tax-server";
+import { widgetsFor } from "@/lib/widgets";
+import { HomeWidgets } from "@/components/home-widgets";
 import type { Course, DocumentRow, Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +67,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const admin = profile.role === "admin";
   const canOrder = !emp || can(profile, "ordering");
 
+  const w = widgetsFor(profile);
   const desk = emp && can(profile, "order_desk");
   const credit = emp && can(profile, "credit_check");
   const count = (q: PromiseLike<{ count: number | null }>) => Promise.resolve(q).then((r) => r.count ?? 0, () => 0);
@@ -168,14 +171,15 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {sp.welcome ? (
         <div className="alert ok">You&apos;re all set. Welcome to AMBIT Intelligence! Tip: on your phone, use Share → &ldquo;Add to Home Screen&rdquo; to open it like an app.</div>
       ) : null}
-      {pending > 0 ? (
+      {/* Admins see these in the "Waiting on you" card instead. */}
+      {pending > 0 && !w.admin ? (
         <Link href="/admin/users" className="alert warn" style={{ alignItems: "center" }}>
           <UserCheck size={18} />
           <span className="grow"><b>{pending}</b> access {pending === 1 ? "request is" : "requests are"} waiting for approval</span>
           <ChevronRight size={18} />
         </Link>
       ) : null}
-      {noRole > 0 ? (
+      {noRole > 0 && !w.admin ? (
         <Link href="/admin/users?tab=norole" className="alert warn" style={{ alignItems: "center" }}>
           <UserCheck size={18} />
           <span className="grow"><b>{noRole}</b> staff {noRole === 1 ? "account needs" : "accounts need"} a job role</span>
@@ -207,7 +211,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <ChevronRight size={18} />
         </Link>
       ) : null}
-      {taxWork > 0 && tax ? (
+      {taxWork > 0 && tax && !w.admin && !w.credit ? (
         <Link href="/tax" className={`home-alert ${tax.expired ? "err" : "warn"}`}>
           <span className="ic"><Landmark size={19} /></span>
           <span className="grow col tight">
@@ -225,7 +229,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <ChevronRight size={18} />
         </Link>
       ) : null}
-      {due?.length ? (
+      {due?.length && !w.sales ? (
         <Link href="/orders/due" className="home-alert">
           <span className="ic"><CalendarClock size={19} /></span>
           <span className="grow col tight">
@@ -238,6 +242,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <ChevronRight size={18} />
         </Link>
       ) : null}
+
+      {/* What needs this person today, by job (warehouse, order desk, accounting, sales, admin). */}
+      <HomeWidgets db={supabase} profile={profile} known={{ access: pending, roles: noRole, apps: waitingApps, due, tax }} />
 
       {/* Smart reorder: "You usually order 4 drums of AMBI-SEAL 5.0 every 3 weeks." */}
       {nudge ? (
