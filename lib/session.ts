@@ -4,12 +4,15 @@ import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
 import { can, type Perm } from "@/lib/access";
 
+/** Who's signed in, from their verified sign-in token (id and email). */
+export type SessionUser = { id: string; email: string | undefined };
+
 export const getSession = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (!claims?.sub) return null;
+  const user: SessionUser = { id: claims.sub, email: typeof claims.email === "string" ? claims.email : undefined };
   const { data: profile } = await supabase
     .from("profiles")
     .select("*, company:companies!company_id(id, name, account_no, default_branch_id)")

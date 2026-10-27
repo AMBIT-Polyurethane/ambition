@@ -335,15 +335,17 @@ export async function saveLink(form: FormData) {
     sort: num(form.get("sort")) ?? 0,
     active: id ? form.get("active") === "on" : true,
     perm: (PERM_KEYS as string[]).includes(s(form, "perm")) ? s(form, "perm") : null,
+    folder: ["main", "sales", "forms", "learn", "admin"].includes(s(form, "folder")) ? s(form, "folder") : null,
   };
   if (!row.title) return;
   const write = (r: Partial<typeof row>) => (id ? supabase.from("links").update(r).eq("id", id) : supabase.from("links").insert(r));
   const { error } = await write(row);
-  if (error && /perm/i.test(error.message)) {
-    // The roles update (0011) hasn't been run yet: save everything else.
-    const { perm: _skip, ...rest } = row;
+  if (error && /perm|folder/i.test(error.message)) {
+    // An update (0011 roles, 0026 folders) hasn't been run yet: save everything else.
+    const { perm, folder: _skip, ...rest } = row;
     void _skip;
-    await write(rest);
+    const { error: again } = await write(/folder/i.test(error.message) ? { ...rest, perm } : rest);
+    if (again && /perm/i.test(again.message)) await write(rest);
   }
   revalidatePath("/admin/links");
   revalidatePath("/");

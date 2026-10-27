@@ -8,7 +8,47 @@ export type HomeApp = {
   icon: string; // a name from components/icons
   color: string; // the tile color
   badge?: number;
+  /** Staff: the folder it lives in on the home screen (none = right on the home screen). */
+  folder?: FolderKey;
 };
+
+// ------------------------------------------------------------------ folders
+// Staff home screens group the less-used apps into folders, so the everyday ones stay one tap away.
+export type FolderKey = "sales" | "forms" | "learn" | "admin";
+export const FOLDERS: Record<FolderKey, { label: string; icon: string; color: string }> = {
+  sales: { label: "Sales tools", icon: "tag", color: "#E59A0B" },
+  forms: { label: "Employee forms", icon: "form", color: "#4F46E5" },
+  learn: { label: "Learn & resources", icon: "academy", color: "#7C3AED" },
+  admin: { label: "Admin tools", icon: "shield", color: "#52525B" },
+};
+export const FOLDER_KEYS = Object.keys(FOLDERS) as FolderKey[];
+
+export type HomeTile =
+  | { kind: "app"; app: HomeApp }
+  | { kind: "folder"; key: FolderKey; label: string; icon: string; color: string; apps: HomeApp[]; badge: number };
+
+/**
+ * The home grid: apps in the person's order, with each folder's apps gathered into one tile where its first app
+ * would be. A folder with a single app for this person just shows that app.
+ */
+export function homeTiles(apps: HomeApp[]): HomeTile[] {
+  const byFolder = new Map<FolderKey, HomeApp[]>();
+  for (const a of apps) if (a.folder) byFolder.set(a.folder, [...(byFolder.get(a.folder) ?? []), a]);
+  const out: HomeTile[] = [];
+  const placed = new Set<FolderKey>();
+  for (const a of apps) {
+    const f = a.folder;
+    if (!f || (byFolder.get(f)?.length ?? 0) < 2) {
+      out.push({ kind: "app", app: a });
+      continue;
+    }
+    if (placed.has(f)) continue;
+    placed.add(f);
+    const list = byFolder.get(f)!;
+    out.push({ kind: "folder", key: f, ...FOLDERS[f], apps: list, badge: list.reduce((n, x) => n + (x.badge ?? 0), 0) });
+  }
+  return out;
+}
 
 /** A person's own layout (Profile → Edit apps): the order they picked and the apps they hid. */
 export type HomeLayout = { order?: string[]; hidden?: string[] } | null | undefined;

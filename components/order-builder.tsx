@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, MapPin, Minus, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, type Cart } from "@/lib/cart";
 import { money } from "@/lib/format";
-import { placeOrder } from "@/app/(app)/order/actions";
+import { customerDetails, placeOrder } from "@/app/(app)/order/actions";
 import { CustomerPicker } from "@/components/customer-picker";
 import { addressOnFile, type OrderCustomer } from "@/lib/customers";
 import { bagsFor, parseSqft, sqftText } from "@/lib/sqft";
@@ -170,7 +170,8 @@ export function OrderBuilder(props: Props) {
   const [cart, setCart] = useState<Cart>({});
   const [loaded, setLoaded] = useState(false);
   // Staff start by picking the AMBIT location; contractors order from their own region's location.
-  const [step, setStep] = useState<"location" | "catalog" | "review">(isEmployee ? "location" : "catalog");
+  // Staff: location, then the customer (their details and, later, their prices come with them), then items.
+  const [step, setStep] = useState<"location" | "customer" | "catalog" | "review">(isEmployee ? "location" : "catalog");
   const [cat, setCat] = useState("all");
   const [q, setQ] = useState(props.initialSearch ?? "");
   // Staff: show only what's available (in stock, not reserved) at the location, when it has live stock.
@@ -252,6 +253,23 @@ export function OrderBuilder(props: Props) {
 
   const customer = isEmployee ? customerList.find((c) => c.id === companyId) ?? null : null;
 
+  // The customer list arrives trimmed (name, account #, city) so the screen opens fast; the chosen customer's
+  // address, email and phone are fetched when they're picked.
+  const [detailed, setDetailed] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    if (!isEmployee || !companyId || detailed.has(companyId)) return;
+    let stop = false;
+    customerDetails(companyId).then((full) => {
+      if (stop || !full) return;
+      setCustomerList((list) => list.map((c) => (c.id === full.id ? { ...c, ...full } : c)));
+      setDetailed((d) => new Set(d).add(full.id));
+    });
+    return () => {
+      stop = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+
   const branch = branches.find((b) => b.id === branchId) ?? null;
   const stockHere = (props.stock ?? {})[delivery === "dropship" ? "" : branchId];
   const branchLabel = (b: Branch | null | undefined) => (b ? `${b.name}, ${b.state}` : "");
@@ -259,8 +277,19 @@ export function OrderBuilder(props: Props) {
     setBranchId(id);
     setLastBranch(id);
     writeOrderBranch(id);
-    setStep("catalog");
+    setStep(isEmployee && !companyId ? "customer" : "catalog");
     window.scrollTo(0, 0);
+  };
+  const pickCustomer = (id: string) => {
+    setCompanyId(id);
+    if (id) {
+      setStep("catalog");
+      window.scrollTo(0, 0);
+    }
+  };
+  const addToList = (c: OrderCustomer) => {
+    setCustomerList((list) => (list.some((x) => x.id === c.id) ? list : [...list, c].sort((a, b) => a.name.localeCompare(b.name))));
+    setDetailed((d) => new Set(d).add(c.id));
   };
 
   // The approval email starts as the customer's email on file (editable, same rule as the address).
@@ -407,6 +436,41 @@ export function OrderBuilder(props: Props) {
     );
   }
 
+  // ---------------------------------------------------------------- customer
+  if (step === "customer") {
+    return (
+      <main className="shell">
+        <header className="topbar">
+          <button type="button" className="iconbtn" aria-label="Back to locations" onClick={() => setStep("location")}>
+            <ChevronLeft size={22} />
+          </button>
+          <h1 className="title" style={{ margin: 0 }}>Who&apos;s it for?</h1>
+        </header>
+        <button type="button" className="loc-bar" onClick={() => { setStep("location"); window.scrollTo(0, 0); }} aria-label={`Location: ${branchLabel(branch)}. Change location`}>
+          <MapPin size={15} />
+          <span className="grow">From <b>{branch ? branchLabel(branch) : "no location"}</b></span>
+          <span className="linkbtn small">Change</span>
+        </button>
+        <section className="section">
+          <div className="h2">Pick the customer</div>
+          <p className="muted small" style={{ margin: 0 }}>Then add the items. Their ship-to address and contact fill in for you.</p>
+          <CustomerPicker
+            customers={customerList}
+            value=""
+            onChange={pickCustomer}
+            onAdded={addToList}
+            branches={branches}
+            defaultBranch={branchId}
+            autoFocus
+          />
+        </section>
+        {loaded && lineCount > 0 ? (
+          <p className="tiny faint" style={{ margin: 0 }}>Your unfinished order ({lineCount} {lineCount === 1 ? "item" : "items"}) is still saved.</p>
+        ) : null}
+      </main>
+    );
+  }
+
   // ------------------------------------------------------------------ review
   if (step === "review") {
     const forName = !isEmployee ? me.company?.name ?? "" : customer?.name ?? "";
@@ -426,7 +490,7 @@ export function OrderBuilder(props: Props) {
               customers={customerList}
               value={companyId}
               onChange={setCompanyId}
-              onAdded={(c) => setCustomerList((list) => (list.some((x) => x.id === c.id) ? list : [...list, c].sort((a, b) => a.name.localeCompare(b.name))))}
+              onAdded={addToList}
               branches={branches}
               defaultBranch={branchId}
             />
@@ -630,6 +694,13 @@ export function OrderBuilder(props: Props) {
             <MapPin size={15} />
             <span className="grow">From <b>{branch ? branchLabel(branch) : "no location"}</b></span>
             <span className="linkbtn small">Change</span>
+          </button>
+        ) : null}
+        {isEmployee ? (
+          <button type="button" className="loc-bar" onClick={() => { setStep("customer"); window.scrollTo(0, 0); }} aria-label={`Customer: ${customer?.name ?? "none"}. Change customer`}>
+            <UserRound size={15} />
+            <span className="grow ellipsis">For <b>{customer ? customer.name : "no customer yet"}</b>{customer?.account_no ? <span className="faint"> · {customer.account_no}</span> : null}</span>
+            <span className="linkbtn small">{customer ? "Change" : "Pick"}</span>
           </button>
         ) : null}
         <div className="search">

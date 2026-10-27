@@ -30,3 +30,13 @@ export const RANGES = [
 ] as const;
 export type RangeKey = (typeof RANGES)[number]["key"];
 
+
+/** 0.6 -> "35 min", 5.2 -> "5.2 hrs", 70 -> "2.9 days" */
+export function duration(hours: number | null | undefined): string {
+  if (hours === null || hours === undefined || Number.isNaN(Number(hours))) return "–";
+  const h = Number(hours);
+  if (h < 1) return `${Math.max(1, Math.round(h * 60))} min`;
+  if (h < 48) return `${h < 10 ? h.toFixed(1) : Math.round(h)} hrs`;
+  const d = h / 24;
+  return `${d < 10 ? d.toFixed(1) : Math.round(d)} days`;
+}

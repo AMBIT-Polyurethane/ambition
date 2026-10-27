@@ -171,6 +171,7 @@ export type LinkRow = {
   sort: number;
   active: boolean;
   perm?: string | null; // staff need this permission to see it (0011)
+  folder?: string | null; // staff home screen folder: main | sales | forms | learn | admin (0026); empty = by kind
 };
 
 export type DocumentRow = {

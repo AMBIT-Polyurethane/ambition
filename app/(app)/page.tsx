@@ -1,13 +1,14 @@
 import Link from "next/link";
+import { unstable_cache } from "next/cache";
 import { Bell, CalendarClock, ChevronRight, Landmark, Plus, RefreshCw, Sparkles, UserCheck } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { firstName, greeting, initials, orderNo, dateShort } from "@/lib/format";
-import { Icon } from "@/components/icons";
 import { BrandImg } from "@/components/brand";
 import { JumpBackIn, RecentLink } from "@/components/recent";
 import { can, seesOrders } from "@/lib/access";
 import { docProducts } from "@/lib/docs";
-import { arrangeApps, parseLayout } from "@/lib/home-apps";
+import { arrangeApps, homeTiles, parseLayout } from "@/lib/home-apps";
+import { HomeGrid } from "@/components/home-grid";
 import { homeApps } from "@/lib/home-apps-server";
 import { homePromos } from "@/lib/promos";
 import { PromoBanner } from "@/components/promo-banner";
@@ -28,8 +29,16 @@ const PRODUCT_ART = [
   ["#4ADE80", "#15803D"],
 ];
 
-/** Credit applications and account setups nobody has decided on yet (admins). Never holds up the home screen. */
+/**
+ * Credit applications and account setups nobody has decided on yet (admins). It asks Jotform, which is slow, so the
+ * answer is kept for 5 minutes (the same for every admin) and the home screen never waits more than 1.2 seconds.
+ */
 async function creditWaiting(supabase: Awaited<ReturnType<typeof requireActive>>["supabase"]): Promise<number> {
+  const cached = unstable_cache(() => creditWaitingNow(supabase), ["home-credit-waiting"], { revalidate: 300 });
+  return Promise.race([cached().catch(() => 0), new Promise<number>((resolve) => setTimeout(() => resolve(0), 1200))]);
+}
+
+async function creditWaitingNow(supabase: Awaited<ReturnType<typeof requireActive>>["supabase"]): Promise<number> {
   try {
     const [{ hubForms, formSubmissions, reviewable }, { extraForms, reviewsFor }] = await Promise.all([
       import("@/lib/forms"),
@@ -255,24 +264,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <span className="sec-title">Your apps</span>
           <Link href="/profile/apps" className="sec-link">Edit</Link>
         </div>
-        <div className="apps-grid">
-          {apps.map((a) => {
-            const inner = (
-              <>
-                <span className="app-ic" style={{ ["--c" as string]: a.color }}>
-                  <Icon name={a.icon} size={28} />
-                  {a.badge ? <span className="bdg">{a.badge > 99 ? "99+" : a.badge}</span> : null}
-                </span>
-                <span className="lbl">{a.label}</span>
-              </>
-            );
-            return a.external ? (
-              <a key={a.key} className="app" href={a.href} target="_blank" rel="noopener noreferrer">{inner}</a>
-            ) : (
-              <Link key={a.key} className="app" href={a.href}>{inner}</Link>
-            );
-          })}
-        </div>
+        <HomeGrid tiles={homeTiles(apps)} />
       </section>
 
       {/* Order: start a new one or repeat the last one */}

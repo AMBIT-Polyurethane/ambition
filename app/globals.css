@@ -1604,3 +1604,46 @@ a.dash-tile:hover { border-color: var(--line-hover); }
   .vary-head span { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); }
   .vary-row:not(.vary-head) .vary-k { display: none; }
 }
+
+/* ---- Loading screens (shown the moment a link is tapped) ---- */
+.skel-page { gap: 14px; }
+.skel-top { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.skel { display: block; border-radius: 14px; background: linear-gradient(90deg, var(--s1) 0%, var(--s2) 40%, var(--s1) 80%); background-size: 240% 100%; animation: skel-shine 1.3s ease-in-out infinite; }
+.skel.circle { width: 44px; height: 44px; border-radius: 50%; flex: none; }
+.skel.line { height: 14px; border-radius: 8px; }
+.skel.block { width: 100%; }
+.skel.tile { aspect-ratio: 1; border-radius: 18px; }
+.skel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.skel-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.skel-two { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 900px) {
+  .skel-row { grid-template-columns: repeat(4, 1fr); }
+  .skel-two { grid-template-columns: 1fr 1fr; }
+  .skel-grid { grid-template-columns: repeat(6, 1fr); }
+}
+@keyframes skel-shine { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+/* Dashboard marks are links to the orders behind them */
+.dash a.hl, .dash a.dcol, .dash a.dseg, .dash a.fill { color: inherit; text-decoration: none; cursor: pointer; }
+.dash a.hl:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.dash a.dcol:focus-visible, .dash a.dseg:focus-visible, .dash a.fill:focus-visible, .dash-tile:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.ddonut a { cursor: pointer; }
+.ddonut a:hover circle, .ddonut a:focus-visible circle { filter: brightness(1.15); }
+/* Orders list opened from a dashboard number: what it's filtered to */
+.filter-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--dc1, #3987e5); border-radius: 12px; background: var(--s1); font-size: 14px; }
+.filter-bar .linkbtn { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.wait-tag { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--text2); }
+.wait-tag.warn svg { color: var(--st-warn, #fab219); }
+.wait-tag.crit svg { color: var(--st-crit, #d03b3b); }
+
+/* ---- Home screen folders ---- */
+button.app { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.app .app-ic.folder { background: color-mix(in srgb, var(--c) 22%, var(--s2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }
+.app .app-ic.folder .mini { display: grid; grid-template-columns: repeat(2, 20px); grid-auto-rows: 20px; gap: 4px; }
+.app .app-ic.folder .mini span { display: grid; place-items: center; border-radius: 6px; color: #fff; background: var(--c); }
+.folder-scrim { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: folder-in 0.16s ease-out; }
+.folder-panel { width: min(560px, 100%); max-height: calc(100dvh - 48px); overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 26px; background: var(--bg, var(--s1)); border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
+.folder-panel .apps-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.folder-title { font-size: 18px; font-weight: 800; padding-left: 4px; }
+@keyframes folder-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .folder-scrim { animation: none; } }

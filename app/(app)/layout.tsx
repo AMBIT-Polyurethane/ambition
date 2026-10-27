@@ -1,7 +1,8 @@
 import { TabBar } from "@/components/tabbar";
 import { Sidebar, type SideItem } from "@/components/sidebar";
 import { requireActive, isEmployee } from "@/lib/session";
-import { can, roleLabel, seesOrders } from "@/lib/access";
+import { can, roleLabel } from "@/lib/access";
+import { deskAccess } from "@/lib/order-desk";
 import { assistantAccess } from "@/lib/assistant/settings";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/", label: "Home", icon: "home" },
         ask,
         can(profile, "ordering") && { href: "/order", label: "Order", icon: "cart" },
-        seesOrders(profile) && { href: "/orders", label: "Orders", icon: "orders" },
-        (can(profile, "order_desk") || can(profile, "credit_check")) && { href: "/orders/desk", label: "Order desk", icon: "desk" },
+        // One place for orders: the Order Desk (with "View orders" for the full list).
+        !!deskAccess(profile) && { href: "/orders/desk", label: "Order desk", icon: "desk" },
         can(profile, "takeoff") && { href: "/ops", label: "AMBIT-OPS", icon: "ops" },
         can(profile, "inventory") && { href: "/inventory", label: "Inventory", icon: "inventory" },
         (can(profile, "credit_check") || profile.role === "admin") && { href: "/tax", label: "Tax certificates", icon: "tax" },

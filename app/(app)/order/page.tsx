@@ -21,7 +21,10 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
     supabase.from("categories").select("*").order("sort"),
     supabase.from("branches").select("*").eq("active", true).order("sort"),
     // Staff pick from every customer. Contractors never receive the list (the database won't send it either).
-    emp ? supabase.from("companies").select("*").eq("active", true).order("name") : Promise.resolve({ data: null }),
+    // Only what the search needs (the chosen customer's address and email are fetched when they're picked).
+    emp
+      ? supabase.from("companies").select("id, name, account_no, contact_name, city, state, default_branch_id, needs_qb_setup").eq("active", true).order("name")
+      : Promise.resolve({ data: null }),
     !emp && profile.company_id
       ? supabase.from("companies").select("*").eq("id", profile.company_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -154,12 +157,12 @@ function toOrderCustomer(c: Company): OrderCustomer {
     account_no: c.account_no,
     default_branch_id: c.default_branch_id,
     contact_name: c.contact_name ?? null,
-    phone: c.phone ?? null,
-    email: c.email ?? null,
+    phone: null,
+    email: null,
     city: c.city ?? null,
     state: c.state ?? null,
-    bill_address: c.bill_address ?? null,
-    ship_address: c.ship_address ?? null,
+    bill_address: null,
+    ship_address: null,
     needs_qb_setup: c.needs_qb_setup ?? false,
   };
 }

@@ -14,10 +14,13 @@ import { dateShort } from "@/lib/format";
 export const metadata = { title: "Profile" };
 
 export default async function ProfilePage() {
-  const { supabase, user, profile } = await requireActive();
+  const { supabase, profile } = await requireActive();
   const emp = isEmployee(profile);
-  const { data: branches } = await supabase.from("branches").select("id, name, state").eq("active", true).order("sort");
-  const usesPassword = (user.identities ?? []).some((i) => i.provider === "email");
+  const [{ data: branches }, { data: who }] = await Promise.all([
+    supabase.from("branches").select("id, name, state").eq("active", true).order("sort"),
+    supabase.auth.getUser(),
+  ]);
+  const usesPassword = (who.user?.identities ?? []).some((i) => i.provider === "email");
   const theme = await getTheme();
   // Contractors: their tax-exempt certificate, and a place to send the renewal.
   const tax = !emp && profile.company_id ? await companyTax(supabase, profile.company_id) : null;

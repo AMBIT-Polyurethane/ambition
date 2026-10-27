@@ -35,16 +35,30 @@ export default async function OrderDetailPage({
 
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) notFound();
-  const [{ data: items }, { data: branch }, { data: company }] = await Promise.all([
+  // Everything else about the order, all at once.
+  const staffOpen = emp && order.company_id && order.status !== "completed" && order.status !== "cancelled";
+  const [{ data: items }, { data: branch }, { data: company }, picks, { data: fileRows }, { data: varRows }, tax, { data: invRows }] = await Promise.all([
     supabase.from("order_items").select("*, product:products!order_items_product_id_fkey(image_url, category_id)").eq("order_id", id).order("id"),
     order.branch_id ? supabase.from("branches").select("*").eq("id", order.branch_id).maybeSingle<Branch>() : Promise.resolve({ data: null }),
     emp && order.company_id
       ? supabase.from("companies").select("email, contact_name").eq("id", order.company_id).maybeSingle<Pick<Company, "email" | "contact_name">>()
       : Promise.resolve({ data: null }),
+    // Staff: which brand and lot the spray foam drums come from.
+    emp ? orderPicks(supabase, id) : Promise.resolve(new Map<number, LotPick[]>()),
+    emp
+      ? supabase.from("order_files").select("id, kind, name, uploaded_by_name, created_at").eq("order_id", id).order("created_at")
+      : Promise.resolve({ data: null }),
+    emp
+      ? supabase.from("order_variances").select("id, order_item_id, kind, from_text, to_text, reason, stage, by_name, created_at").eq("order_id", id).order("created_at")
+      : Promise.resolve({ data: null }),
+    // Staff: the customer's sales-tax exemption (an expired certificate holds the order at the credit check).
+    staffOpen ? companyTax(supabase, order.company_id!) : Promise.resolve(null),
+    // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
+    emp
+      ? supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).or("done_by.is.null,done_by.neq.swap").order("id")
+      : Promise.resolve({ data: null }),
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
-  // Staff: which brand and lot the spray foam drums come from (the warehouse can change it until pickup).
-  const picks = emp ? await orderPicks(supabase, id) : new Map<number, never[]>();
   const pickFor = (l: OrderItem) => {
     const p = picks.get(l.id);
     return emp && showsPicks(l.sku, p) ? p : undefined;
@@ -69,26 +83,14 @@ export default async function OrderDetailPage({
         }),
     ]);
   }
-  const [{ data: fileRows }, { data: varRows }] = emp
-    ? await Promise.all([
-        supabase.from("order_files").select("id, kind, name, uploaded_by_name, created_at").eq("order_id", id).order("created_at"),
-        supabase.from("order_variances").select("id, order_item_id, kind, from_text, to_text, reason, stage, by_name, created_at").eq("order_id", id).order("created_at"),
-      ])
-    : [{ data: null }, { data: null }];
   const files = (fileRows ?? []) as OrderFile[];
   const variance: VarianceData | null = emp
-    ? { orderId: order.id, lines, picks: picks as Map<number, LotPick[]>, choices, alternatives, log: (varRows ?? []) as Variance[], canEdit: canVary }
+    ? { orderId: order.id, lines, picks, choices, alternatives, log: (varRows ?? []) as Variance[], canEdit: canVary }
     : null;
   // Spray foam grouped by load (ISO with the resin it goes with), like the printed order.
   const groups = foamLoads(lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id), picks: pickFor(l) })));
   const shownStock = new Set<number>();
   const shownVary = new Set<number>();
-  // Staff: the customer's sales-tax exemption (an expired certificate holds the order at the credit check).
-  const tax = emp && order.company_id && stageOf(order) !== "completed" && stageOf(order) !== "cancelled" ? await companyTax(supabase, order.company_id) : null;
-  // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
-  const { data: invRows } = emp
-    ? await supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).or("done_by.is.null,done_by.neq.swap").order("id")
-    : { data: null };
   const inv = new Map<number, { state: string; sheet_row: number | null }[]>();
   for (const r of (invRows ?? []) as { order_item_id: number; state: string; sheet_row: number | null }[]) inv.set(r.order_item_id, [...(inv.get(r.order_item_id) ?? []), r]);
   const stockNote = (itemId: number) => {

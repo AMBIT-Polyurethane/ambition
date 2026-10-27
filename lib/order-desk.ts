@@ -1,4 +1,5 @@
 import type { Order, OrderStage } from "@/lib/types";
+import { can } from "@/lib/access";
 
 // The order desk: where each order sits after it's placed, and who moves it on.
 //   customer approval -> Sales Order # (CRM) -> credit check (Accounting) -> scheduled (CRM) -> completed
@@ -39,4 +40,54 @@ export function customerProgress(o: Order): string | null {
   if (st === "completed") return o.delivery_method === "pickup" ? "Picked up" : "Delivered";
   if (st === "cancelled") return "Cancelled";
   return "Approved, AMBIT is processing it";
+}
+
+// ------------------------------------------------------------------ who sees which orders
+/**
+ * The Order Desk for staff: "all" for admins, the order desk (CRM), credit approvals and the warehouse;
+ * "mine" for sales reps (the orders they placed, nothing to act on); null for everyone else.
+ */
+export function deskAccess(p: Parameters<typeof can>[0] & { role: string }): "all" | "mine" | null {
+  if (!p || (p.role !== "admin" && p.role !== "employee")) return null;
+  if (p.role === "admin" || can(p, "order_desk") || can(p, "credit_check") || can(p, "inventory")) return "all";
+  if (can(p, "ordering")) return "mine";
+  return null;
+}
+
+// ------------------------------------------------------------------ Central-time days
+/** "2026-10-21" plus n days. */
+export function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The moment a Central-time day starts, as an ISO timestamp (handles daylight saving). */
+export function centralStart(day: string): string {
+  // 06:00 UTC is midnight in winter (CST) and 1 AM in summer (CDT).
+  const probe = new Date(`${day}T06:00:00Z`);
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "numeric", hourCycle: "h23" }).format(probe));
+  return new Date(probe.getTime() - hour * 3600_000).toISOString();
+}
+
+/** Since when an open order has been waiting on its current step (same rule as the dashboard). */
+export function waitingSince(
+  o: Pick<Order, "approval_sent_at" | "approved_at" | "po_at" | "credit_at" | "created_at" | "scheduled_for"> & { stage?: OrderStage | null },
+  today: string,
+): string | null {
+  switch (o.stage) {
+    case "customer":
+      return o.approval_sent_at ?? o.created_at;
+    case "needs_po":
+      return o.approved_at ?? o.created_at;
+    case "credit":
+      return o.po_at ?? o.created_at;
+    case "hold":
+    case "schedule":
+      return o.credit_at ?? o.created_at;
+    case "scheduled":
+      return o.scheduled_for && o.scheduled_for < today ? centralStart(addDays(o.scheduled_for, 1)) : null;
+    default:
+      return null;
+  }
 }

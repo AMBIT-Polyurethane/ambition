@@ -24,6 +24,14 @@ export type NewCustomerResult = { ok: true; customer: OrderCustomer; message: st
 const clip = (v: unknown, max = 300) => String(v ?? "").trim().slice(0, max);
 
 /** AMBIT staff add a customer from the order screen. Usable right away; accounting is emailed to set it up in QuickBooks. */
+/** Staff picked a customer on the order screen: their address, email and phone (the list itself is kept short). */
+export async function customerDetails(id: string): Promise<OrderCustomer | null> {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile) || !/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { data } = await s.supabase.from("companies").select(ORDER_CUSTOMER_COLUMNS).eq("id", id).maybeSingle();
+  return (data as OrderCustomer | null) ?? null;
+}
+
 export async function addCustomer(input: NewCustomerInput): Promise<NewCustomerResult> {
   const s = await getSession();
   if (!s || !s.profile) return { ok: false, error: "Please sign in again." };

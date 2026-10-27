@@ -30,10 +30,10 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Refreshes the session cookie if needed. Do not remove.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refreshes the session cookie if needed. Do not remove. getClaims checks the sign-in token's signature
+  // right here (no trip to the sign-in server on every tap) when the project signs tokens with its own keys.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims?.sub ? data.claims : null;
 
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/"));

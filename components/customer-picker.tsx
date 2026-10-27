@@ -14,10 +14,12 @@ type Props = {
   branches: Branch[];
   /** Home branch filled in when adding a new customer (the location the order is from). */
   defaultBranch?: string;
+  /** Put the cursor in the search box straight away (its own step on the order screen). */
+  autoFocus?: boolean;
 };
 
 /** AMBIT staff: type part of a customer's name, account # or city to find them. */
-export function CustomerPicker({ customers, value, onChange, onAdded, branches, defaultBranch }: Props) {
+export function CustomerPicker({ customers, value, onChange, onAdded, branches, defaultBranch, autoFocus }: Props) {
   const selected = customers.find((c) => c.id === value) ?? null;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -29,6 +31,12 @@ export function CustomerPicker({ customers, value, onChange, onAdded, branches, 
 
   const { shown, more } = useMemo(() => matchCustomers(customers, query), [customers, query]);
   useEffect(() => setActive(0), [query]);
+  useEffect(() => {
+    if (autoFocus) {
+      inputRef.current?.focus();
+      setOpen(true);
+    }
+  }, [autoFocus]);
 
   const choose = (c: OrderCustomer) => {
     onChange(c.id);

@@ -25,7 +25,14 @@ Pick items → review → choose branch pickup, job site or drop ship → **Send
 The order is saved, then emailed to `ORDERS_EMAIL` (orders@ambitpu.com) with a copy to the person who placed it.
 Spray foam and fiberglass categories show "Based on customer pricing"; everything else shows list price.
 No checkout or payments: AMBIT handles invoices and POs as usual. Locations with a live inventory spreadsheet
-(Oklahoma City first) show stock on the Order screen, see "Live inventory" below.
+(Oklahoma City first) show stock on the Order screen, see "Live inventory" below. AMBIT staff go location →
+customer ("Who's it for?") → items → review; the order screen gets a trimmed customer list (name, account #, city)
+and fetches the chosen customer's address / email / phone with `customerDetails()`.
+
+**Speed.** Every section has a `loading.tsx` (`components/page-skeleton.tsx`), so a tap shows the next screen's
+outline at once (and links prefetch it). Sign-in is checked with `auth.getClaims()` (the project signs tokens with
+ES256, so it's verified locally instead of a trip to the sign-in server on every request). The order page loads
+its data in one parallel round; Home's Jotform check is cached for 5 minutes and never waits more than 1.2 s.
 
 ## First-time setup
 
@@ -250,7 +257,10 @@ form links can be limited to a box in Admin → Links. Needs `supabase/migration
 "Your apps" grid (colored app icons; each person can reorder or hide apps under Edit, saved to their profile), the
 Place an Order card with Start order and Reorder (repeats the person's last order), Jump back in (things opened
 recently on this device), tech bulletins, product lines and the Academy. Needs `supabase/migrations/0014_home_apps.sql`
-for saving layouts.
+for saving layouts. Staff apps carry a `folder` (`lib/home-apps.ts`: Sales tools, Employee forms, Learn & resources,
+Admin tools); `homeTiles()` turns each folder with 2+ apps into one tile that opens a panel (`components/home-grid.tsx`).
+Admin → Links has a "Staff home screen" choice per link (`links.folder`, 0026); left on Automatic, forms go in
+Employee forms, price-request links in Sales tools, the rest in Learn & resources.
 
 ### Expenses (AMBIT staff)
 
@@ -312,6 +322,14 @@ sheet line Cancelled. **Delete:** admins only, cancelled orders only (`order_del
 ISO and every resin are drums (0022); the order page, the PDF, the approval page and the emails list each resin with
 the ISO drums that go with it, a dark line between those groups (`lib/order-doc/loads.ts`). Needs
 `supabase/migrations/0022_sales_order_cancel_drums.sql`.
+
+**One Order Desk** (`0026_one_order_desk.sql`): staff get a single "Order desk" menu item (`deskAccess()` in
+`lib/order-desk.ts`): admins, the order desk, credit approvals and the warehouse see every order; sales reps
+(Ordering only) see the orders they placed, dashboard included (`order_desk_stats` filters to `placed_by = auth.uid()`
+for them). "View orders" opens `/orders`. Every dashboard tile, bar, slice and step links to `/orders` with filters:
+`day`, `week`, `from`/`to` (Central-time days, placed; with `done=1` completed), `stage` (comma list), `open=1`,
+`stuck=1` (waiting over a day or past the date, same rule as the dashboard via `waitingSince()`), `b` (branch or
+`dropship`); the list shows what it's filtered to with Clear.
 
 Dashboard at the top of the Order Desk (`components/desk-dashboard.tsx`, data from `order_desk_stats(p_days, p_branch)` in
 `0024_order_desk_dashboard.sql`, one call): filters for time range and location (they also scope the order lists),

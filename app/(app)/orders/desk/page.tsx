@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { requirePerm } from "@/lib/session";
+import { redirect } from "next/navigation";
+import { List } from "lucide-react";
+import { requireActive } from "@/lib/session";
 import { can } from "@/lib/access";
 import { dateShort, money, orderNo } from "@/lib/format";
-import { STAGES } from "@/lib/order-desk";
+import { STAGES, deskAccess } from "@/lib/order-desk";
 import { Empty, TopBar } from "@/components/ui";
 import { DeskDashboard } from "@/components/desk-dashboard";
 import { RANGES, type DeskStats, type RangeKey } from "@/lib/desk-stats";
@@ -27,10 +29,14 @@ const TABS: Tab[] = [
 
 export default async function OrderDeskPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const { supabase, profile } = await requirePerm("order_desk", "credit_check");
+  const { supabase, profile } = await requireActive();
+  // One Order Desk for all staff: everyone who works orders sees all of them; sales reps see the ones they placed.
+  const access = deskAccess(profile);
+  if (!access) redirect("/");
+  const mine = access === "mine";
   const desk = can(profile, "order_desk");
   const credit = can(profile, "credit_check");
-  const tabs = TABS.filter((t) => t.who === "both" || (t.who === "desk" ? desk : credit));
+  const tabs = mine || (!desk && !credit) ? TABS : TABS.filter((t) => t.who === "both" || (t.who === "desk" ? desk : credit));
 
   // Filters at the top scope the dashboard and the lists below: time range and location.
   const range = (RANGES.find((r) => r.key === sp.r)?.key ?? "30") as RangeKey;
@@ -44,7 +50,8 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
   // A Supabase query narrowed to the chosen location.
   const where = <T,>(q: T): T => {
     const b = q as unknown as { eq: (c: string, v: string) => unknown; is: (c: string, v: null) => unknown };
-    return (branchId === "dropship" ? b.is("branch_id", null) : branchId ? b.eq("branch_id", branchId) : q) as T;
+    const scoped = (branchId === "dropship" ? b.is("branch_id", null) : branchId ? b.eq("branch_id", branchId) : q) as T;
+    return (mine ? (scoped as unknown as { eq: (c: string, v: string) => unknown }).eq("placed_by", profile.id) : scoped) as T;
   };
 
   const counts = await Promise.all(
@@ -78,9 +85,19 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
 
   return (
     <main className="shell wide">
-      <TopBar title="Order desk" back="/" />
+      <TopBar
+        title="Order desk"
+        back="/"
+        right={
+          <Link href={mine ? "/orders?status=mine" : "/orders"} className="btn sm">
+            <List size={16} /> View orders
+          </Link>
+        }
+      />
       <p className="small muted" style={{ margin: 0 }}>
-        Order placed → customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date and the customer is emailed.
+        {mine
+          ? "The orders you placed, and where each one is: customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date → picked up or delivered."
+          : "Order placed → customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date and the customer is emailed."}
       </p>
 
       {stats ? (
@@ -90,6 +107,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
           branch={branchId}
           tab={sp.tab ?? null}
           branches={branchList.map((b) => ({ id: b.id, name: b.name }))}
+          mine={mine}
         />
       ) : !setupMissing ? (
         <div className="alert warn small">The dashboard needs database update 0024. Ask an admin to run it in Supabase; the order lists below still work.</div>

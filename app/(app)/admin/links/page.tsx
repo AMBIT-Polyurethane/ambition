@@ -5,6 +5,7 @@ import { Icon, ICON_NAMES } from "@/components/icons";
 import { deleteLink, saveLink } from "@/app/(app)/admin/actions";
 import type { LinkRow } from "@/lib/types";
 import { PERMS } from "@/lib/access";
+import { FOLDERS } from "@/lib/home-apps";
 
 export const metadata = { title: "Links & forms" };
 
@@ -40,6 +41,14 @@ function LinkFields({ l }: { l?: LinkRow }) {
         <select className="select sm" name="perm" defaultValue={l?.perm ?? ""}>
           <option value="">Everyone on the team</option>
           {PERMS.map((p) => <option key={p.key} value={p.key}>Only with: {p.label}</option>)}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">Staff home screen</span>
+        <select className="select sm" name="folder" defaultValue={l?.folder ?? ""}>
+          <option value="">Automatic (forms in Employee forms, others in Learn &amp; resources)</option>
+          <option value="main">On the home screen (no folder)</option>
+          {Object.entries(FOLDERS).map(([k, f]) => <option key={k} value={k}>In {f.label}</option>)}
         </select>
       </label>
       <label className="field"><span className="label">Sort</span><input className="input sm" name="sort" type="number" defaultValue={l?.sort ?? 0} /></label>

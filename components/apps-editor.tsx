@@ -8,7 +8,7 @@ import { FormMessage } from "@/components/forms";
 import { saveHomeApps } from "@/app/(app)/profile/actions";
 import type { FormState } from "@/app/(auth)/actions";
 
-type Row = { key: string; label: string; icon: string; color: string; hidden: boolean };
+type Row = { key: string; label: string; icon: string; color: string; hidden: boolean; folder?: string | null };
 
 /** Profile → Your apps: reorder with the arrows, switch apps on or off, then save. */
 export function AppsEditor({ apps }: { apps: Row[] }) {
@@ -41,7 +41,10 @@ export function AppsEditor({ apps }: { apps: Row[] }) {
         {rows.map((r, i) => (
           <div key={r.key} className={`row-app${r.hidden ? " off" : ""}`}>
             <span className="app-ic" style={{ ["--c" as string]: r.color }}><Icon name={r.icon} size={20} /></span>
-            <span className="name">{r.label}</span>
+            <span className="name">
+              {r.label}
+              {r.folder ? <span className="tiny faint" style={{ display: "block", fontWeight: 600 }}>In {r.folder}</span> : null}
+            </span>
             <button type="button" className="mv" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${r.label} up`}><ArrowUp size={16} /></button>
             <button type="button" className="mv" onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label={`Move ${r.label} down`}><ArrowDown size={16} /></button>
             <button type="button" className="switch" role="switch" aria-checked={!r.hidden} aria-label={`Show ${r.label} on my home screen`} onClick={() => toggle(i)} />
