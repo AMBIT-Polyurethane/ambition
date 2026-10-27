@@ -119,8 +119,8 @@ const SECTIONS: Section[] = [
 - Warehouse manager: "Daily spot check" (one item a day to count, see below; a red alert when a day was missed) and "This week" (a 7-day calendar for their location: blue dots = pickups, orange = deliveries, green = incoming trucks; tap a day to see them; anything late shows on today in red; "+ Expected delivery" adds an incoming truck).
 - Order desk (CRM): "Your order desk" (orders needing a Sales Order # and Invoice #, released and needing a date, picking up or delivering today, past their date, waiting on the customer) and "This week".
 - Accounting / credit approvals: "Credit approvals" (credit checks waiting, credit holds, tax certificates to verify or expiring).
-- Sales reps: "Your month" (their orders this month in dollars against the same point last month, their monthly goal with a marker for where the month is, and customers overdue to order). An admin sets the goal in Admin > Accounts (Monthly sales goal).
-- Admins: "Waiting on you" (inventory counts to approve, credit applications, access requests, staff needing a job role, tax certificates), "Sales" (this month by location and the top 5 products, against last month) and "Inventory movement" (what's ordered more or less than the 30 days before, and each location's spot check today).
+- Sales reps: "Your month" (how many orders they've placed this month against the same point last month, the list-price dollars, their monthly goal with a marker for where the month is, and customers overdue to order). An admin sets the goal in Admin > Accounts (Monthly sales goal).
+- Admins: "Waiting on you" (inventory counts to approve, credit applications, access requests, staff needing a job role, tax certificates), "Sales" (orders placed this month against the same point last month, by location, and the top 3 products by how many orders had them) and "Inventory movement" (what's ordered more or less than the 30 days before, and each location's spot check today).
 Sales numbers are orders placed in the app at list price; QuickBooks invoiced sales come later.`,
   },
   {

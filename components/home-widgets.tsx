@@ -32,6 +32,21 @@ type TaxCounts = ReturnType<typeof taxCounts>;
 export type HomeKnown = { access: number; roles: number; apps: number; due: DueCustomer[] | null; tax: TaxCounts | null };
 const whole = (n: number) => money(Math.round(n)).replace(/\.00$/, "");
 const pct = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : null);
+/** $20,611 → $20.6k (for tight spots). */
+const short = (n: number) => (n >= 1000 ? `$${Number((n / 1000).toFixed(n >= 100000 ? 0 : 1))}k` : whole(n));
+const ordersWord = (n: number) => `${n} ${n === 1 ? "order" : "orders"}`;
+/** "↑ 12% vs. this point last month" (orders), or nothing when there's nothing to compare with. */
+function Versus({ now, last }: { now: number; last: number }) {
+  const change = pct(now, last);
+  if (change === null) return null;
+  return (
+    <>
+      {" · "}
+      {change >= 0 ? <ArrowUpRight size={13} aria-hidden="true" /> : <ArrowDownRight size={13} aria-hidden="true" />}
+      {Math.abs(change)}% vs. this point last month ({last})
+    </>
+  );
+}
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
 
 function Card({ title, href, link, children, tone }: { title: string; href?: string; link?: string; children: React.ReactNode; tone?: "warn" | "err" }) {
@@ -151,18 +166,15 @@ async function CreditWidget({ db, t }: { db: Db; t: TaxCounts | null }) {
 // ------------------------------------------------------------------ Sales rep: my month
 async function MyMonthWidget({ db, profile, due }: { db: Db; profile: Profile; due: DueCustomer[] | null }) {
   const m = await myMonth(db, profile);
-  const change = pct(m.total, m.last);
   const pace = m.goal ? m.total / m.goal : null;
   const expected = m.dayOfMonth / m.daysIn; // where the month is
   return (
     <Card title="Your month" href="/orders?status=mine" link="My orders">
       <div className="wg-big">
-        <b>{whole(m.total)}</b>
+        <b>{ordersWord(m.orders)}</b>
         <span className="small muted">
-          {m.orders} {m.orders === 1 ? "order" : "orders"} so far
-          {change !== null ? (
-            <> · {change >= 0 ? <ArrowUpRight size={13} aria-hidden="true" /> : <ArrowDownRight size={13} aria-hidden="true" />}{Math.abs(change)}% vs. this point last month</>
-          ) : null}
+          {whole(m.total)} at list price
+          <Versus now={m.orders} last={m.lastOrders} />
         </span>
       </div>
       {m.goal ? (
@@ -216,29 +228,26 @@ async function WaitingWidget({ db, known }: { db: Db; known: HomeKnown }) {
 
 async function SalesWidget({ db }: { db: Db }) {
   const s = await salesSummary(db);
-  const change = pct(s.total, s.last);
-  const max = Math.max(1, ...s.byBranch.map((b) => b.total));
+  const max = Math.max(1, ...s.byBranch.map((b) => b.orders));
   const topMax = Math.max(1, ...s.top.slice(0, 3).map((t) => t.orders));
   return (
     <Card title={`Sales · ${s.month}`} href="/orders/desk?r=30" link="Order desk">
       <div className="wg-big">
-        <b>{whole(s.total)}</b>
+        <b>{ordersWord(s.orders)}</b>
         <span className="small muted">
-          {s.orders} {s.orders === 1 ? "order" : "orders"} so far
-          {change !== null ? (
-            <> · {change >= 0 ? <ArrowUpRight size={13} aria-hidden="true" /> : <ArrowDownRight size={13} aria-hidden="true" />}{Math.abs(change)}% vs. this point last month ({whole(s.last)})</>
-          ) : null}
+          {whole(s.total)} at list price
+          <Versus now={s.orders} last={s.lastOrders} />
         </span>
       </div>
       {s.byBranch.length ? (
         <>
-          <div className="wg-sub">By location <span className="lc">· orders</span></div>
+          <div className="wg-sub">By location</div>
           <div className="wg-bars">
             {s.byBranch.map((b) => (
               <Link key={b.id} href={`/orders?b=${b.id}&from=${todayCentral().slice(0, 8)}01&to=${todayCentral()}`} className="wg-bar">
                 <span className="nm">{b.name}</span>
-                <span className="track"><i style={{ width: `${(b.total / max) * 100}%` }} /></span>
-                <span className="v">{whole(b.total)} <span className="faint">· {b.orders}</span></span>
+                <span className="track"><i style={{ width: `${(b.orders / max) * 100}%` }} /></span>
+                <span className="v">{ordersWord(b.orders)}{b.total > 0 ? <span className="faint"> · {short(b.total)}</span> : null}</span>
               </Link>
             ))}
           </div>

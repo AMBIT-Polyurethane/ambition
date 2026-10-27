@@ -147,6 +147,7 @@ export type SalesSummary = {
   total: number;
   orders: number;
   last: number;
+  lastOrders: number;
   byBranch: { id: string; name: string; total: number; orders: number }[];
   top: { sku: string; name: string; total: number; qty: number; unit: string; orders: number }[];
   month: string;
@@ -178,7 +179,7 @@ export async function salesSummary(db: Db): Promise<SalesSummary> {
   const byBranch = [...names.keys(), "dropship"]
     .filter((k) => by.has(k))
     .map((k) => ({ id: k, name: k === "dropship" ? "Drop ship" : names.get(k) ?? k, ...by.get(k)! }))
-    .sort((a, b) => b.total - a.total);
+    .sort((a, b) => b.orders - a.orders || b.total - a.total);
   // Top products by how many orders had them: spray foam and other customer-priced items have no price in the app,
   // and drums, bags and cases don't add up, so the count of orders is the fair way to rank them.
   const prod = new Map<string, { sku: string; name: string; total: number; qty: number; unit: string; ids: Set<string> }>();
@@ -198,6 +199,7 @@ export async function salesSummary(db: Db): Promise<SalesSummary> {
     total: now.reduce((a, o) => a + o.est_subtotal, 0),
     orders: now.length,
     last: last.reduce((a, o) => a + o.est_subtotal, 0),
+    lastOrders: last.length,
     byBranch,
     top,
     month,
@@ -215,6 +217,7 @@ export async function myMonth(db: Db, profile: Pick<Profile, "id"> & { monthly_g
     total: now.reduce((a, o) => a + o.est_subtotal, 0),
     orders: now.length,
     last: last.reduce((a, o) => a + o.est_subtotal, 0),
+    lastOrders: last.length,
     goal: profile.monthly_goal ? Number(profile.monthly_goal) : null,
     dayOfMonth: d.getUTCDate(),
     daysIn,
