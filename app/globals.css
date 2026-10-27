@@ -1689,9 +1689,10 @@ button.app { background: none; border: 0; padding: 0; font: inherit; cursor: poi
 .dot-badge.static { position: static; }
 
 /* ---- Home widgets: a few cards that answer "what needs me today?" ---- */
-.widgets { --wc1: #3987e5; --wc2: #d95926; --wc3: #199e70; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
-:root[data-theme="light"] .widgets { --wc1: #2a78d6; --wc2: #eb6834; --wc3: #1baf7a; }
-@media (prefers-color-scheme: light) { :root[data-theme="system"] .widgets { --wc1: #2a78d6; --wc2: #eb6834; --wc3: #1baf7a; } }
+.board, .widgets { --wc1: #3987e5; --wc2: #d95926; --wc3: #199e70; }
+.widgets { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+:root[data-theme="light"] .widgets, :root[data-theme="light"] .board { --wc1: #2a78d6; --wc2: #eb6834; --wc3: #1baf7a; }
+@media (prefers-color-scheme: light) { :root[data-theme="system"] .widgets, :root[data-theme="system"] .board { --wc1: #2a78d6; --wc2: #eb6834; --wc3: #1baf7a; } }
 @media (min-width: 1024px) { .widgets { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); } }
 .wg { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 14px 16px 16px; background: var(--s1); border: 1px solid var(--line); border-radius: 18px; }
 .wg.err { border-color: color-mix(in srgb, var(--red) 55%, var(--line)); }
@@ -1806,3 +1807,59 @@ button.app { background: none; border: 0; padding: 0; font: inherit; cursor: poi
 .goal-table td .gbar { margin-top: 5px; height: 6px; }
 .tbl-wrap { overflow-x: auto; max-width: 100%; }
 .price-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 650; font-size: 14px; line-height: 1.3; }
+
+/* ---- Home board: masonry on a computer, one column on a phone; Customize to move and hide cards ---- */
+.board { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 14px; row-gap: 0; align-items: start; }
+.board > .slot { min-width: 0; padding-bottom: 14px; }
+.board > .slot:has(> .slot-in > .slot-body:empty) { padding-bottom: 0; }
+.board > .slot:last-child { padding-bottom: 0; }
+.board[data-masonry] > .slot:last-child { padding-bottom: 14px; }
+@media (min-width: 1024px) {
+  .board { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .board[data-masonry] { grid-auto-rows: 8px; }
+  .board > .slot.wide { grid-column: 1 / -1; }
+}
+.board.editing { padding-bottom: 130px; }
+.board.editing > .slot { cursor: grab; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.board.editing .slot-in { border-radius: 20px; outline: 2px dashed var(--line-hover); outline-offset: 3px; }
+.board.editing .slot-body { max-height: 190px; overflow: hidden; pointer-events: none; -webkit-mask-image: linear-gradient(#000 55%, transparent); mask-image: linear-gradient(#000 55%, transparent); }
+.slot-bar { display: flex; align-items: center; gap: 4px; padding: 6px 6px 8px 0; font-size: 14px; }
+.slot-grip { display: grid; place-items: center; width: 36px; height: 36px; flex: none; touch-action: none; color: var(--text3); cursor: grab; }
+.board .slot.off .slot-in { opacity: 0.6; }
+.slot-hidden { padding: 14px; border: 1px dashed var(--line); border-radius: 14px; }
+.board .slot.dragging .slot-in { opacity: 0.35; outline-color: var(--red); }
+.board.is-dragging, .board.is-dragging * { cursor: grabbing !important; }
+.iconbtn.eye-off { color: var(--red-text); }
+.board-ghost { position: fixed; left: 0; top: 0; z-index: 80; pointer-events: none; display: flex; align-items: center; gap: 8px; width: min(320px, 78vw); padding: 14px 16px; border-radius: 16px; background: var(--s1); color: var(--text); border: 2px solid var(--red); box-shadow: var(--shadow); font-size: 15px; will-change: transform; }
+.board-bar { position: fixed; left: 12px; right: 12px; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 10px); z-index: 70; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-radius: 18px; background: var(--s1); border: 1px solid var(--line); box-shadow: var(--shadow); }
+@media (min-width: 1024px) { .board-bar { left: calc(var(--side, 0px) + 24px); right: 24px; bottom: 24px; } }
+.board-customize { align-self: center; display: inline-flex; gap: 8px; align-items: center; background: none; border: 1px dashed var(--line); color: var(--text3); border-radius: 999px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.board-customize:hover { color: var(--text); border-color: var(--line-hover); }
+
+/* ---- Outlook cards ---- */
+.ol-connect { display: flex; flex-direction: column; gap: 10px; }
+.ol-count { display: flex; align-items: baseline; gap: 8px; }
+.ol-count b { font-size: 28px; font-weight: 850; line-height: 1; font-variant-numeric: tabular-nums; }
+.ol-list { list-style: none; margin: -4px -8px; padding: 0; display: flex; flex-direction: column; }
+.ol-list li a { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 7px 8px; border-radius: 10px; color: var(--text); text-decoration: none; }
+.ol-list li a:hover { background: var(--s2); color: var(--text); }
+.ol-list li a.ol-ev { flex-direction: row; align-items: center; gap: 10px; }
+.ol-from { font-size: 14px; color: var(--text2); display: flex; align-items: center; gap: 6px; }
+.ol-list a.unread .ol-from { color: var(--text); font-weight: 750; }
+.ol-dot { width: 8px; height: 8px; border-radius: 4px; background: var(--wc1, #3987e5); flex: none; }
+.ol-subj { color: var(--text2); }
+.ol-list a.unread .ol-subj { color: var(--text); }
+.ol-agenda { display: flex; flex-direction: column; gap: 10px; }
+.ol-day { display: flex; flex-direction: column; gap: 6px; }
+.ol-time { flex: none; width: 64px; font-size: 13px; font-weight: 750; color: var(--text2); font-variant-numeric: tabular-nums; }
+.ol-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 2px; border-top: 1px solid var(--line); padding-top: 10px; }
+.ol-foot .linkbtn { flex: none; }
+@media (min-width: 1024px) {
+  /* In a board column: rails and the banner scroll inside the card instead of bleeding to the page edge. */
+  .board .rail { margin: 0; padding: 0 0 4px; scroll-padding: 0; }
+  .board .promo-track { margin: 0; padding: 0; scroll-padding: 0; }
+  .board .promo-cell { flex-basis: 100%; }
+  .board .promo-nav.prev { left: 8px; }
+  .board .promo-nav.next { right: 8px; }
+  .board .apps-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

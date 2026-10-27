@@ -12,8 +12,8 @@ import { serviceClient, serviceReady } from "@/lib/supabase/service";
 export const MS_SCOPES = "offline_access User.Read Files.ReadWrite.All";
 export const MS_ENV = ["MS_TENANT_ID", "MS_CLIENT_ID", "MS_CLIENT_SECRET"] as const;
 
-const LOGIN = () => (process.env.MS_LOGIN_URL || "https://login.microsoftonline.com").replace(/\/$/, "");
-const GRAPH = () => (process.env.MS_GRAPH_URL || "https://graph.microsoft.com/v1.0").replace(/\/$/, "");
+export const LOGIN = () => (process.env.MS_LOGIN_URL || "https://login.microsoftonline.com").replace(/\/$/, "");
+export const GRAPH = () => (process.env.MS_GRAPH_URL || "https://graph.microsoft.com/v1.0").replace(/\/$/, "");
 const env = (k: (typeof MS_ENV)[number]) => (process.env[k] ?? "").trim();
 
 /** Vercel settings still to add before the connection can work. */
@@ -70,25 +70,31 @@ export async function msDisconnect() {
 }
 
 /** Where "Connect Microsoft" sends the admin to sign in and allow access. */
-export function msAuthorizeUrl(redirectUri: string, state: string): string {
+export function msAuthorizeUrl(redirectUri: string, state: string, scope: string = MS_SCOPES, loginHint?: string | null): string {
   const u = new URL(`${LOGIN()}/${encodeURIComponent(env("MS_TENANT_ID"))}/oauth2/v2.0/authorize`);
   u.searchParams.set("client_id", env("MS_CLIENT_ID"));
   u.searchParams.set("response_type", "code");
   u.searchParams.set("redirect_uri", redirectUri);
   u.searchParams.set("response_mode", "query");
-  u.searchParams.set("scope", MS_SCOPES);
+  u.searchParams.set("scope", scope);
   u.searchParams.set("state", state);
   u.searchParams.set("prompt", "select_account");
+  if (loginHint) u.searchParams.set("login_hint", loginHint);
   return u.toString();
 }
 
-type TokenReply = { access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string };
+export type TokenReply = { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; error?: string; error_description?: string };
 
-async function tokenCall(params: Record<string, string>): Promise<TokenReply> {
+/** Microsoft's token endpoint (a sign-in code or a refresh token in, tokens out), for the given permissions. */
+export async function msTokenCall(params: Record<string, string>, scope: string): Promise<TokenReply> {
+  return tokenCall(params, scope);
+}
+
+async function tokenCall(params: Record<string, string>, scope: string = MS_SCOPES): Promise<TokenReply> {
   const res = await fetch(`${LOGIN()}/${encodeURIComponent(env("MS_TENANT_ID"))}/oauth2/v2.0/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: env("MS_CLIENT_ID"), client_secret: env("MS_CLIENT_SECRET"), scope: MS_SCOPES, ...params }),
+    body: new URLSearchParams({ client_id: env("MS_CLIENT_ID"), client_secret: env("MS_CLIENT_SECRET"), scope, ...params }),
     cache: "no-store",
   });
   const json = (await res.json().catch(() => ({}))) as TokenReply;

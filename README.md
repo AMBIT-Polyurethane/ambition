@@ -278,6 +278,25 @@ before, spot checks per location).
 
 Home "Jump back in" checks remembered orders with `openOrders()` and drops deleted, cancelled and completed ones.
 
+### Home board (Customize) and Outlook
+
+Everything below the greeting on Home is one board (`components/home-board.tsx`): the job cards (`roleCards()` in
+`components/home-widgets.tsx`), Outlook calendar and inbox, News & sales (banner), Your apps, Place an order, Jump back
+in, Tech bulletins, AMBIT products and Keep learning. On a computer it's a masonry wall: CSS grid with 8px rows, each
+card spanning as many rows as it is tall (measured with a ResizeObserver), so cards tuck up under each other; on a
+phone it's one column. "Customize" (the grid button in the Home header, or "Customize Home" under the board): drag
+(mouse) or press-and-hold then drag (touch) to move a card, arrows for keyboard, the eye hides it; saved to
+`profiles.home_layout` (`saveHomeLayout`, 0029) and merged with the cards a person has by `arrangeBoard()`
+(`lib/home-board.ts`). Hidden cards aren't loaded.
+
+Outlook (`lib/outlook.ts`, `components/outlook-widgets.tsx`): each staff member taps "Connect Outlook"
+(`/api/microsoft/outlook`), signs in with their Microsoft 365 account and allows `Mail.Read Calendars.Read`
+(read only); Microsoft returns to the already-registered `/api/microsoft/callback`, which sees the `ms_oauth_for=outlook`
+cookie and stores that person's tokens in `user_ms_tokens` (RLS, no policies: server key only). The cards read the
+inbox (unread count + newest 6) and the next 7 days of calendar (`calendarView`, Central time; Jacksonville Eastern).
+Setup (once, Microsoft Entra → App registrations → AMBIT Intelligence → API permissions): add Microsoft Graph delegated
+`Mail.Read` and `Calendars.Read`, then "Grant admin consent".
+
 ### Customer approval
 
 Orders AMBIT staff place for a customer are emailed to the customer first, with a secure link (valid 7 days)

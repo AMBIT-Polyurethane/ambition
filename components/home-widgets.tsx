@@ -51,12 +51,16 @@ function Versus({ now, last }: { now: number; last: number }) {
 }
 const dayLabel = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
 
-function Card({ title, href, link, children, tone }: { title: string; href?: string; link?: string; children: React.ReactNode; tone?: "warn" | "err" }) {
+export function Card({ title, href, link, children, tone, external }: { title: string; href?: string; link?: string; children: React.ReactNode; tone?: "warn" | "err"; external?: boolean }) {
   return (
     <section className={`wg${tone ? ` ${tone}` : ""}`}>
       <div className="wg-head">
         <span className="wg-title">{title}</span>
-        {href ? (
+        {href && external ? (
+          <a href={href} className="wg-link" target="_blank" rel="noopener noreferrer">
+            {link ?? "Open"} <ChevronRight size={14} />
+          </a>
+        ) : href ? (
           <Link href={href} className="wg-link">
             {link ?? "Open"} <ChevronRight size={14} />
           </Link>
@@ -67,7 +71,7 @@ function Card({ title, href, link, children, tone }: { title: string; href?: str
   );
 }
 
-function Loading({ title }: { title: string }) {
+export function Loading({ title }: { title: string }) {
   return (
     <section className="wg" aria-busy="true">
       <div className="wg-head"><span className="wg-title">{title}</span></div>
@@ -331,56 +335,35 @@ async function MovementWidget({ db }: { db: Db }) {
 }
 
 // ------------------------------------------------------------------ the set for this person
-export async function HomeWidgets({ db, profile, known }: { db: Db; profile: Profile; known: HomeKnown }) {
+/** A card on the Home board: its key (saved in the person's layout), its name in Customize, and what it shows. */
+export type BoardCard = { key: string; title: string; node: React.ReactNode };
+
+/**
+ * The cards for this person's job. A card they've hidden is listed (so Customize can show it again) but not loaded.
+ */
+export async function roleCards({ db, profile, known, skip }: { db: Db; profile: Profile; known: HomeKnown; skip: Set<string> }): Promise<BoardCard[]> {
   const w = widgetsFor(profile);
-  if (!w.admin && !w.spot && !w.calendar && !w.queue && !w.credit && !w.goals) return null;
-  const branches = w.spot || w.calendar ? await inventoryBranches(db, profile).catch(() => []) : [];
+  const branches = (w.spot && !skip.has("spot")) || (w.calendar && !skip.has("calendar")) ? await inventoryBranches(db, profile).catch(() => []) : [];
   const own = branches[0];
   const branch = own?.id ?? profile.branch_id ?? null;
   const branchName = own?.name ?? (branch ? branch.toUpperCase() : "");
-  return (
-    <section className="widgets" aria-label="Today">
-      {w.spot && own ? (
-        <Suspense fallback={<Loading title="Daily spot check" />}>
-          <SpotWidget db={db} branch={own.id} branchName={own.name} />
-        </Suspense>
-      ) : null}
-      {w.queue ? (
-        <Suspense fallback={<Loading title="Your order desk" />}>
-          <QueueWidget db={db} />
-        </Suspense>
-      ) : null}
-      {w.credit ? (
-        <Suspense fallback={<Loading title="Credit approvals" />}>
-          <CreditWidget db={db} t={known.tax} />
-        </Suspense>
-      ) : null}
-      {w.goals ? (
-        <Suspense fallback={<Loading title="Your sales goals" />}>
-          <GoalsWidget db={db} profile={profile} due={profile.job_role === "sales_rep" ? known.due : null} />
-        </Suspense>
-      ) : null}
-      {w.calendar && branch ? (
-        <Suspense fallback={<Loading title="This week" />}>
-          <CalendarWidget db={db} branch={branch} branchName={branchName} canAdd={w.spot || profile.role === "admin"} />
-        </Suspense>
-      ) : null}
-      {w.admin ? (
-        <>
-          <Suspense fallback={<Loading title="Waiting on you" />}>
-            <WaitingWidget db={db} known={known} />
-          </Suspense>
-          <Suspense fallback={<Loading title="Sales goals" />}>
-            <TeamGoalsWidget db={db} />
-          </Suspense>
-          <Suspense fallback={<Loading title="Sales" />}>
-            <SalesWidget db={db} />
-          </Suspense>
-          <Suspense fallback={<Loading title="Inventory movement" />}>
-            <MovementWidget db={db} />
-          </Suspense>
-        </>
-      ) : null}
-    </section>
-  );
+  const card = (key: string, title: string, node: () => React.ReactNode): BoardCard => ({
+    key,
+    title,
+    node: skip.has(key) ? null : <Suspense fallback={<Loading title={title} />}>{node()}</Suspense>,
+  });
+  const out: BoardCard[] = [];
+  if (w.spot && (own || skip.has("spot"))) out.push(card("spot", "Daily spot check", () => (own ? <SpotWidget db={db} branch={own.id} branchName={own.name} /> : null)));
+  if (w.queue) out.push(card("queue", "Your order desk", () => <QueueWidget db={db} />));
+  if (w.credit) out.push(card("credit", "Credit approvals", () => <CreditWidget db={db} t={known.tax} />));
+  if (w.goals) out.push(card("goals", "Your sales goals", () => <GoalsWidget db={db} profile={profile} due={profile.job_role === "sales_rep" ? known.due : null} />));
+  if (w.calendar && (branch || skip.has("calendar")))
+    out.push(card("calendar", "This week", () => (branch ? <CalendarWidget db={db} branch={branch} branchName={branchName} canAdd={w.spot || profile.role === "admin"} /> : null)));
+  if (w.admin) {
+    out.push(card("waiting", "Waiting on you", () => <WaitingWidget db={db} known={known} />));
+    out.push(card("teamgoals", "Sales goals", () => <TeamGoalsWidget db={db} />));
+    out.push(card("sales", "Sales", () => <SalesWidget db={db} />));
+    out.push(card("movement", "Inventory movement", () => <MovementWidget db={db} />));
+  }
+  return out;
 }

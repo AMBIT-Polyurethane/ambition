@@ -16,7 +16,12 @@ import { reorderCount } from "@/lib/inventory/view";
 import { customersDue, reorderNudge } from "@/lib/reorder";
 import { companyTax, taxCounts, taxOverview } from "@/lib/tax-server";
 import { widgetsFor } from "@/lib/widgets";
-import { HomeWidgets } from "@/components/home-widgets";
+import { roleCards, type BoardCard } from "@/components/home-widgets";
+import { OutlookCalendarWidget, OutlookMailWidget } from "@/components/outlook-widgets";
+import { CustomizeButton, HomeBoard } from "@/components/home-board";
+import { arrangeBoard, parseHomeLayout } from "@/lib/home-board";
+import { Suspense } from "react";
+import { Loading } from "@/components/home-widgets";
 import type { Course, DocumentRow, Order } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -137,6 +142,157 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const tsbNo = (d: Pick<DocumentRow, "code" | "title">) => (d.code ?? d.title).match(/(\d{1,4})/)?.[1] ?? "TSB";
   const tsbTitle = (t: string) => t.replace(/^TSB[\s-]*\d+\s*[:\-–·]?\s*/i, "") || t;
 
+  // ---- The Home board: every card, in the order this person chose (Customize), minus the ones they hid.
+  const saved = parseHomeLayout(profile.home_layout);
+  const skip = new Set(saved?.hidden ?? []);
+  const show = (key: string, node: () => React.ReactNode) => (skip.has(key) ? null : node());
+  const roles = await roleCards({ db: supabase, profile, known: { access: pending, roles: noRole, apps: waitingApps, due, tax }, skip });
+  const cards: BoardCard[] = [...roles];
+  if (emp) {
+    cards.push({
+      key: "outlook-cal",
+      title: "Outlook calendar",
+      node: show("outlook-cal", () => (
+        <Suspense fallback={<Loading title="Outlook calendar" />}>
+          <OutlookCalendarWidget profile={profile} />
+        </Suspense>
+      )),
+    });
+    cards.push({
+      key: "outlook-mail",
+      title: "Outlook inbox",
+      node: show("outlook-mail", () => (
+        <Suspense fallback={<Loading title="Outlook inbox" />}>
+          <OutlookMailWidget profile={profile} />
+        </Suspense>
+      )),
+    });
+  }
+  if (promos.length) cards.push({ key: "promo", title: "News & sales", node: show("promo", () => <PromoBanner slides={promos} />) });
+  cards.push({
+    key: "apps",
+    title: "Your apps",
+    node: show("apps", () => (
+      <section className="section">
+        <div className="row between" style={{ alignItems: "baseline" }}>
+          <span className="sec-title">Your apps</span>
+          <Link href="/profile/apps" className="sec-link">Edit</Link>
+        </div>
+        <HomeGrid tiles={homeTiles(apps)} />
+      </section>
+    )),
+  });
+  if (canOrder) {
+    cards.push({
+      key: "order",
+      title: "Place an order",
+      node: show("order", () => (
+        <section className="order-card">
+          <img src="/brand/atom-mark.png" alt="" className="atom" />
+          <span className="kick">Order</span>
+          <h2 className="big">Place an Order</h2>
+          <div className="btns">
+            <Link href="/order" className="b1"><Plus size={18} strokeWidth={2.6} /> Start order</Link>
+            {lastOrder ? (
+              <Link href={`/order?reorder=${lastOrder.id}`} className="b2"><RefreshCw size={17} strokeWidth={2.4} /> Reorder</Link>
+            ) : null}
+          </div>
+          {lastOrder ? (
+            <Link href={`/orders/${lastOrder.id}`} className="last">
+              <span className="lk">Last</span>
+              <span className="grow ellipsis">
+                {orderNo(lastOrder.order_no)}
+                {emp ? ` · ${lastOrder.company_name}` : ""} · {lastOrder.order_items.length} {lastOrder.order_items.length === 1 ? "item" : "items"} · {dateShort(lastOrder.created_at)}
+              </span>
+              <ChevronRight size={16} />
+            </Link>
+          ) : (
+            <span className="last" style={{ opacity: 0.85 }}>Your past orders show here, ready to reorder in one tap.</span>
+          )}
+        </section>
+      )),
+    });
+  }
+  cards.push({ key: "jump", title: "Jump back in", node: show("jump", () => <JumpBackIn uid={profile.id} />) });
+  if (tsbs.length) {
+    cards.push({
+      key: "tsb",
+      title: "Tech bulletins",
+      node: show("tsb", () => (
+        <section className="section">
+          <div className="row between" style={{ alignItems: "baseline" }}>
+            <span className="sec-title">Tech bulletins</span>
+            <Link href="/docs?type=tsb" className="sec-link">Show all</Link>
+          </div>
+          <div className="rail">
+            {tsbs.map((d) => (
+              <RecentLink
+                key={d.id}
+                uid={profile.id}
+                className="tsb-card"
+                item={{ kind: "tsb", href: `/docs/open/${d.id}`, title: tsbTitle(d.title), sub: "Bulletin", code: tsbNo(d), external: true }}
+              >
+                <span className="cover">
+                  <span className="kk">AMBIT TSB</span>
+                  <span className="num">{tsbNo(d)}</span>
+                </span>
+                <span className="tt">{tsbTitle(d.title)}</span>
+              </RecentLink>
+            ))}
+          </div>
+        </section>
+      )),
+    });
+  }
+  if (products.length) {
+    cards.push({
+      key: "products",
+      title: "AMBIT products",
+      node: show("products", () => (
+        <section className="section">
+          <div className="row between" style={{ alignItems: "baseline" }}>
+            <span className="sec-title">AMBIT products</span>
+            <Link href="/docs" className="sec-link">TDS · SDS · ESR</Link>
+          </div>
+          <div className="rail">
+            {products.map(([name, n], i) => {
+              const [c1, c2] = PRODUCT_ART[i % PRODUCT_ART.length];
+              return (
+                <Link key={name} className="prod-card" href={`/docs?product=${encodeURIComponent(name)}`} style={{ background: `linear-gradient(140deg, ${c1} 0%, ${c2} 100%)` }}>
+                  <span className="pk">{n} {n === 1 ? "doc" : "docs"}</span>
+                  <span className="pn">{name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )),
+    });
+  }
+  if (course) {
+    cards.push({
+      key: "learn",
+      title: "Keep learning",
+      node: show("learn", () => (
+        <section className="section">
+          <span className="sec-title">Keep learning</span>
+          {course.status === "live" && course.url ? (
+            <a className="learn" href={course.url} target="_blank" rel="noopener noreferrer">
+              <LearnInner course={course} />
+            </a>
+          ) : (
+            <Link className="learn" href="/academy">
+              <LearnInner course={course} />
+            </Link>
+          )}
+        </section>
+      )),
+    });
+  }
+  const defaults = cards.map((c) => c.key);
+  const layout = arrangeBoard(defaults, saved);
+  const board = cards.map((c) => ({ key: c.key, title: c.title, node: c.node }));
+
   return (
     <main className="shell home">
       <header className="row between" style={{ paddingTop: 8 }}>
@@ -148,6 +304,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               {newOrders > 0 ? <span className="dot-badge">{newOrders}</span> : null}
             </Link>
           ) : null}
+          <CustomizeButton />
           <Link href="/profile" className="avatar grad" aria-label="Profile">{initials(profile.full_name, profile.email)}</Link>
         </div>
       </header>
@@ -168,6 +325,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       ) : null}
 
       {sp.password === "updated" ? <div className="alert ok">Your password was updated.</div> : null}
+      {sp.outlook ? <div className="alert ok small" role="status">Outlook connected ({sp.outlook}). Your inbox and calendar show below.</div> : null}
+      {sp.outlook_err ? <div className="alert err small" role="alert">{sp.outlook_err}</div> : null}
       {sp.welcome ? (
         <div className="alert ok">You&apos;re all set. Welcome to AMBIT Intelligence! Tip: on your phone, use Share → &ldquo;Add to Home Screen&rdquo; to open it like an app.</div>
       ) : null}
@@ -243,9 +402,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Link>
       ) : null}
 
-      {/* What needs this person today, by job (warehouse, order desk, accounting, sales, admin). */}
-      <HomeWidgets db={supabase} profile={profile} known={{ access: pending, roles: noRole, apps: waitingApps, due, tax }} />
-
       {/* Smart reorder: "You usually order 4 drums of AMBI-SEAL 5.0 every 3 weeks." */}
       {nudge ? (
         <section className="smart-card">
@@ -263,108 +419,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </section>
       ) : null}
 
-      <PromoBanner slides={promos} />
-
-      {/* Your apps */}
-      <section className="section">
-        <div className="row between" style={{ alignItems: "baseline" }}>
-          <span className="sec-title">Your apps</span>
-          <Link href="/profile/apps" className="sec-link">Edit</Link>
-        </div>
-        <HomeGrid tiles={homeTiles(apps)} />
-      </section>
-
-      {/* Order: start a new one or repeat the last one */}
-      {canOrder ? (
-        <section className="order-card">
-          <img src="/brand/atom-mark.png" alt="" className="atom" />
-          <span className="kick">Order</span>
-          <h2 className="big">Place an Order</h2>
-          <div className="btns">
-            <Link href="/order" className="b1"><Plus size={18} strokeWidth={2.6} /> Start order</Link>
-            {lastOrder ? (
-              <Link href={`/order?reorder=${lastOrder.id}`} className="b2"><RefreshCw size={17} strokeWidth={2.4} /> Reorder</Link>
-            ) : null}
-          </div>
-          {lastOrder ? (
-            <Link href={`/orders/${lastOrder.id}`} className="last">
-              <span className="lk">Last</span>
-              <span className="grow ellipsis">
-                {orderNo(lastOrder.order_no)}
-                {emp ? ` · ${lastOrder.company_name}` : ""} · {lastOrder.order_items.length} {lastOrder.order_items.length === 1 ? "item" : "items"} · {dateShort(lastOrder.created_at)}
-              </span>
-              <ChevronRight size={16} />
-            </Link>
-          ) : (
-            <span className="last" style={{ opacity: 0.85 }}>Your past orders show here, ready to reorder in one tap.</span>
-          )}
-        </section>
-      ) : null}
-
-      <JumpBackIn uid={profile.id} />
-
-      {/* Tech bulletins */}
-      {tsbs.length ? (
-        <section className="section">
-          <div className="row between" style={{ alignItems: "baseline" }}>
-            <span className="sec-title">Tech bulletins</span>
-            <Link href="/docs?type=tsb" className="sec-link">Show all</Link>
-          </div>
-          <div className="rail">
-            {tsbs.map((d) => (
-              <RecentLink
-                key={d.id}
-                uid={profile.id}
-                className="tsb-card"
-                item={{ kind: "tsb", href: `/docs/open/${d.id}`, title: tsbTitle(d.title), sub: "Bulletin", code: tsbNo(d), external: true }}
-              >
-                <span className="cover">
-                  <span className="kk">AMBIT TSB</span>
-                  <span className="num">{tsbNo(d)}</span>
-                </span>
-                <span className="tt">{tsbTitle(d.title)}</span>
-              </RecentLink>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {/* Products */}
-      {products.length ? (
-        <section className="section">
-          <div className="row between" style={{ alignItems: "baseline" }}>
-            <span className="sec-title">AMBIT products</span>
-            <Link href="/docs" className="sec-link">TDS · SDS · ESR</Link>
-          </div>
-          <div className="rail">
-            {products.map(([name, n], i) => {
-              const [c1, c2] = PRODUCT_ART[i % PRODUCT_ART.length];
-              return (
-                <Link key={name} className="prod-card" href={`/docs?product=${encodeURIComponent(name)}`} style={{ background: `linear-gradient(140deg, ${c1} 0%, ${c2} 100%)` }}>
-                  <span className="pk">{n} {n === 1 ? "doc" : "docs"}</span>
-                  <span className="pn">{name}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      {/* Academy */}
-      {course ? (
-        <section className="section">
-          <span className="sec-title">Keep learning</span>
-          {course.status === "live" && course.url ? (
-            <a className="learn" href={course.url} target="_blank" rel="noopener noreferrer">
-              <LearnInner course={course} />
-            </a>
-          ) : (
-            <Link className="learn" href="/academy">
-              <LearnInner course={course} />
-            </Link>
-          )}
-        </section>
-      ) : null}
+      <HomeBoard items={board} defaults={defaults} initial={layout} />
     </main>
   );
 }
