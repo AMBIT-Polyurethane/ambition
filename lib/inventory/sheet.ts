@@ -75,6 +75,28 @@ export function rangeStart(address: string): { top: number; left: number } {
 }
 
 export const at = (g: Grid, row: number, col: number) => g.values[row - g.top]?.[col - g.left];
+export const formulaText = (g: Grid, row: number, col: number): string | null => {
+  const f = g.formulas[row - g.top]?.[col - g.left];
+  return typeof f === "string" && f.startsWith("=") ? f : null;
+};
+
+/**
+ * A formula moved to another row, the way Excel's copy / fill does it: row numbers without a $ move by `delta`,
+ * $-anchored rows stay. Text in "quotes" and 'sheet names' are left alone.
+ */
+export function shiftFormula(f: string, delta: number): string {
+  if (!delta) return f;
+  return f
+    .split(/("(?:[^"]|"")*"|'(?:[^']|'')*')/)
+    .map((part, i) =>
+      i % 2
+        ? part
+        : part.replace(/(?<![A-Za-z0-9_.$])(\$?[A-Z]{1,3})(\$?)(\d+)(?![\d(A-Za-z_])/g, (m, col: string, abs: string, row: string) =>
+            abs ? m : `${col}${Number(row) + delta}`,
+          ),
+    )
+    .join("");
+}
 export const formulaAt = (g: Grid, row: number, col: number) => {
   const f = g.formulas[row - g.top]?.[col - g.left];
   return typeof f === "string" && f.startsWith("=");
@@ -214,6 +236,8 @@ export type PendingRow = {
   po: string;
   closed: string | null;
   notes: string;
+  /** Line Wt (lbs), when it's filled in. */
+  weight: number | null;
   /** The lot in the Notes ("[Lot PA86002836]"), "" for "[Lot -]", null when there's none. */
   lot: string | null;
 };
@@ -291,6 +315,7 @@ export function parsePendingSheet(g: Grid): PendingSheet {
       po: cellText(get("po")),
       closed: cellDate(get("closed")),
       notes: cellText(get("notes")),
+      weight: cellNum(get("weight")),
       lot: lotInNotes(cellText(get("notes"))),
     });
   }

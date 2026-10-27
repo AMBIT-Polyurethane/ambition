@@ -111,6 +111,15 @@ export class Workbook {
     }
   }
 
+  /** Inserts blank cells at `address` (for example "A11:X11"), pushing what's below down. They take the look of the row above. */
+  async insertDown(sheet: string, address: string) {
+    await graph(`${this.base}/worksheets(${quote(sheet)})/range(address='${address}')/insert`, {
+      method: "POST",
+      body: { shift: "Down" },
+      headers: this.headers,
+    });
+  }
+
   /** Writes a block of cells starting at (row, col). Values are entered as if typed. */
   async write(sheet: string, row: number, col: number, values: unknown[][]) {
     const width = Math.max(...values.map((v) => v.length));

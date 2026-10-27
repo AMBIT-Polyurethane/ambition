@@ -215,7 +215,12 @@ changes in the app:
   Shipped Out, fills in the formula columns on new lot rows, and writes app lines to PENDING ORDERS with the brand
   SKU and "[Lot …]" in Notes (FOAM LOTS' Pending Pickup adds those up). TOTAL IN STOCK for these products on the
   COUNT SHEET is a formula over FOAM LOTS. The app adds the tab itself the first time (from the lots in the
-  database).
+  database). A lot product with lots on FOAM LOTS but no COUNT SHEET row (the Winter resins) gets one right under the
+  row it's a version of (AMB-SEAL-50-W under AMB-SEAL-50): cells A..(last header) are inserted and filled from that row
+  (formulas moved down one row, group / UOM / pack / weight / price / vendor / lead time copied), and the group band's
+  "N items" goes up (`addCountRows`). PENDING PICKUP and NET AVAILABLE are kept as formulas: a typed number or a blank
+  gets the nearest row's formula back, logged (`restoreCountFormulas`). Line Wt on PENDING ORDERS uses the row's own
+  Unit Weight, else the row it's a version of, and is filled in on app lines where it's blank.
 
 Setup (once): Microsoft Entra app registration "AMBIT Intelligence" (Web redirect URI
 `https://<app>/api/microsoft/callback`, delegated permissions Files.ReadWrite.All, offline_access, User.Read, a client

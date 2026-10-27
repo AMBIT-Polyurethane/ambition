@@ -30,6 +30,13 @@ import {
   type PendingSheet,
   type SheetItem,
   type StatusKind,
+  at,
+  cellNum,
+  cellText,
+  formulaText,
+  shiftFormula,
+  type CountSheet,
+  type Grid,
 } from "@/lib/inventory/sheet";
 
 // Two-way sync between a branch's inventory workbook and the app.
@@ -292,8 +299,8 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
     const pendTab = names.find((n) => norm(n) === "pending orders") ?? names.find((n) => norm(n).includes("pending"));
     if (!countTab) throw new Error(`"${file.name}" has no COUNT SHEET tab.`);
     if (!pendTab) throw new Error(`"${file.name}" has no PENDING ORDERS tab.`);
-    const countGrid = await wb.used(countTab);
-    const count = parseCountSheet(countGrid);
+    let countGrid = await wb.used(countTab);
+    let count = parseCountSheet(countGrid);
     const pend = parsePendingSheet(await wb.used(pendTab));
     sum.items = count.items.length;
     sum.duplicates = count.duplicates;
@@ -301,10 +308,21 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
 
     // -------------------------------------------------------------- new items -> products
     const productId = await ensureProducts(db, count.items, sum, log);
-    const itemByKey = new Map(count.items.map((i) => [i.key, i]));
+    let itemByKey = new Map(count.items.map((i) => [i.key, i]));
 
     // -------------------------------------------------------------- FOAM LOTS (added the first time)
     const lots = await syncLotsIn(db, wb, names, cfg, count, countTab, pend, pendTab, productId, sum, log);
+
+    // -------------------------------------------------------------- COUNT SHEET upkeep
+    // Lot products the COUNT SHEET doesn't list (Winter resins) get a row under their Summer row.
+    if (await addCountRows(db, wb, countTab, countGrid, count, lots, sum, log)) {
+      countGrid = await wb.used(countTab);
+      count = parseCountSheet(countGrid);
+      itemByKey = new Map(count.items.map((i) => [i.key, i]));
+      sum.items = count.items.length;
+    }
+    // PENDING PICKUP and NET AVAILABLE always calculate: a number typed over the formula is replaced.
+    await restoreCountFormulas(wb, countTab, countGrid, count, sum, log);
 
     // -------------------------------------------------------------- stock rows for new items
     const inv = await loadInventory(db, branch);
@@ -496,6 +514,144 @@ async function loadInventory(db: SupabaseClient, branch: string): Promise<Map<st
 }
 
 /** SKU on the sheet -> product id. Adds products for SKUs the app doesn't have yet. */
+// ======================================================================================
+// COUNT SHEET upkeep
+
+/** Header text of each COUNT SHEET column, lower case. */
+const countHeaders = (g: Grid, count: CountSheet) => {
+  const out = new Map<number, string>();
+  const width = g.values[count.headerRow - g.top]?.length ?? 0;
+  for (let c = g.left; c < g.left + width; c++) out.set(c, norm(at(g, count.headerRow, c)));
+  return out;
+};
+
+/**
+ * Spray foam counted by lot but missing from the COUNT SHEET (the Winter resins): a row goes in right under the
+ * row it's a version of (AMB-SEAL-50-W under AMB-SEAL-50), with that row's formulas and details, so its stock,
+ * PENDING PICKUP and NET AVAILABLE show there like everything else. Only the table's own columns move down
+ * (lists kept to the right of it stay put). Gives back how many rows went in.
+ */
+async function addCountRows(
+  db: SupabaseClient,
+  wb: Workbook,
+  tab: string,
+  g: Grid,
+  count: CountSheet,
+  lots: Lots,
+  sum: SyncSummary,
+  log: (kind: string, message: string, sku?: string | null, before?: number | null, after?: number | null, by?: string) => void,
+): Promise<number> {
+  if (!lots.sheet || !count.cols.sku || !count.cols.desc) return 0;
+  const listed = new Set(count.items.map((i) => i.key));
+  const want = [...lots.skuKeys]
+    .filter((k) => !listed.has(k))
+    .map((k) => ({ key: k, sib: count.items.filter((i) => k.startsWith(`${i.key}-`)).sort((a, b) => b.key.length - a.key.length)[0] }))
+    .filter((w): w is { key: string; sib: SheetItem } => Boolean(w.sib));
+  if (!want.length) return 0;
+
+  // The table's columns: from the first column to the last header before a gap.
+  const heads = countHeaders(g, count);
+  const first = g.left;
+  let last = count.cols.sku;
+  for (let c = count.cols.sku; heads.has(c) && heads.get(c); c++) last = c;
+  const copyValue = (h: string) =>
+    h === "group" || h === "uom" || h.startsWith("pack") || h.startsWith("unit weight") || h === "sell price" || h.startsWith("preferred vendor") || h.startsWith("vendor") || h.startsWith("lead time");
+
+  const { data: prods } = await db.from("products").select("sku, name").in("sku", want.map((w) => lots.sheet!.rows.find((r) => r.key === w.key)?.sku ?? w.key));
+  const nameOf = new Map(((prods ?? []) as { sku: string; name: string }[]).map((p) => [p.sku.toUpperCase(), p.name]));
+
+  // Bottom first, so the rows above keep their numbers.
+  want.sort((a, b) => b.sib.row - a.sib.row || b.key.localeCompare(a.key));
+  const bands = new Map<number, { col: number; text: string; added: number }>();
+  for (const w of want) {
+    const r0 = w.sib.row;
+    const r = r0 + 1;
+    const sku = lots.sheet.rows.find((x) => x.key === w.key)?.sku ?? w.key;
+    const desc = nameOf.get(w.key) ?? lots.sheet.rows.find((x) => x.key === w.key)?.label ?? sku;
+    const cells: unknown[] = [];
+    for (let c = first; c <= last; c++) {
+      const f = formulaText(g, r0, c);
+      if (c === count.cols.sku) cells.push(sku);
+      else if (c === count.cols.desc) cells.push(desc);
+      else if (f) cells.push(shiftFormula(f, 1));
+      else if (copyValue(heads.get(c) ?? "")) cells.push(at(g, r0, c) ?? "");
+      else cells.push("");
+    }
+    try {
+      await wb.insertDown(tab, `${colLetter(first)}${r}:${colLetter(last)}${r}`);
+    } catch (e) {
+      // Never stops the sync. Said once a day, not every run.
+      const msg = `Couldn't add a COUNT SHEET row for ${sku} (${e instanceof Error ? e.message : String(e)}). Insert a row under ${w.sib.sku} and fill it in like that row, with SKU ${sku} and its Description; the app adds the formulas.`;
+      const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const { count: said } = await db.from("inventory_log").select("id", { count: "exact", head: true }).eq("sku", sku).like("message", "Couldn't add a COUNT SHEET row%").gte("at", since);
+      if (!said) log("error", msg, sku, null, null, "AMBIT A.I.");
+      return 0;
+    }
+    await wb.write(tab, r, first, [cells]);
+    sum.to_sheet++;
+    log("sheet", `${sku} added to the COUNT SHEET under ${w.sib.sku}, so its stock, PENDING PICKUP and NET AVAILABLE show there too.`, sku, null, null, "AMBIT A.I.");
+    // The group's band above it ("AMBIT FOAM · 6 items") counts one more.
+    for (let b = r0 - 1; b > count.headerRow; b--) {
+      if (cellText(at(g, b, count.cols.sku))) continue;
+      let hit = false;
+      for (let c = first; c <= last; c++) {
+        const t = at(g, b, c);
+        if (typeof t === "string" && /\d+\s+items?\b/i.test(t) && !formulaText(g, b, c)) {
+          const prev = bands.get(b);
+          bands.set(b, { col: c, text: t, added: (prev?.added ?? 0) + 1 });
+          hit = true;
+          break;
+        }
+      }
+      if (hit) break;
+    }
+  }
+  for (const [b, x] of bands) {
+    const text = x.text.replace(/(\d+)(\s+items?\b)/i, (_m, n: string) => `${Number(n) + x.added} items`);
+    await wb.write(tab, b, x.col, [[text]]);
+  }
+  return want.length;
+}
+
+/**
+ * PENDING PICKUP and NET AVAILABLE are formulas (they add up PENDING ORDERS). A number typed over one, or a
+ * row that never got it, gets the formula back, copied from the nearest row that has it.
+ */
+async function restoreCountFormulas(
+  wb: Workbook,
+  tab: string,
+  g: Grid,
+  count: CountSheet,
+  sum: SyncSummary,
+  log: (kind: string, message: string, sku?: string | null, before?: number | null, after?: number | null, by?: string) => void,
+) {
+  const heads = countHeaders(g, count);
+  for (const col of [count.cols.pending, count.cols.net]) {
+    if (!col) continue;
+    const withF = count.items.filter((i) => formulaText(g, i.row, col));
+    if (!withF.length) continue; // this sheet doesn't use formulas there
+    const label = String(at(g, count.headerRow, col) ?? heads.get(col) ?? "").toUpperCase();
+    for (const i of count.items) {
+      if (formulaText(g, i.row, col)) continue;
+      const near = withF.reduce((a, b) => (Math.abs(b.row - i.row) < Math.abs(a.row - i.row) ? b : a));
+      const f = formulaText(g, near.row, col)!;
+      await wb.write(tab, i.row, col, [[shiftFormula(f, i.row - near.row)]]);
+      sum.to_sheet++;
+      const typed = cellNum(at(g, i.row, col));
+      log(
+        "sheet",
+        typed !== null
+          ? `${label} for ${i.sku} had ${show(typed)} typed over its formula. The formula is back, so it adds up the Pending Pickup lines on PENDING ORDERS again${col === count.cols.pending ? " (anything really waiting needs a line there)" : ""}.`
+          : `${label} for ${i.sku} had no formula, so it was filled in.`,
+        i.sku,
+        null,
+        null,
+        "AMBIT A.I.",
+      );
+    }
+  }
+}
+
 async function ensureProducts(
   db: SupabaseClient,
   items: SheetItem[],
@@ -824,11 +980,23 @@ async function reconcilePending(
   const isOpen = (o: Ord) => o.status !== "cancelled" && o.status !== "completed";
 
   // What an app line looks like on PENDING ORDERS.
+  // Unit weight: the item's own COUNT SHEET row, else the row it's a version of (AMB-SEAL-50 for AMB-SEAL-50-W).
+  const unitWeight = (sku: string): number | null => {
+    const k = sku.toUpperCase();
+    const own = itemByKey.get(k)?.weight;
+    if (own) return own;
+    const base = [...itemByKey.values()].filter((i) => i.weight && k.startsWith(`${i.key}-`)).sort((a, b) => b.key.length - a.key.length)[0];
+    return base?.weight ?? null;
+  };
+  const lineWeight = (l: Line) => {
+    const w = unitWeight(l.sku);
+    return w ? r2(w * l.qty) : "";
+  };
   const rowValues = (l: Line, kind: "pending" | "done"): Partial<Record<PendingCol, unknown>> => {
     const o = l.ord!;
     const item = itemByKey.get(l.sku.toUpperCase());
     const price = l.item?.customer_priced ? "" : l.item?.unit_price ?? "";
-    const wt = item?.weight ? r2(item.weight * l.qty) : "";
+    const wt = lineWeight(l);
     const how = o.delivery_method === "jobsite" ? "Job site delivery" : "Branch pickup";
     const notes = [
       `AMBIT A.I. app · ${how}`,
@@ -930,6 +1098,11 @@ async function reconcilePending(
     if (row.key !== sku) {
       const v = rowValues(l, "pending");
       for (const k of ["sku", "desc", "uom", "weight"] as PendingCol[]) edit(row, k, v[k] ?? "");
+    }
+    // Line Wt left blank (an item that wasn't on the COUNT SHEET yet): fill it in.
+    if (row.weight === null && row.key === sku) {
+      const wt = lineWeight(l);
+      if (wt !== "") edit(row, "weight", wt);
     }
     // Spray foam: the lot it comes from, in the Notes.
     if (lotLine(l)) {
