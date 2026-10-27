@@ -22,6 +22,10 @@ export async function setOrderStatus(form: FormData) {
   const id = String(form.get("id") ?? "");
   const status = String(form.get("status") ?? "");
   if (!STATUSES.includes(status)) return;
+  if (status === "completed") {
+    const { count } = await s.supabase.from("order_files").select("id", { count: "exact", head: true }).eq("order_id", id).eq("kind", "bol");
+    if (!count) back(id, "err", "Attach the signed BOL first: use Mark delivered / Mark picked up on the order desk card.");
+  }
   await s.supabase.from("orders").update({ status }).eq("id", id);
   await kickForOrder(s.supabase, id, `order ${status}`);
   revalidatePath(`/orders/${id}`);
@@ -63,6 +67,17 @@ export async function recordApproval(form: FormData) {
   back(id, "msg", sent.status === "sent" ? "Approval recorded. The order went to orders@ambitpu.com." : "Approval recorded.");
 }
 
+/** Staff, until email is set up: the customer approved, and wasn't (or couldn't be) emailed. */
+export async function approveWithoutEmail(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const id = String(form.get("id") ?? "");
+  const { error } = await s.supabase.rpc("record_order_approval", { p_order: id, p_note: "Customer approved without email" });
+  if (error) back(id, "err", error.message);
+  await sendOrderEmail(s.supabase, id);
+  back(id, "msg", "Marked as approved by the customer (without email). The order is ready for its Sales Order # and Invoice #.");
+}
+
 /** A signed-in contractor approves, or asks to change, an order AMBIT placed for their company. */
 export async function customerDecision(form: FormData) {
   const s = await getSession();
@@ -84,18 +99,56 @@ export async function customerDecision(form: FormData) {
 // ------------------------------------------------------------------ order desk
 // The database checks who may do each step (Admin > Accounts boxes); these just call it and send the emails.
 
-/** CRM: AMBIT's Sales Order number. The order moves on to the credit check. */
+/** Files the app uploaded to the order-files bucket (paths and names), as sent by the upload forms. */
+function filesFrom(form: FormData): { path: string; name: string }[] {
+  const paths = form.getAll("file_path").map(String);
+  const names = form.getAll("file_name").map(String);
+  return paths.filter(Boolean).map((path, i) => ({ path, name: names[i] ?? "" }));
+}
+
+async function addFiles(s: NonNullable<Awaited<ReturnType<typeof getSession>>>, id: string, kind: "invoice" | "bol", files: { path: string; name: string }[]) {
+  for (const f of files) {
+    const { error } = await s.supabase.rpc("order_add_file", { p_order: id, p_kind: kind, p_path: f.path, p_name: f.name || null });
+    if (error) return error.message;
+  }
+  return null;
+}
+
+/** CRM: AMBIT's Sales Order # and Invoice # (and the invoice itself, if it's ready). The order moves on to the credit check. */
 export async function setOrderPo(form: FormData) {
   const s = await getSession();
   if (!s?.profile) return;
   const id = String(form.get("id") ?? "");
   const po = String(form.get("po") ?? "").trim();
+  const invoice = String(form.get("invoice") ?? "").trim();
   const { data: before } = await s.supabase.from("orders").select("credit_status").eq("id", id).maybeSingle<{ credit_status: string | null }>();
-  const { error } = await s.supabase.rpc("order_set_po", { p_order: id, p_po: po });
+  const { error } = await s.supabase.rpc("order_set_numbers", { p_order: id, p_po: po, p_invoice: invoice });
   if (error) back(id, "err", error.message);
+  const files = filesFrom(form);
+  const fileErr = await addFiles(s, id, "invoice", files);
   await kickForOrder(s.supabase, id, "PO entered");
   if (!before?.credit_status) await sendDeskNotice(s.supabase, id, "credit_needed");
-  back(id, "msg", before?.credit_status ? `Sales Order # changed to ${po}.` : `Sales Order # ${po} saved. Accounting has been asked for the credit check.`);
+  if (fileErr) back(id, "err", `Sales Order # and Invoice # saved, but the invoice file wasn't added: ${fileErr}`);
+  const added = files.length ? ` ${files.length === 1 ? "Invoice file" : `${files.length} invoice files`} added.` : "";
+  back(
+    id,
+    "msg",
+    before?.credit_status
+      ? `Sales Order # ${po} and Invoice # ${invoice} saved.${added}`
+      : `Sales Order # ${po} and Invoice # ${invoice} saved.${added} Accounting has been asked for the credit check.`,
+  );
+}
+
+/** Order desk: add the invoice file later (after the numbers are in). */
+export async function addInvoiceFile(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const files = filesFrom(form);
+  if (!files.length) back(id, "err", "Choose the invoice file first.");
+  const err = await addFiles(s, id, "invoice", files);
+  if (err) back(id, "err", err);
+  back(id, "msg", files.length === 1 ? "Invoice file added." : `${files.length} invoice files added.`);
 }
 
 /** Accounting: release the order, or put it on hold (with a reason). */
@@ -128,7 +181,9 @@ export async function scheduleOrder(form: FormData) {
     sent.status === "sent" ? "msg" : "err",
     sent.status === "sent"
       ? "Scheduled, and the customer was emailed."
-      : `Scheduled, but the customer email didn't go out (${sent.error ?? sent.status}). Use Resend customer email.`,
+      : sent.status === "not_configured"
+        ? "Scheduled. Email isn't set up yet, so the customer wasn't emailed. Let them know, then tap Customer Approved without Email."
+        : `Scheduled, but the customer email didn't go out (${sent.error ?? sent.status}). Use Resend customer email, or let them know and tap Customer Approved without Email.`,
   );
 }
 
@@ -140,15 +195,28 @@ export async function resendScheduledEmail(form: FormData) {
   back(id, sent.status === "sent" ? "msg" : "err", sent.status === "sent" ? "Customer emailed again." : `The email didn't go out (${sent.error ?? sent.status}).`);
 }
 
-/** CRM or warehouse: delivered / picked up. */
+/** Order desk, until email is set up: the customer knows the date (told by phone), so the missing email is fine. */
+export async function notifyOverride(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const { error } = await s.supabase.rpc("order_notify_override", { p_order: id });
+  if (error) back(id, "err", error.message);
+  back(id, "msg", "Marked as approved by the customer without email. The order is ready to go out.");
+}
+
+/** CRM or warehouse: delivered / picked up, with the signed BOL (photo or scan) attached. */
 export async function completeOrder(form: FormData) {
   const s = await getSession();
   if (!s?.profile) return;
   const id = String(form.get("id") ?? "");
+  const files = filesFrom(form);
+  const fileErr = await addFiles(s, id, "bol", files);
+  if (fileErr) back(id, "err", `The signed BOL wasn't saved: ${fileErr}`);
   const { error } = await s.supabase.rpc("order_complete", { p_order: id });
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "order completed");
-  back(id, "msg", "Marked complete.");
+  back(id, "msg", "Marked complete. The signed BOL is saved on the order.");
 }
 
 /** Cancel an order with a reason. Its stock is released and the inventory sheet line is marked Cancelled. */
@@ -177,16 +245,32 @@ export async function deleteOrder(form: FormData) {
 }
 
 
-/** Warehouse / order desk: take a line's drums from a different lot (or another ISO brand). */
+/** Item variance (admins, or the Item variance box): take a line's drums from a different lot (or another ISO brand). */
 export async function changeLot(form: FormData) {
   const s = await getSession();
   if (!s?.profile || !isEmployee(s.profile)) return;
   const id = String(form.get("id") ?? "");
   const line = Number(form.get("line"));
   const lot = Number(form.get("lot"));
+  const reason = String(form.get("reason") ?? "").trim();
   if (!line || !lot) back(id, "err", "Choose a lot.");
-  const { data, error } = await s.supabase.rpc("inventory_repick", { p_line: line, p_lot: lot });
+  const { data, error } = await s.supabase.rpc("order_variance_lot", { p_line: line, p_lot: lot, p_reason: reason || null });
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "lot changed");
   back(id, "msg", `Lot changed to ${data}. The spreadsheet updates in a moment.`);
+}
+
+/** Item variance: load a different product type than the one ordered (Summer / Winter, another product in the same category). */
+export async function swapItem(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const id = String(form.get("id") ?? "");
+  const item = Number(form.get("item"));
+  const product = String(form.get("product") ?? "");
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!item || !product) back(id, "err", "Choose what to load instead.");
+  const { data, error } = await s.supabase.rpc("order_item_swap", { p_item: item, p_product: product, p_reason: reason });
+  if (error) back(id, "err", error.message);
+  await kickForOrder(s.supabase, id, "item type changed");
+  back(id, "msg", `Now loading ${data}. The change is saved on the item variance table.`);
 }

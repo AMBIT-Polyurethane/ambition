@@ -128,7 +128,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
                         {o.scheduled_for && (tab.stage === "scheduled" || tab.stage === "completed") ? <span className="pill ok">{dateShort(o.scheduled_for)}</span> : null}
                       </div>
                       <div className="s ellipsis">
-                        {[where, o.ambit_po ? `Sales Order # ${o.ambit_po}` : null, o.po_number ? `Cust. PO ${o.po_number}` : null].filter(Boolean).join(" · ")}
+                        {[where, o.ambit_po ? `Sales Order # ${o.ambit_po}` : null, o.invoice_no ? `Invoice # ${o.invoice_no}` : null, o.po_number ? `Cust. PO ${o.po_number}` : null].filter(Boolean).join(" · ")}
                       </div>
                       {tab.stage === "hold" && o.credit_note ? <div className="tiny red ellipsis">Hold: {o.credit_note}</div> : null}
                       <div className="tiny faint">

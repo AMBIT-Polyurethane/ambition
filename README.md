@@ -210,8 +210,8 @@ changes in the app:
   `inventory_pick()` splits each foam line across lots (`inventory_lots`, one `inventory_lines` row per lot): brand
   rank first (Covestro 1), then the lot that expires soonest (`use_by` = Exp, or Mfg + 12 months), never an expired
   lot; short on stock = a line with no lot yet. Staff see brand / lot on the order page and the warehouse PDF
-  (`?copy=customer` leaves them out; customers can't read lots at all) and can "Change lot" until pickup
-  (`inventory_repick`). The sheet owns each lot's Starting Qty / Shipped In / Adj / dates; the app adds pickups to
+  (`?copy=customer` leaves them out; customers can't read lots at all); admins and the `item_variance` box can
+  "Change lot" until pickup in the item variance table (`order_variance_lot` → `inventory_repick`). The sheet owns each lot's Starting Qty / Shipped In / Adj / dates; the app adds pickups to
   Shipped Out, fills in the formula columns on new lot rows, and writes app lines to PENDING ORDERS with the brand
   SKU and "[Lot …]" in Notes (FOAM LOTS' Pending Pickup adds those up). TOTAL IN STOCK for these products on the
   COUNT SHEET is a formula over FOAM LOTS. The app adds the tab itself the first time (from the lots in the
@@ -294,8 +294,9 @@ The last active admin can't delete themselves.
 
 ### Order desk
 
-Orders move: customer approval → CRM enters the AMBIT PO # → Accounting releases it (or puts it on credit
-hold) → CRM sets the delivery or pickup date and the customer is emailed → marked delivered / picked up.
+Orders move: customer approval → CRM enters the Sales Order # and Invoice # → Accounting releases it (or puts it on
+credit hold) → CRM sets the delivery or pickup date and the customer is emailed → marked delivered / picked up with
+the signed BOL attached.
 Each step shows on the order page for whoever's job it is, and in Order desk (home screen) with counts.
 
 
@@ -312,6 +313,22 @@ Dashboard at the top of the Order Desk (`components/desk-dashboard.tsx`, data fr
 tiles, open orders by status (donut), orders placed per day/week, open orders by location, typical time per step
 (median) and the orders waiting longest. Colors per status are fixed (validated for both themes); every chart has a
 "Show the numbers" table and hover/focus tooltips.
+
+**Invoice #, invoice file, signed BOL** (`0025_invoice_bol_variance.sql`): `order_set_numbers(p_order, p_po, p_invoice)`
+needs both numbers (the old `order_set_po` now does too). Files go to the private `order-files` bucket under
+`<order id>/` from the browser (`lib/order-file-upload.ts`, photos shrunk to 2400 px), then `order_add_file` puts them on
+the order (`order_files`, kinds `invoice` and `bol`); `/orders/<id>/files/<file id>` opens one through a 2-minute signed
+link. `order_complete` refuses without a BOL, and so do the status dropdown and the sheet sync (which now logs "finish it
+in the app" instead of closing the order). **Customer Approved without Email:** at customer approval it calls
+`record_order_approval` with that note; on a scheduled order `order_notify_override` sets `notify_status = 'override'`.
+Both show only while the email didn't go out.
+
+**Item variance** (permission `item_variance`, admins always; not part of any role by default): the table in
+`components/item-variance.tsx` shows ordered vs loading per line. "Load a different type" → `order_item_swap` (same
+category, unit and foam side; keeps `ordered_sku/ordered_name/ordered_product_id`; lines already on PENDING ORDERS are
+set Cancelled there with `done_by = 'swap'` and the new type is picked again by lot). "Change lot" →
+`order_variance_lot`, which wraps `inventory_repick` (now also limited to `item_variance`). Every change is a row in
+`order_variances` (who, when, why, stage), shown on the order desk card before the Sales Order # and before Delivered.
 ### Price request approvals
 
 Admins: Home → Price approvals. Waiting requests first; each opens as a clean form with requested vs approved

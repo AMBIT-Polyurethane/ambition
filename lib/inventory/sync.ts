@@ -1005,16 +1005,20 @@ async function reconcilePending(
 
   // Every line picked up on the sheet, and the order was ready for pickup / delivery: close it in the app too.
   for (const id of ordersToCheck) {
-    const [{ count: items }, { data: picks }, { data: o }] = await Promise.all([
+    const [{ count: items }, { data: picks }, { data: o }, { count: bols }] = await Promise.all([
       db.from("order_items").select("id", { count: "exact", head: true }).eq("order_id", id),
-      db.from("inventory_lines").select("order_item_id, state").eq("order_id", id),
+      db.from("inventory_lines").select("order_item_id, state, done_by").eq("order_id", id),
       db.from("orders").select("order_no, status, stage").eq("id", id).single<{ order_no: number; status: string; stage: string | null }>(),
+      db.from("order_files").select("id", { count: "exact", head: true }).eq("order_id", id).eq("kind", "bol"),
     ]);
-    // Every item has its stock lines (one per lot), and all of them are picked up.
-    const ps = (picks ?? []) as { order_item_id: number; state: string }[];
+    // Every item has its stock lines (one per lot), and all of them are picked up. Lines let go when a
+    // different type was loaded instead (item variance) don't count.
+    const ps = ((picks ?? []) as { order_item_id: number; state: string; done_by: string | null }[]).filter((p) => p.done_by !== "swap");
     const allDone = ps.length > 0 && ps.every((p) => p.state === "done") && new Set(ps.map((p) => p.order_item_id)).size === items;
     if (!o || o.status === "completed" || o.status === "cancelled" || !items || !allDone) continue;
-    if (o.stage === "scheduled") {
+    if (o.stage === "scheduled" && !bols) {
+      log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet. Finish the order in the app: tap Mark delivered (or Mark picked up) and attach the signed BOL.`, null, null, null, "Spreadsheet");
+    } else if (o.stage === "scheduled") {
       await db.from("orders").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", id).neq("status", "completed");
       log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet, so the order is complete in the app too.`, null, null, null, "Spreadsheet");
     } else {

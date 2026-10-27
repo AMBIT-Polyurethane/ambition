@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 // Photos taken in the app (Ask AMBIT, order intake, complaint reports): made smaller on the phone first
 // (longest side 1600 px, JPEG), then saved in the private "photos" bucket under the person's own folder.
 
-async function shrink(file: File, max = 1600, quality = 0.82): Promise<Blob> {
+export async function shrink(file: File, max = 1600, quality = 0.82): Promise<Blob> {
   try {
     const bmp = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
     const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));

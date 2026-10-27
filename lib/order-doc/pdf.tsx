@@ -151,7 +151,7 @@ function OfficeBox({ pickup, order: o }: { pickup: boolean; order: OrderDoc["ord
       ) : (
         <Two a="Shipped via / truck" b="Date" />
       )}
-      <Line label="QuickBooks invoice #" />
+      <Line label="QuickBooks invoice #" value={o.invoice_no} />
     </View>
   );
 }

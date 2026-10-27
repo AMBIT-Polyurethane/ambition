@@ -1573,3 +1573,34 @@ a.dash-tile:hover { border-color: var(--line-hover); }
   .dash-tile.big { grid-column: auto; }
   .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ---- Order desk: invoice / signed BOL files, item variance (0025) ---- */
+.btn.amber { background: var(--warn-soft); border: 1.5px solid var(--warn); color: var(--text); gap: 8px; letter-spacing: 0.04em; }
+.btn.amber:hover { filter: brightness(1.08); }
+.file-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--s2); border: 1px solid var(--line); font-size: 12px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip button { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: transparent; color: var(--text2); cursor: pointer; }
+.file-chip button:hover { background: var(--s3); color: var(--text); }
+.file-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.file-link { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 750; }
+.desk-steps li.vary-step .dot { border-style: dashed; }
+.desk-steps li.vary-step.done .dot { border-style: solid; }
+.stock-tag.vary { color: var(--warn-text); }
+.vary { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--s1); container-type: inline-size; }
+.vary > summary { cursor: pointer; font-size: 13px; font-weight: 750; }
+.vary[open] > summary { margin-bottom: 10px; }
+.vary-table { display: flex; flex-direction: column; }
+.vary-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+.vary-head { display: none; }
+.vary-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.vary-k { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); }
+.vary-changed { color: var(--warn-text); }
+.vary-edit > summary { margin-top: 2px; }
+.vary-log { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.vary-log-row { display: block; font-size: 12px; line-height: 1.45; color: var(--text2); padding-left: 10px; border-left: 2px solid var(--warn); }
+@container (min-width: 500px) {
+  .vary-row { grid-template-columns: 1.1fr 1.2fr 1.4fr; gap: 12px; }
+  .vary-head { display: grid; padding: 0 0 6px; border-top: 0; }
+  .vary-head span { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); }
+  .vary-row:not(.vary-head) .vary-k { display: none; }
+}

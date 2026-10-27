@@ -132,6 +132,10 @@ export type Order = {
   notify_status?: string | null;
   notify_error?: string | null;
   completed_at?: string | null;
+  // Invoice # and the scheduled-email override (migration 0025)
+  invoice_no?: string | null;
+  notify_override_by?: string | null;
+  notify_override_at?: string | null;
 };
 
 export type OrderStage = "customer" | "needs_po" | "credit" | "hold" | "schedule" | "scheduled" | "completed" | "cancelled";
@@ -149,6 +153,10 @@ export type OrderItem = {
   unit_price: number | null;
   customer_priced: boolean;
   line_total: number | null;
+  // Item variance (0025): what the customer ordered, when a different type is loaded
+  ordered_product_id?: string | null;
+  ordered_sku?: string | null;
+  ordered_name?: string | null;
 };
 
 export type LinkRow = {

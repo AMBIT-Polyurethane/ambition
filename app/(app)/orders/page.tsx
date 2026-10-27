@@ -37,7 +37,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   if (filter === "approval") query = query.in("approval_status", ["pending", "changes_requested"]).neq("status", "cancelled");
   if (q) {
     const n = Number(q.replace(/\D/g, ""));
-    query = n ? query.or(`order_no.eq.${n},po_number.ilike.%${q}%,ambit_po.ilike.%${q}%`) : query.or(`company_name.ilike.%${q}%,po_number.ilike.%${q}%,ambit_po.ilike.%${q}%`);
+    query = n
+      ? query.or(`order_no.eq.${n},po_number.ilike.%${q}%,ambit_po.ilike.%${q}%,invoice_no.ilike.%${q}%`)
+      : query.or(`company_name.ilike.%${q}%,po_number.ilike.%${q}%,ambit_po.ilike.%${q}%,invoice_no.ilike.%${q}%`);
   }
   const { data } = await query;
   const orders = (data ?? []) as Order[];

@@ -200,7 +200,7 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string) {
   const no = orderNo(o.order_no);
   const who = o.account_no ? `${o.company_name} (${o.account_no})` : o.company_name;
   const head = {
-    credit_needed: { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Sales Order # ${o.ambit_po ?? ""}. Check for credit holds, then release the order or put it on hold.` },
+    credit_needed: { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Sales Order # ${o.ambit_po ?? ""}${o.invoice_no ? ` and Invoice # ${o.invoice_no}` : ""}. Check for credit holds, then release the order or put it on hold.` },
     credit_hold: { eyebrow: "ON CREDIT HOLD", subject: `On credit hold · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} put this order on hold: ${o.credit_note ?? ""}` },
     ready_to_schedule: { eyebrow: "READY TO SCHEDULE", subject: `Ready to schedule · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} released this order. Set the ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date and the customer is emailed.` },
   }[kind];
@@ -208,6 +208,7 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string) {
     ["Order", no],
     ["Customer", who],
     ["Sales Order #", o.ambit_po ?? "-"],
+    ["Invoice #", o.invoice_no ?? "-"],
     ["Customer PO", o.po_number ?? "-"],
     ["Delivery", whereText(doc)],
     ["Needed by", o.needed_by ? dateShort(o.needed_by) : "-"],

@@ -15,6 +15,7 @@ export const PERMS = [
   { key: "order_desk", label: "Order desk", hint: "Enter Sales Order #s, schedule delivery and pickup" },
   { key: "credit_check", label: "Credit check", hint: "Release orders or put them on hold" },
   { key: "takeoff", label: "Takeoff", hint: "Measure plans: areas, walls and counts" },
+  { key: "item_variance", label: "Item variance", hint: "Load a different lot or product type than the one picked" },
 ] as const;
 
 export type Perm = (typeof PERMS)[number]["key"];
@@ -22,7 +23,7 @@ export const PERM_KEYS = PERMS.map((p) => p.key) as Perm[];
 
 export const ROLES = [
   { key: "admin", label: "Admin", perms: PERM_KEYS },
-  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check") },
+  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance") },
   { key: "sales_rep", label: "Sales rep", perms: ["ordering", "price_requests", "time_off", "travel", "takeoff"] as Perm[] },
   { key: "tech", label: "Tech", perms: ["time_off", "travel", "spray_log", "complaints"] as Perm[] },
   { key: "warehouse", label: "Warehouse manager", perms: ["inventory", "ordering", "time_off", "travel"] as Perm[] },

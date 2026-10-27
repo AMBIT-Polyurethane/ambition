@@ -4,13 +4,15 @@ import { Check, CircleAlert, CircleCheck, FileDown, MailCheck, RefreshCw } from 
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
-import { brandOf, foamLoads, foamOf, pickText, splitNote } from "@/lib/order-doc/loads";
+import { foamLoads, foamOf, pickText, splitNote } from "@/lib/order-doc/loads";
 import { orderPicks, showsPicks } from "@/lib/order-doc/load";
+import type { LotPick } from "@/lib/order-doc/loads";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
-import { cancelOrder, changeLot, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
+import { cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
 import { docState } from "@/lib/order-doc/types";
-import { OrderDeskCard } from "@/components/order-desk-card";
+import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
+import type { Alternative, LotChoice, Variance, VarianceData } from "@/components/item-variance";
 import { can } from "@/lib/access";
 import { STAGES, customerProgress, stageOf } from "@/lib/order-desk";
 import type { Branch, Company, Order, OrderItem } from "@/lib/types";
@@ -34,7 +36,7 @@ export default async function OrderDetailPage({
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) notFound();
   const [{ data: items }, { data: branch }, { data: company }] = await Promise.all([
-    supabase.from("order_items").select("*, product:products(image_url, category_id)").eq("order_id", id).order("id"),
+    supabase.from("order_items").select("*, product:products!order_items_product_id_fkey(image_url, category_id)").eq("order_id", id).order("id"),
     order.branch_id ? supabase.from("branches").select("*").eq("id", order.branch_id).maybeSingle<Branch>() : Promise.resolve({ data: null }),
     emp && order.company_id
       ? supabase.from("companies").select("email, contact_name").eq("id", order.company_id).maybeSingle<Pick<Company, "email" | "contact_name">>()
@@ -47,33 +49,45 @@ export default async function OrderDetailPage({
     const p = picks.get(l.id);
     return emp && showsPicks(l.sku, p) ? p : undefined;
   };
-  const canPick = emp && (can(profile, "inventory") || can(profile, "order_desk")) && order.status !== "completed" && order.status !== "cancelled";
-  type Choice = { lot_id: number; sku: string; lot_no: string; exp: string | null; use_by: string | null; available: number; expired: boolean };
-  const choices = new Map<number, Choice[]>();
-  const pickQty = new Map<number, number>();
-  if (canPick) {
-    const open = lines.flatMap((l) => (pickFor(l) ?? []).filter((p) => p.state === "reserved"));
-    await Promise.all(
-      open.map(async (p) => {
-        pickQty.set(p.id, p.qty);
+  // Item variance: admins and the Item variance box can load a different lot or product type.
+  const isOpen = order.status !== "completed" && order.status !== "cancelled";
+  const canVary = emp && can(profile, "item_variance") && isOpen;
+  const choices = new Map<number, LotChoice[]>();
+  const alternatives = new Map<number, Alternative[]>();
+  if (canVary) {
+    const open = lines.flatMap((l) => (picks.get(l.id) ?? []).filter((p) => p.state === "reserved"));
+    await Promise.all([
+      ...open.map(async (p) => {
         const { data } = await supabase.rpc("inventory_lot_choices", { p_line: p.id });
-        choices.set(p.id, ((data ?? []) as Choice[]).map((c) => ({ ...c, available: Number(c.available) })));
+        choices.set(p.id, ((data ?? []) as LotChoice[]).map((c) => ({ ...c, available: Number(c.available) })));
       }),
-    );
+      ...lines
+        .filter((l) => l.product_id)
+        .map(async (l) => {
+          const { data } = await supabase.rpc("order_item_alternatives", { p_item: l.id });
+          alternatives.set(l.id, ((data ?? []) as Alternative[]).map((a) => ({ ...a, on_hand: a.on_hand === null ? null : Number(a.on_hand), available: a.available === null ? null : Number(a.available) })));
+        }),
+    ]);
   }
-  const shownPick = new Set<number>();
-  const choiceText = (c: Choice) =>
-    [brandOf(c.sku), `Lot ${c.lot_no || "(no lot #)"}`, c.exp ? `exp ${dateShort(c.exp)}` : c.use_by ? `use by ${dateShort(c.use_by)}` : null, `${Math.max(0, c.available)} available`, c.expired ? "EXPIRED" : null]
-      .filter(Boolean)
-      .join(" · ");
+  const [{ data: fileRows }, { data: varRows }] = emp
+    ? await Promise.all([
+        supabase.from("order_files").select("id, kind, name, uploaded_by_name, created_at").eq("order_id", id).order("created_at"),
+        supabase.from("order_variances").select("id, order_item_id, kind, from_text, to_text, reason, stage, by_name, created_at").eq("order_id", id).order("created_at"),
+      ])
+    : [{ data: null }, { data: null }];
+  const files = (fileRows ?? []) as OrderFile[];
+  const variance: VarianceData | null = emp
+    ? { orderId: order.id, lines, picks: picks as Map<number, LotPick[]>, choices, alternatives, log: (varRows ?? []) as Variance[], canEdit: canVary }
+    : null;
   // Spray foam grouped by load (ISO with the resin it goes with), like the printed order.
   const groups = foamLoads(lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id), picks: pickFor(l) })));
   const shownStock = new Set<number>();
+  const shownVary = new Set<number>();
   // Staff: the customer's sales-tax exemption (an expired certificate holds the order at the credit check).
   const tax = emp && order.company_id && stageOf(order) !== "completed" && stageOf(order) !== "cancelled" ? await companyTax(supabase, order.company_id) : null;
   // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
   const { data: invRows } = emp
-    ? await supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).order("id")
+    ? await supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).or("done_by.is.null,done_by.neq.swap").order("id")
     : { data: null };
   const inv = new Map<number, { state: string; sheet_row: number | null }[]>();
   for (const r of (invRows ?? []) as { order_item_id: number; state: string; sheet_row: number | null }[]) inv.set(r.order_item_id, [...(inv.get(r.order_item_id) ?? []), r]);
@@ -193,6 +207,7 @@ export default async function OrderDetailPage({
             <><dt>{order.delivery_method === "pickup" ? "Pickup" : "Delivery"}</dt><dd>{dateShort(order.scheduled_for)}{order.schedule_note ? `\n${order.schedule_note}` : ""}</dd></>
           ) : null}
           {emp && order.ambit_po ? (<><dt>Sales Order #</dt><dd>{order.ambit_po}</dd></>) : null}
+          {emp && order.invoice_no ? (<><dt>Invoice #</dt><dd>{order.invoice_no}</dd></>) : null}
           {emp && order.tax_note ? (<><dt>Sales tax</dt><dd style={{ color: "var(--warn-text)", fontWeight: 700 }}>{order.tax_note}</dd></>) : null}
           {state === "approved" ? (
             <>
@@ -221,7 +236,17 @@ export default async function OrderDetailPage({
           </span>
         </div>
       ) : null}
-      {emp ? <OrderDeskCard order={order} desk={can(profile, "order_desk")} credit={can(profile, "credit_check")} warehouse={can(profile, "inventory")} tax={tax} /> : null}
+      {emp ? (
+        <OrderDeskCard
+          order={order}
+          desk={can(profile, "order_desk")}
+          credit={can(profile, "credit_check")}
+          warehouse={can(profile, "inventory")}
+          tax={tax}
+          files={files}
+          variance={variance}
+        />
+      ) : null}
 
       <section className="section">
         <div className="eyebrow">{lines.length} {lines.length === 1 ? "item" : "items"}</div>
@@ -240,39 +265,16 @@ export default async function OrderDetailPage({
                     <div className="desc">{l.sku} · {qtyText(row.qty, l.unit)}</div>
                     {note ? <div className="tiny faint">{note}</div> : null}
                     {stock ? <div className={`stock-tag ${stock.cls}`}>{stock.text}</div> : null}
+                    {emp && l.ordered_sku && !shownVary.has(l.id) && shownVary.add(l.id) ? (
+                      <div className="stock-tag vary">Loading this instead of {l.ordered_name} ({l.ordered_sku})</div>
+                    ) : null}
                     {row.picks?.length ? (
                       <div className="picks">
-                        {row.picks.map((p, pi) => {
-                          // Empty placeholder rows (a brand with no lot # and nothing in it) aren't worth listing.
-                          const opts = (choices.get(p.id) ?? []).filter((c) => c.lot_id === p.lot_id || c.lot_no || c.available > 0);
-                          const change = canPick && p.state === "reserved" && opts.length > 0 && !shownPick.has(p.id);
-                          shownPick.add(p.id);
-                          const need = pickQty.get(p.id) ?? p.qty;
-                          return (
-                            <div key={`${p.id}-${pi}`} className="pick">
-                              <span><b>{qtyText(p.qty, l.unit)}</b> {pickText(p)}</span>
-                              {change ? (
-                                <details className="pick-change">
-                                  <summary className="linkbtn">Change lot</summary>
-                                  <form action={changeLot} className="pick-form">
-                                    <input type="hidden" name="id" value={order.id} />
-                                    <input type="hidden" name="line" value={p.id} />
-                                    <select className="select sm" name="lot" defaultValue={p.lot_id ?? ""} aria-label="Lot">
-                                      {p.lot_id === null ? <option value="">Choose a lot…</option> : null}
-                                      {opts.map((c) => (
-                                        <option key={c.lot_id} value={c.lot_id} disabled={c.lot_id !== p.lot_id && c.available < need}>
-                                          {choiceText(c)}{c.lot_id === p.lot_id ? " (now)" : ""}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <Submit className="btn sm dark" pendingText="Saving…">Use this lot</Submit>
-                                  </form>
-                                  <p className="tiny faint" style={{ margin: 0 }}>Moves all {qtyText(need, l.unit)} of this pick. Lots without enough available are greyed out.</p>
-                                </details>
-                              ) : null}
-                            </div>
-                          );
-                        })}
+                        {row.picks.map((p, pi) => (
+                          <div key={`${p.id}-${pi}`} className="pick">
+                            <span><b>{qtyText(p.qty, l.unit)}</b> {pickText(p)}</span>
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                   </div>
