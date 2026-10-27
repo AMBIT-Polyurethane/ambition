@@ -138,13 +138,6 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                       {((branches ?? []) as Branch[]).map((b) => <option key={b.id} value={b.id}>{b.name}, {b.state}</option>)}
                     </select>
                   </label>
-                  {u.role !== "customer" && u.status === "active" ? (
-                    <label className="field">
-                      <span className="label">Monthly sales goal ($)</span>
-                      <input className="input sm" name="monthly_goal" inputMode="decimal" defaultValue={u.monthly_goal ? String(Number(u.monthly_goal)) : ""} placeholder="None" />
-                      <span className="tiny faint">Shows on their Home screen.</span>
-                    </label>
-                  ) : null}
                 </div>
                 <div><Submit className="btn sm" pendingText="Saving…">{u.status === "pending" ? "Save & notify" : "Save"}</Submit></div>
               </form>

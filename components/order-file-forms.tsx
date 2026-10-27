@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Camera, FileUp, LoaderCircle, X } from "lucide-react";
 import { completeOrder, setOrderPo } from "@/app/(app)/orders/actions";
 import { uploadOrderFiles } from "@/lib/order-file-upload";
+import { qtyText } from "@/lib/format";
 
 /** Pick one or more files (PDF or photo). On a phone this offers the camera too. */
 function FilePick({ label, files, setFiles, required, camera }: { label: string; files: File[]; setFiles: (f: File[]) => void; required?: boolean; camera?: boolean }) {
@@ -47,17 +48,32 @@ function useSend() {
   return { busy, setBusy, error, setError };
 }
 
-/** Order desk: Sales Order # and Invoice # side by side (both required), plus the invoice file if it's ready. */
-export function NumbersForm({ orderId, po, invoice }: { orderId: string; po: string | null; invoice: string | null }) {
+export type PriceLine = { id: number; sku: string; name: string; unit: string; qty: number; price: number | null; cp: boolean };
+
+const money2 = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+const priceOk = (v: string) => /^\d+(\.\d{1,2})?$/.test(v.replace(/[$,\s]/g, ""));
+const priceNum = (v: string) => Number(v.replace(/[$,\s]/g, ""));
+
+/**
+ * Order desk: Sales Order # and Invoice # side by side (both required), the price of each line from the invoice
+ * (required for spray foam, fiberglass and anything else priced per customer; list prices are filled in for the
+ * rest and can be changed to match the invoice), plus the invoice file if it's ready.
+ */
+export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: string; po: string | null; invoice: string | null; lines?: PriceLine[] }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [prices, setPrices] = useState<Record<number, string>>(() => Object.fromEntries(lines.map((l) => [l.id, l.price === null ? "" : l.price.toFixed(2)])));
   const { busy, setBusy, error, setError } = useSend();
+  const total = lines.reduce((a, l) => a + (priceOk(prices[l.id] ?? "") ? priceNum(prices[l.id]) * l.qty : 0), 0);
+  const missing = lines.filter((l) => !priceOk(prices[l.id] ?? ""));
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (!String(fd.get("po") ?? "").trim()) return setError("Enter the Sales Order #.");
     if (!String(fd.get("invoice") ?? "").trim()) return setError("Enter the Invoice # too.");
+    if (missing.length) return setError(`Enter the price for ${missing.map((l) => l.sku).join(", ")} (from the invoice).`);
     setError(null);
     setBusy(true);
+    fd.set("prices", JSON.stringify(lines.map((l) => ({ id: l.id, price: priceNum(prices[l.id]) }))));
     const up = await uploadOrderFiles(orderId, "invoice", files);
     if (up.error) {
       setBusy(false);
@@ -86,11 +102,48 @@ export function NumbersForm({ orderId, po, invoice }: { orderId: string; po: str
           <input className="input sm" name="invoice" required defaultValue={invoice ?? ""} placeholder="Invoice #" />
         </label>
       </div>
+      {lines.length ? (
+        <div className="price-box">
+          <div className="row between" style={{ gap: 8 }}>
+            <span className="label">Prices from the invoice (each)</span>
+            <span className="small">Total <b>{money2(total)}</b></span>
+          </div>
+          {lines.map((l) => {
+            const v = prices[l.id] ?? "";
+            const bad = v !== "" && !priceOk(v);
+            return (
+              <label key={l.id} className={`price-line${l.cp && !priceOk(v) ? " need" : ""}`}>
+                <span className="grow" style={{ minWidth: 0 }}>
+                  <span className="price-name">{l.name}</span>
+                  <span className="tiny faint">
+                    {l.sku} · {qtyText(l.qty, l.unit)}
+                    {l.cp ? " · customer pricing, required" : ""}
+                    {priceOk(v) ? ` · ${money2(priceNum(v) * l.qty)}` : ""}
+                  </span>
+                </span>
+                <span className="price-in">
+                  <span aria-hidden="true">$</span>
+                  <input
+                    className="input sm"
+                    inputMode="decimal"
+                    value={v}
+                    placeholder={l.cp ? "Price" : "0.00"}
+                    aria-label={`Price each for ${l.sku}`}
+                    aria-invalid={bad || undefined}
+                    onChange={(e) => setPrices((p) => ({ ...p, [l.id]: e.target.value }))}
+                  />
+                </span>
+              </label>
+            );
+          })}
+          <span className="tiny faint">Spray foam, fiberglass and other customer-priced items need their price. The others start at list price: change any to match the invoice. These prices count toward sales goals.</span>
+        </div>
+      ) : null}
       <FilePick label="Upload invoice (optional, PDF or photo)" files={files} setFiles={setFiles} />
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="submit" className="btn sm" disabled={busy} style={{ alignSelf: "flex-start", gap: 8 }}>
         {busy ? <LoaderCircle size={16} className="spin" /> : null}
-        {busy ? "Saving…" : po ? "Save changes" : "Save Sales Order # & Invoice #"}
+        {busy ? "Saving…" : po ? "Save changes" : "Save Sales Order #, Invoice # & prices"}
       </button>
     </form>
   );

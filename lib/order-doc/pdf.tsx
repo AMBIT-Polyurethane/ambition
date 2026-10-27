@@ -293,8 +293,9 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
     ? ["AMBIT Polyurethane", doc.branch ? `${doc.branch.name} branch` : "", doc.branch?.address ?? ""].filter(Boolean)
     : (o.ship_address ?? "").split(/\r?\n/);
 
-  const listed = doc.items.filter((i) => !i.customer_priced && i.line_total !== null);
-  const acct = doc.items.filter((i) => i.customer_priced);
+  // Once the order desk enters the invoice prices (0028), every line has one.
+  const listed = doc.items.filter((i) => i.line_total !== null);
+  const acct = doc.items.filter((i) => i.customer_priced && i.line_total === null);
   const tbd = doc.items.filter((i) => !i.customer_priced && i.line_total === null);
   const subtotal = Number(o.est_subtotal ?? 0);
   // Spray foam lines grouped by load (ISO with its resin), a dark line between groups.
@@ -403,7 +404,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
               ))}
             </View>
             <Text style={[s.td, s.cQty]}>{qtyText(row.qty, it.unit)}</Text>
-            {it.customer_priced ? (
+            {it.customer_priced && it.line_total === null ? (
               <>
                 <Text style={[s.td, s.cPrice, s.acct]}>Account pricing</Text>
                 <Text style={[s.td, s.cAmt, s.acct]}>On invoice</Text>
@@ -427,12 +428,13 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
             <Label>Order notes</Label>
             {o.notes ? <Text>{o.notes}</Text> : <Text style={{ color: FAINT }}>No notes.</Text>}
             <Text style={s.fine}>
-              Prices are AMBIT list prices when the order was placed. Spray foam and fiberglass are billed at the account&apos;s contract price.
-              Final pricing, tax and freight are confirmed on the AMBIT invoice.
+              {o.priced_at
+                ? `Prices are from AMBIT invoice ${o.invoice_no ?? ""}. Tax and freight are on the invoice.`
+                : "Prices are AMBIT list prices when the order was placed. Spray foam and fiberglass are billed at the account's contract price. Final pricing, tax and freight are confirmed on the AMBIT invoice."}
             </Text>
           </View>
           <View style={s.totals}>
-            <View style={s.totRow}><Text>List-price items ({listed.length})</Text><Text style={s.b}>{money(subtotal)}</Text></View>
+            <View style={s.totRow}><Text>{o.priced_at ? "Invoice-priced items" : "List-price items"} ({listed.length})</Text><Text style={s.b}>{money(subtotal)}</Text></View>
             {acct.length ? (
               <View style={s.totRow}><Text style={s.sub}>Account-priced items ({acct.length})</Text><Text style={s.sub}>Account pricing</Text></View>
             ) : null}
@@ -441,7 +443,7 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
             ) : null}
             <View style={s.totRow}><Text style={s.sub}>Tax and freight</Text><Text style={s.sub}>On invoice</Text></View>
             <View style={s.totGrand}>
-              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10 }}>Estimated subtotal</Text>
+              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10 }}>{o.priced_at && !acct.length && !tbd.length ? "Subtotal" : "Estimated subtotal"}</Text>
               <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10 }}>{money(subtotal)}{acct.length || tbd.length ? " +" : ""}</Text>
             </View>
           </View>

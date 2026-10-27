@@ -60,7 +60,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     .order(done ? "completed_at" : "created_at", { ascending: false })
     .limit(stuck ? 500 : 200);
   if (["new", "processing", "completed", "cancelled"].includes(filter)) query = query.eq("status", filter);
-  if (filter === "mine") query = query.eq("placed_by", profile.id);
+  // "Mine": orders you placed, and your customers' orders (you're their sales rep).
+  if (filter === "mine") query = query.or(`placed_by.eq.${profile.id},sales_rep_id.eq.${profile.id}`);
   if (filter === "approval") query = query.in("approval_status", ["pending", "changes_requested"]).neq("status", "cancelled");
   if (stages.length) query = query.in("stage", stages);
   if (open || stuck) query = query.not("stage", "in", "(completed,cancelled)");

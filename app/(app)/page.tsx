@@ -229,7 +229,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <ChevronRight size={18} />
         </Link>
       ) : null}
-      {due?.length && !w.sales ? (
+      {due?.length && !(w.goals && profile.job_role === "sales_rep") ? (
         <Link href="/orders/due" className="home-alert">
           <span className="ic"><CalendarClock size={19} /></span>
           <span className="grow col tight">

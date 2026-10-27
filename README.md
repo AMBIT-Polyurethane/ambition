@@ -258,6 +258,26 @@ before, spot checks per location).
   non-lot items to `on_hand`; foam needs a lot #: an existing lot gets `in_unsynced` (→ Shipped In), a new lot is
   inserted with `add_to_sheet` and the sync inserts its FOAM LOTS row at the end of that SKU's block (`addReceivedLots`).
 
+### Sales reps, invoice prices and sales goals
+
+`0028_sales_reps_prices_goals.sql`:
+- **Sales rep per customer** (`companies.sales_rep_id`, Admin → Customers: pick one per customer, or tick several and
+  "Assign"; the customer import takes a "Sales Rep" column, name or email). `orders.sales_rep_id` is set from the
+  customer when the order is placed (`orders_set_rep` trigger; a customer getting a rep fills in their orders that had
+  none). No foreign keys to `profiles` on purpose. Sales reps' "mine" on the Order desk = placed by them or their
+  customers' orders.
+- **Invoice prices**: `order_set_numbers(order, po, invoice, prices)` saves the price each for every line with the
+  Sales Order # and Invoice # (required for customer-priced lines: spray foam, fiberglass), recomputes
+  `est_subtotal`, and stamps `priced_at` / `priced_by_name`. The order page, the PDF and the Sales card use them.
+- **Sales goals**: `categories.goal_group` (foam, fiberglass, ppe, roof, guns, intumescent, sealants, supplies;
+  Admin → Products → Categories), `sales_goals` (person × group, monthly dollars; Admin → Sales goals,
+  `admin_set_sales_goals`). `sales_goal_board(month, person)` returns each person's sales by group for the month (orders
+  placed that month, not cancelled, priced lines only): sales reps by `orders.sales_rep_id`, warehouse managers
+  (`job_role = warehouse`) by `orders.branch_id`. Home: "Your sales goals" (reps, warehouse) and "Sales goals"
+  (admins); `/sales-goals` has the month-by-month table.
+
+Home "Jump back in" checks remembered orders with `openOrders()` and drops deleted, cancelled and completed ones.
+
 ### Customer approval
 
 Orders AMBIT staff place for a customer are emailed to the customer first, with a secure link (valid 7 days)

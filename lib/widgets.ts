@@ -21,7 +21,8 @@ export function widgetsFor(p: Profile) {
     calendar: emp && !admin && (warehouse || can(p, "order_desk")),
     queue: emp && !admin && can(p, "order_desk"),
     credit: emp && !admin && can(p, "credit_check"),
-    sales: emp && !admin && deskAccess(p) === "mine",
+    // Sales goal progress: sales reps (their customers' orders) and warehouse managers (their location).
+    goals: emp && !admin && (p.job_role === "sales_rep" || warehouse || deskAccess(p) === "mine"),
   };
 }
 
@@ -203,24 +204,6 @@ export async function salesSummary(db: Db): Promise<SalesSummary> {
     byBranch,
     top,
     month,
-  };
-}
-
-/** Sales rep: their own month so far, against last month and their goal. */
-export async function myMonth(db: Db, profile: Pick<Profile, "id"> & { monthly_goal?: number | null }) {
-  const today = todayCentral();
-  const lw = lastMonthWindow(today);
-  const [now, last] = await Promise.all([ordersBetween(db, monthStart(today), today, profile.id), ordersBetween(db, lw.from, lw.to, profile.id)]);
-  const d = new Date(`${today}T12:00:00Z`);
-  const daysIn = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
-  return {
-    total: now.reduce((a, o) => a + o.est_subtotal, 0),
-    orders: now.length,
-    last: last.reduce((a, o) => a + o.est_subtotal, 0),
-    lastOrders: last.length,
-    goal: profile.monthly_goal ? Number(profile.monthly_goal) : null,
-    dayOfMonth: d.getUTCDate(),
-    daysIn,
   };
 }
 

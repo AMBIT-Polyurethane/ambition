@@ -1764,3 +1764,45 @@ button.app { background: none; border: 0; padding: 0; font: inherit; cursor: poi
 .wcal-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .wcal-txt > * { display: block; }
 .wcal-day .dw { letter-spacing: 0; }
+
+/* ---- Customers: assign sales reps in bulk ---- */
+.bulk-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--s1); }
+.bulk-bar .select { width: auto; flex: 1; min-width: 200px; }
+.bulk-check { width: 20px; height: 20px; flex: none; accent-color: var(--red); }
+
+/* ---- Order desk: invoice prices with the Sales Order # ---- */
+.price-box { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--s2); }
+.price-line { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--s1); border: 1px solid transparent; }
+.price-line.need { border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+.price-in { display: flex; align-items: center; gap: 4px; flex: none; color: var(--text3); font-weight: 700; }
+.price-in .input { width: 104px; text-align: right; }
+.price-in .input[aria-invalid="true"] { border-color: var(--red); }
+
+/* ---- Sales goals ---- */
+.goal-admin { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 1024px) { .goal-admin { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.goal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.goal-grid .price-in .input { width: 100%; }
+.goal-grid .price-in { width: 100%; }
+.gbar { position: relative; display: block; height: 8px; border-radius: 4px; background: var(--s2); }
+.gbar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--wc1, #3987e5); }
+.gbar .fill.done { background: var(--ok); }
+.gbar .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text); }
+.goal-body { display: flex; flex-direction: column; gap: 12px; }
+.goal-rows, .team-goals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.goal-rows li, .team-goals li { display: flex; flex-direction: column; gap: 5px; font-size: 13.5px; min-width: 0; }
+.team-goals li a { display: flex; flex-direction: column; gap: 5px; color: var(--text); text-decoration: none; padding: 6px 8px; margin: -6px -8px; border-radius: 10px; }
+.team-goals li a:hover { background: var(--s2); color: var(--text); }
+.goal-rows .v, .team-goals .v { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.goal-rows .ok { color: var(--ok); vertical-align: -2px; }
+.goal-page { --wc1: #3987e5; --wc3: #199e70; }
+:root[data-theme="light"] .goal-page { --wc1: #2a78d6; --wc3: #1baf7a; }
+@media (prefers-color-scheme: light) { :root[data-theme="system"] .goal-page { --wc1: #2a78d6; --wc3: #1baf7a; } }
+.goal-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.goal-table th { text-align: left; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text3); padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.goal-table td { padding: 10px 6px; border-bottom: 1px solid var(--line); vertical-align: top; min-width: 84px; }
+.goal-table td:first-child { min-width: 150px; }
+.goal-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.goal-table td .gbar { margin-top: 5px; height: 6px; }
+.tbl-wrap { overflow-x: auto; max-width: 100%; }
+.price-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 650; font-size: 14px; line-height: 1.3; }

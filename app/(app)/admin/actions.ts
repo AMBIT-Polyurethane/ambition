@@ -76,18 +76,6 @@ export async function saveUser(form: FormData) {
     if (accessError && !/admin_set_access|could not find the function|schema cache/i.test(accessError.message)) {
       redirect(back("error=" + encodeURIComponent(accessError.message)));
     }
-    // Monthly sales goal for their Home screen (blank = none).
-    if (form.has("monthly_goal")) {
-      const raw = s(form, "monthly_goal").replace(/[$,\s]/g, "");
-      const goal = raw === "" ? null : Number(raw);
-      if (goal !== null && (!Number.isFinite(goal) || goal < 0)) redirect(back("error=" + encodeURIComponent("The monthly sales goal should be a dollar amount, like 50000.")));
-      if (goal !== (before.monthly_goal == null ? null : Number(before.monthly_goal))) {
-        const { error: goalError } = await supabase.rpc("admin_set_goal", { p_user: userId, p_goal: goal });
-        if (goalError && !/admin_set_goal|could not find the function|schema cache/i.test(goalError.message)) {
-          redirect(back("error=" + encodeURIComponent(goalError.message)));
-        }
-      }
-    }
   }
 
   if (before.status !== "active" && status === "active") {
@@ -132,6 +120,7 @@ export async function saveCompany(form: FormData) {
     notes: n(form, "notes"),
     active: id ? form.get("active") === "on" : true,
     needs_qb_setup: form.get("needs_qb_setup") === "on",
+    sales_rep_id: n(form, "sales_rep_id"),
   };
   if (!row.name) return;
   if (id) await supabase.from("companies").update(row).eq("id", id);
@@ -148,6 +137,17 @@ export async function importCompanies(rows: Record<string, string>[]): Promise<I
     return (branches ?? []).find((b) => b.id === t || b.name.toLowerCase() === t || t.startsWith(b.name.toLowerCase()))?.id ?? null;
   };
   const { data: existing } = await supabase.from("companies").select("id, name, account_no, qb_id");
+  // Sales rep column: an AMBIT staff member's name or email (a first name works if only one person has it).
+  const { data: staff } = await supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]);
+  const repFor = (v: string | undefined) => {
+    const t = (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (!t) return undefined;
+    const list = (staff ?? []) as { id: string; full_name: string | null; email: string }[];
+    const exact = list.find((p) => p.email.toLowerCase() === t || (p.full_name ?? "").trim().toLowerCase().replace(/\s+/g, " ") === t);
+    if (exact) return exact.id;
+    const first = list.filter((p) => (p.full_name ?? "").trim().toLowerCase().split(" ")[0] === t);
+    return first.length === 1 ? first[0].id : undefined;
+  };
   const byQb = new Map((existing ?? []).filter((c) => c.qb_id).map((c) => [String(c.qb_id), c.id]));
   const byAcct = new Map((existing ?? []).filter((c) => c.account_no).map((c) => [String(c.account_no).toLowerCase(), c.id]));
   const byName = new Map((existing ?? []).map((c) => [c.name.toLowerCase(), c.id]));
@@ -176,6 +176,8 @@ export async function importCompanies(rows: Record<string, string>[]): Promise<I
       ship_address: t(r.ship_address || r.shipping_address || r.ship_to),
     };
     if (qb) { row.qb_id = qb; row.source = "quickbooks"; }
+    const rep = repFor(r.sales_rep || r.rep || r.salesperson || r.sales_person);
+    if (rep) row.sales_rep_id = rep;
     if (!row.default_branch_id) delete row.default_branch_id; // keep a branch someone already chose
     const id = (qb && byQb.get(qb)) || (acct && byAcct.get(acct.toLowerCase())) || byName.get(name.toLowerCase());
     if (id === "new") { skipped++; continue; } // listed twice in the file
@@ -184,7 +186,7 @@ export async function importCompanies(rows: Record<string, string>[]): Promise<I
       if (error) skipped++;
       else updated++;
     } else {
-      toInsert.push({ ...row, source: row.source ?? "admin", default_branch_id: row.default_branch_id ?? null });
+      toInsert.push({ ...row, source: row.source ?? "admin", default_branch_id: row.default_branch_id ?? null, sales_rep_id: row.sales_rep_id ?? null });
       if (qb) byQb.set(qb, "new");
       if (acct) byAcct.set(acct.toLowerCase(), "new");
       byName.set(name.toLowerCase(), "new");
@@ -205,13 +207,45 @@ export async function importCompanies(rows: Record<string, string>[]): Promise<I
   return { ok: true, message: `${added} added, ${updated} updated${skipped ? `, ${skipped} skipped` : ""}.` };
 }
 
+/** Customers: give the ticked customers a sales rep (or take it away). */
+export async function assignRep(form: FormData) {
+  const { supabase } = await requireAdmin();
+  const ids = form.getAll("ids").map(String).filter(Boolean);
+  const rep = n(form, "rep");
+  const back = s(form, "back") || "/admin/companies";
+  const go = (q: string) => redirect(`${back}${back.includes("?") ? "&" : "?"}${q}`);
+  if (!ids.length) go("err=" + encodeURIComponent("Tick the customers first (the box next to each name)."));
+  if (rep && rep !== "none") {
+    const { data: who } = await supabase.from("profiles").select("id").eq("id", rep).in("role", ["employee", "admin"]).maybeSingle();
+    if (!who) go("err=" + encodeURIComponent("Pick an AMBIT staff member."));
+  }
+  const { error } = await supabase.from("companies").update({ sales_rep_id: rep && rep !== "none" ? rep : null }).in("id", ids);
+  if (error) go("err=" + encodeURIComponent(error.message));
+  revalidatePath("/admin/companies");
+  go("msg=" + encodeURIComponent(`${ids.length} ${ids.length === 1 ? "customer" : "customers"} updated.`));
+}
+
+/** Sales goals: one person's monthly goal for each group (blank = none). */
+export async function saveGoals(form: FormData) {
+  const { supabase } = await requireAdmin();
+  const person = s(form, "person");
+  const goals: Record<string, string> = {};
+  for (const [k, v] of form.entries()) if (k.startsWith("g_")) goals[k.slice(2)] = String(v);
+  const { error } = await supabase.rpc("admin_set_sales_goals", { p_person: person, p_goals: goals });
+  if (error) redirect(`/admin/sales-goals?err=${encodeURIComponent(error.message)}`);
+  revalidatePath("/admin/sales-goals");
+  revalidatePath("/sales-goals");
+  redirect(`/admin/sales-goals?msg=${encodeURIComponent(`Goals saved for ${s(form, "name") || "them"}.`)}#p-${person}`);
+}
+
 // ------------------------------------------------------------------ catalog
 export async function saveCategory(form: FormData) {
   const { supabase } = await requireAdmin();
   const id = s(form, "id");
   const name = s(form, "name");
   if (!name) return;
-  const row = { name, customer_priced: form.get("customer_priced") === "on", sort: num(form.get("sort")) ?? 0 };
+  const row: Record<string, unknown> = { name, customer_priced: form.get("customer_priced") === "on", sort: num(form.get("sort")) ?? 0 };
+  if (form.has("goal_group")) row.goal_group = n(form, "goal_group") ?? "supplies";
   if (id) await supabase.from("categories").update(row).eq("id", id);
   else await supabase.from("categories").insert({ id: slug(name), ...row });
   revalidatePath("/admin/products");

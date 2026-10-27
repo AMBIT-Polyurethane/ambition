@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
+import { openOrders } from "@/app/(app)/recent-actions";
 
 // "Jump back in" on the home screen: the last few things this person opened on this device
 // (orders, price requests, credit applications, bulletins, product docs). Kept in the browser only.
@@ -51,10 +52,44 @@ const ART: Record<RecentKind, { color: string; icon: string; label: string }> = 
   doc: { color: "#0D9488", icon: "docs", label: "Doc" },
 };
 
-/** The home screen's "Jump back in" grid. Hidden until something has been opened. */
+const orderId = (href: string) => href.match(/^\/orders\/([0-9a-f-]{36})$/i)?.[1] ?? null;
+
+/** Forget things that are gone (orders deleted, cancelled or completed), on this device too. */
+function forget(uid: string, hrefs: Set<string>) {
+  try {
+    window.localStorage.setItem(keyFor(uid), JSON.stringify(readRecent(uid).filter((x) => !hrefs.has(x.href))));
+  } catch {
+    // storage blocked: nothing to forget
+  }
+}
+
+/**
+ * The home screen's "Jump back in" grid. Hidden until something has been opened. Orders show only while they're
+ * still open: deleted, cancelled and completed (picked up / delivered) ones drop off.
+ */
 export function JumpBackIn({ uid }: { uid: string }) {
   const [items, setItems] = useState<RecentItem[]>([]);
-  useEffect(() => setItems(readRecent(uid).slice(0, 4)), [uid]);
+  useEffect(() => {
+    let live = true;
+    const all = readRecent(uid);
+    const orders = all.map((x) => orderId(x.href)).filter((x): x is string => Boolean(x));
+    // Non-orders show straight away; orders once the app has checked they're still open.
+    setItems(all.filter((x) => !orderId(x.href)).slice(0, 4));
+    if (!orders.length) return;
+    openOrders(orders)
+      .then((open) => {
+        if (!live) return;
+        if (open === null) return setItems(all.slice(0, 4)); // couldn't check: show them as before
+        const ok = new Set(open);
+        const gone = new Set(all.filter((x) => orderId(x.href) && !ok.has(orderId(x.href)!)).map((x) => x.href));
+        if (gone.size) forget(uid, gone);
+        setItems(all.filter((x) => !gone.has(x.href)).slice(0, 4));
+      })
+      .catch(() => live && setItems(all.slice(0, 4)));
+    return () => {
+      live = false;
+    };
+  }, [uid]);
   if (!items.length) return null;
   return (
     <section className="section">

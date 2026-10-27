@@ -37,7 +37,7 @@ export default async function OrderDetailPage({
   if (!order) notFound();
   // Everything else about the order, all at once.
   const staffOpen = emp && order.company_id && order.status !== "completed" && order.status !== "cancelled";
-  const [{ data: items }, { data: branch }, { data: company }, picks, { data: fileRows }, { data: varRows }, tax, { data: invRows }] = await Promise.all([
+  const [{ data: items }, { data: branch }, { data: company }, picks, { data: fileRows }, { data: varRows }, tax, { data: invRows }, { data: rep }] = await Promise.all([
     supabase.from("order_items").select("*, product:products!order_items_product_id_fkey(image_url, category_id)").eq("order_id", id).order("id"),
     order.branch_id ? supabase.from("branches").select("*").eq("id", order.branch_id).maybeSingle<Branch>() : Promise.resolve({ data: null }),
     emp && order.company_id
@@ -56,6 +56,10 @@ export default async function OrderDetailPage({
     // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
     emp
       ? supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).or("done_by.is.null,done_by.neq.swap").order("id")
+      : Promise.resolve({ data: null }),
+    // Staff: the customer's sales rep, who gets credit for the order.
+    emp && order.sales_rep_id
+      ? supabase.from("profiles").select("full_name, email").eq("id", order.sales_rep_id).maybeSingle<{ full_name: string | null; email: string }>()
       : Promise.resolve({ data: null }),
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
@@ -198,6 +202,12 @@ export default async function OrderDetailPage({
           <dt>Order</dt><dd>{orderNo(order.order_no)}</dd>
           <dt>Customer</dt><dd>{order.company_name}{order.account_no ? ` · ${order.account_no}` : ""}</dd>
           <dt>Placed by</dt><dd>{order.placed_by_name ?? order.placed_by_email}{order.placed_by_role !== "customer" ? " (AMBIT)" : ""}</dd>
+          {emp ? (
+            <>
+              <dt>Sales rep</dt>
+              <dd>{rep ? rep.full_name?.trim() || rep.email : <span className="faint">None yet. Set the customer&apos;s rep in Admin → Customers.</span>}</dd>
+            </>
+          ) : null}
           <dt>Submitted</dt><dd>{dateTime(order.created_at)}</dd>
           <dt>Delivery</dt>
           <dd>{DELIVERY_LABEL[order.delivery_method]}{where}</dd>
@@ -247,6 +257,7 @@ export default async function OrderDetailPage({
           tax={tax}
           files={files}
           variance={variance}
+          lines={lines}
         />
       ) : null}
 
@@ -281,7 +292,7 @@ export default async function OrderDetailPage({
                     ) : null}
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    {l.customer_priced ? (
+                    {l.customer_priced && l.unit_price === null ? (
                       <span className="cp-tag">Customer pricing</span>
                     ) : l.line_total !== null ? (
                       <>
@@ -297,7 +308,7 @@ export default async function OrderDetailPage({
             }),
           )}
           <div className="row between" style={{ padding: "14px 16px" }}>
-            <span className="muted small">Estimated list-price subtotal</span>
+            <span className="muted small">{order.priced_at ? "Subtotal (invoice prices)" : "Estimated list-price subtotal"}</span>
             <b>{money(order.est_subtotal)}</b>
           </div>
         </div>

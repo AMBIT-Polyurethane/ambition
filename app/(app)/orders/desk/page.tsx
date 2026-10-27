@@ -30,7 +30,7 @@ const TABS: Tab[] = [
 export default async function OrderDeskPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, profile } = await requireActive();
-  // One Order Desk for all staff: everyone who works orders sees all of them; sales reps see the ones they placed.
+  // One Order Desk for all staff: everyone who works orders sees all of them; sales reps see the ones they placed and their customers' orders.
   const access = deskAccess(profile);
   if (!access) redirect("/");
   const mine = access === "mine";
@@ -51,7 +51,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
   const where = <T,>(q: T): T => {
     const b = q as unknown as { eq: (c: string, v: string) => unknown; is: (c: string, v: null) => unknown };
     const scoped = (branchId === "dropship" ? b.is("branch_id", null) : branchId ? b.eq("branch_id", branchId) : q) as T;
-    return (mine ? (scoped as unknown as { eq: (c: string, v: string) => unknown }).eq("placed_by", profile.id) : scoped) as T;
+    return (mine ? (scoped as unknown as { or: (f: string) => unknown }).or(`placed_by.eq.${profile.id},sales_rep_id.eq.${profile.id}`) : scoped) as T;
   };
 
   const counts = await Promise.all(
@@ -96,7 +96,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
       />
       <p className="small muted" style={{ margin: 0 }}>
         {mine
-          ? "The orders you placed, and where each one is: customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date → picked up or delivered."
+          ? "The orders you placed and your customers' orders, and where each one is: customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date → picked up or delivered."
           : "Order placed → customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date and the customer is emailed."}
       </p>
 

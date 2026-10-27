@@ -1,3 +1,3 @@
-Name,Account No,Branch,Contact,Phone,Email,Billing Address,Shipping Address,City,State,QuickBooks ID
-EXAMPLE Insulation Co,C-00000,OKC,Pat Smith,405-555-0100,office@example.com,"100 Main St, Oklahoma City, OK 73102","4700 S Council Rd, Oklahoma City, OK 73179",Oklahoma City,OK,
-EXAMPLE Foam Pros,C-00001,ATX,Lee Jones,817-555-0100,,"200 Elm St, Fort Worth, TX 76102",,Fort Worth,TX,
+Name,Account No,Branch,Contact,Phone,Email,Billing Address,Shipping Address,City,State,QuickBooks ID,Sales Rep
+EXAMPLE Insulation Co,C-00000,OKC,Pat Smith,405-555-0100,office@example.com,"100 Main St, Oklahoma City, OK 73102","4700 S Council Rd, Oklahoma City, OK 73179",Oklahoma City,OK,,Rep name or email
+EXAMPLE Foam Pros,C-00001,ATX,Lee Jones,817-555-0100,,"200 Elm St, Fort Worth, TX 76102",,Fort Worth,TX,,

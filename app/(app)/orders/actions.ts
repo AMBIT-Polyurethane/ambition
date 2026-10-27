@@ -122,7 +122,15 @@ export async function setOrderPo(form: FormData) {
   const po = String(form.get("po") ?? "").trim();
   const invoice = String(form.get("invoice") ?? "").trim();
   const { data: before } = await s.supabase.from("orders").select("credit_status").eq("id", id).maybeSingle<{ credit_status: string | null }>();
-  const { error } = await s.supabase.rpc("order_set_numbers", { p_order: id, p_po: po, p_invoice: invoice });
+  // Prices from the invoice: [{ id, price }] for every line (spray foam and fiberglass have none until now).
+  let prices: { id: number; price: number }[] | null = null;
+  try {
+    const raw = JSON.parse(String(form.get("prices") ?? "null"));
+    if (Array.isArray(raw)) prices = raw.map((p) => ({ id: Number(p.id), price: Number(p.price) })).filter((p) => Number.isFinite(p.id) && Number.isFinite(p.price));
+  } catch {
+    prices = null;
+  }
+  const { error } = await s.supabase.rpc("order_set_numbers", { p_order: id, p_po: po, p_invoice: invoice, p_prices: prices });
   if (error) back(id, "err", error.message);
   const files = filesFrom(form);
   const fileErr = await addFiles(s, id, "invoice", files);
@@ -134,8 +142,8 @@ export async function setOrderPo(form: FormData) {
     id,
     "msg",
     before?.credit_status
-      ? `Sales Order # ${po} and Invoice # ${invoice} saved.${added}`
-      : `Sales Order # ${po} and Invoice # ${invoice} saved.${added} Accounting has been asked for the credit check.`,
+      ? `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added}`
+      : `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added} Accounting has been asked for the credit check.`,
   );
 }
 

@@ -20,6 +20,7 @@ export type Company = {
   qb_id?: string | null;
   source?: "admin" | "quickbooks" | "app";
   needs_qb_setup?: boolean;
+  sales_rep_id?: string | null; // 0028: the customer's sales rep (credited with their orders)
   created_by?: string | null;
 };
 
@@ -57,7 +58,7 @@ export type Branch = {
   active: boolean;
 };
 
-export type Category = { id: string; name: string; customer_priced: boolean; sort: number };
+export type Category = { id: string; name: string; customer_priced: boolean; sort: number; goal_group?: string | null };
 
 export type Product = {
   id: string;
@@ -135,6 +136,9 @@ export type Order = {
   completed_at?: string | null;
   // Invoice # and the scheduled-email override (migration 0025)
   invoice_no?: string | null;
+  sales_rep_id?: string | null; // 0028: the customer's rep when it was placed
+  priced_at?: string | null; // 0028: invoice prices entered by the order desk
+  priced_by_name?: string | null;
   notify_override_by?: string | null;
   notify_override_at?: string | null;
 };

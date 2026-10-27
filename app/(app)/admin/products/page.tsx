@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/session";
 import { money, searchSafe } from "@/lib/format";
 import { saleOn, todayCentral } from "@/lib/sale";
+import { GOAL_GROUPS } from "@/lib/sales-goals";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { CsvImport } from "@/components/csv-import";
@@ -67,7 +68,7 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
       </details>
 
       <details className="card">
-        <summary><b>Categories</b> <span className="small muted">· choose which show &ldquo;Based on customer pricing&rdquo;</span></summary>
+        <summary><b>Categories</b> <span className="small muted">· customer pricing, and which sales goal each one counts toward</span></summary>
         <div className="col" style={{ marginTop: 14 }}>
           {cats.map((c) => (
             <form key={c.id} action={saveCategory} className="row wrap" style={{ gap: 10 }}>
@@ -75,6 +76,9 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
               <input className="input sm" name="name" defaultValue={c.name} style={{ maxWidth: 220 }} />
               <input className="input sm" name="sort" type="number" defaultValue={c.sort} style={{ width: 80 }} aria-label="Sort" />
               <label className="check"><input type="checkbox" name="customer_priced" defaultChecked={c.customer_priced} /> Customer pricing</label>
+              <select className="select sm" name="goal_group" defaultValue={c.goal_group ?? "supplies"} aria-label="Sales goal group" style={{ width: "auto" }}>
+                {GOAL_GROUPS.map((g) => <option key={g.key} value={g.key}>Goal: {g.label}</option>)}
+              </select>
               <Submit className="btn sm dark">Save</Submit>
             </form>
           ))}
@@ -82,6 +86,9 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
             <input className="input sm" name="name" placeholder="New category" style={{ maxWidth: 220 }} />
             <input className="input sm" name="sort" type="number" defaultValue={cats.length + 1} style={{ width: 80 }} aria-label="Sort" />
             <label className="check"><input type="checkbox" name="customer_priced" /> Customer pricing</label>
+            <select className="select sm" name="goal_group" defaultValue="supplies" aria-label="Sales goal group" style={{ width: "auto" }}>
+              {GOAL_GROUPS.map((g) => <option key={g.key} value={g.key}>Goal: {g.label}</option>)}
+            </select>
             <Submit className="btn sm dark">Add</Submit>
           </form>
         </div>

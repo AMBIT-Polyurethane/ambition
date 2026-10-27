@@ -13,13 +13,15 @@ import {
   deskQueue,
   inventoryBranches,
   movers,
-  myMonth,
   salesSummary,
   spotChecks,
   spotOverview,
   widgetsFor,
 } from "@/lib/widgets";
 import { SpotCheckForm } from "@/components/count-input";
+import { GoalCardBody, TeamGoals } from "@/components/goal-views";
+import { monthGone, sum } from "@/lib/sales-goals";
+import { goalBoard } from "@/lib/sales-goals-server";
 import { WeekCalendar } from "@/components/week-calendar";
 import type { Profile } from "@/lib/types";
 
@@ -163,34 +165,17 @@ async function CreditWidget({ db, t }: { db: Db; t: TaxCounts | null }) {
   );
 }
 
-// ------------------------------------------------------------------ Sales rep: my month
-async function MyMonthWidget({ db, profile, due }: { db: Db; profile: Profile; due: DueCustomer[] | null }) {
-  const m = await myMonth(db, profile);
-  const pace = m.goal ? m.total / m.goal : null;
-  const expected = m.dayOfMonth / m.daysIn; // where the month is
+// ------------------------------------------------------------------ Sales reps and warehouse managers: goals
+async function GoalsWidget({ db, profile, due }: { db: Db; profile: Profile; due: DueCustomer[] | null }) {
+  const board = await goalBoard(db);
+  const me = board?.people.find((p) => p.id === profile.id);
+  if (!board || !me) return null;
+  const rep = profile.job_role === "sales_rep";
+  if (!sum(me.goals) && !sum(me.sold) && !rep && profile.job_role !== "warehouse") return null;
+  const month = new Date(`${board.month}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
   return (
-    <Card title="Your month" href="/orders?status=mine" link="My orders">
-      <div className="wg-big">
-        <b>{ordersWord(m.orders)}</b>
-        <span className="small muted">
-          {whole(m.total)} at list price
-          <Versus now={m.orders} last={m.lastOrders} />
-        </span>
-      </div>
-      {m.goal ? (
-        <div className="wg-goal" role="img" aria-label={`${Math.round((pace ?? 0) * 100)}% of the ${whole(m.goal)} goal; ${Math.round(expected * 100)}% of the month gone`}>
-          <div className="track">
-            <i className="fill" style={{ width: `${Math.min(100, (pace ?? 0) * 100)}%` }} />
-            <i className="mark" style={{ left: `${expected * 100}%` }} title="Where the month is" />
-          </div>
-          <span className="small">
-            <b>{Math.round((pace ?? 0) * 100)}%</b> of your {whole(m.goal)} goal ·{" "}
-            {(pace ?? 0) >= expected ? "on pace" : `${whole(Math.max(0, m.goal * expected - m.total))} behind pace`}
-          </span>
-        </div>
-      ) : (
-        <p className="tiny faint" style={{ margin: 0 }}>No monthly goal set. An admin can set one in Admin → Accounts.</p>
-      )}
+    <Card title={`Your sales goals · ${month}`} href="/sales-goals" link="Details">
+      <GoalCardBody p={me} gone={monthGone(board.month, todayCentral())} compact />
       {due?.length ? (
         <Link href="/orders/due" className="wg-row warn">
           <b>{due.length}</b>
@@ -198,7 +183,33 @@ async function MyMonthWidget({ db, profile, due }: { db: Db; profile: Profile; d
           <ChevronRight size={15} />
         </Link>
       ) : null}
-      <p className="tiny faint" style={{ margin: 0 }}>Orders you placed in the app, at list price (spray foam and other customer-priced items aren&apos;t in the dollars).</p>
+      <p className="tiny faint" style={{ margin: 0 }}>
+        {me.basis === "branch" ? "Every order from your location" : "Your customers' orders"}, at the invoice prices the order desk enters.
+      </p>
+    </Card>
+  );
+}
+
+/** Admin: every rep's and warehouse manager's month against their goal. */
+async function TeamGoalsWidget({ db }: { db: Db }) {
+  const board = await goalBoard(db);
+  if (!board || !board.people.length) {
+    return (
+      <Card title="Sales goals" href="/admin/sales-goals" link="Set goals">
+        <p className="small muted" style={{ margin: 0 }}>No sales reps or warehouse managers yet.</p>
+      </Card>
+    );
+  }
+  const set = board.people.some((p) => sum(p.goals) > 0);
+  return (
+    <Card title="Sales goals" href="/sales-goals" link="All groups">
+      {set ? null : (
+        <Link href="/admin/sales-goals" className="wg-row warn">
+          <span className="grow">No goals set yet: set them in Admin → Sales goals</span>
+          <ChevronRight size={15} />
+        </Link>
+      )}
+      <TeamGoals people={board.people} gone={monthGone(board.month, todayCentral())} href={(p) => `/sales-goals?p=${p.id}`} />
     </Card>
   );
 }
@@ -235,7 +246,7 @@ async function SalesWidget({ db }: { db: Db }) {
       <div className="wg-big">
         <b>{ordersWord(s.orders)}</b>
         <span className="small muted">
-          {whole(s.total)} at list price
+          {whole(s.total)} so far
           <Versus now={s.orders} last={s.lastOrders} />
         </span>
       </div>
@@ -272,7 +283,7 @@ async function SalesWidget({ db }: { db: Db }) {
           </ol>
         </>
       ) : null}
-      <p className="tiny faint" style={{ margin: 0 }}>Orders placed in the app. Dollars are list prices, so spray foam and other customer-priced items aren&apos;t in them. QuickBooks invoiced sales come later.</p>
+      <p className="tiny faint" style={{ margin: 0 }}>Orders placed in the app. Dollars are the invoice prices the order desk enters (list prices until then). QuickBooks sales come later.</p>
     </Card>
   );
 }
@@ -322,7 +333,7 @@ async function MovementWidget({ db }: { db: Db }) {
 // ------------------------------------------------------------------ the set for this person
 export async function HomeWidgets({ db, profile, known }: { db: Db; profile: Profile; known: HomeKnown }) {
   const w = widgetsFor(profile);
-  if (!w.admin && !w.spot && !w.calendar && !w.queue && !w.credit && !w.sales) return null;
+  if (!w.admin && !w.spot && !w.calendar && !w.queue && !w.credit && !w.goals) return null;
   const branches = w.spot || w.calendar ? await inventoryBranches(db, profile).catch(() => []) : [];
   const own = branches[0];
   const branch = own?.id ?? profile.branch_id ?? null;
@@ -344,9 +355,9 @@ export async function HomeWidgets({ db, profile, known }: { db: Db; profile: Pro
           <CreditWidget db={db} t={known.tax} />
         </Suspense>
       ) : null}
-      {w.sales ? (
-        <Suspense fallback={<Loading title="Your month" />}>
-          <MyMonthWidget db={db} profile={profile} due={known.due} />
+      {w.goals ? (
+        <Suspense fallback={<Loading title="Your sales goals" />}>
+          <GoalsWidget db={db} profile={profile} due={profile.job_role === "sales_rep" ? known.due : null} />
         </Suspense>
       ) : null}
       {w.calendar && branch ? (
@@ -358,6 +369,9 @@ export async function HomeWidgets({ db, profile, known }: { db: Db; profile: Pro
         <>
           <Suspense fallback={<Loading title="Waiting on you" />}>
             <WaitingWidget db={db} known={known} />
+          </Suspense>
+          <Suspense fallback={<Loading title="Sales goals" />}>
+            <TeamGoalsWidget db={db} />
           </Suspense>
           <Suspense fallback={<Loading title="Sales" />}>
             <SalesWidget db={db} />

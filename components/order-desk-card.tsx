@@ -3,9 +3,9 @@ import { Submit } from "@/components/forms";
 import { approveWithoutEmail, creditDecision, notifyOverride, resendScheduledEmail, scheduleOrder } from "@/app/(app)/orders/actions";
 import { CompleteForm, NumbersForm } from "@/components/order-file-forms";
 import { ItemVariance, VarianceLog, type VarianceData } from "@/components/item-variance";
-import { dateShort, dateTime } from "@/lib/format";
+import { dateShort, dateTime, money } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
-import type { Order } from "@/lib/types";
+import type { Order, OrderItem } from "@/lib/types";
 import { TAX_STATE, taxLine, type TaxInfo } from "@/lib/tax";
 
 type Step = {
@@ -48,8 +48,10 @@ export function OrderDeskCard({
   tax,
   files = [],
   variance,
+  lines = [],
 }: {
   order: Order;
+  lines?: OrderItem[];
   desk: boolean;
   credit: boolean;
   warehouse: boolean;
@@ -116,17 +118,23 @@ export function OrderDeskCard({
     },
     {
       key: "po",
-      title: "Sales Order # & Invoice #",
+      title: "Sales Order #, Invoice # & prices",
       done: Boolean(o.ambit_po),
       current: st === "needs_po",
       detail: o.ambit_po ? (
         <>
           Sales Order # <b>{o.ambit_po}</b> · Invoice # <b>{o.invoice_no ?? "not entered"}</b> · {o.po_by_name} · {dateTime(o.po_at)}
+          {o.priced_at ? <><br />Invoice prices entered: <b>{money(o.est_subtotal)}</b> · {o.priced_by_name}</> : <><br /><span className="faint">Prices not entered yet.</span></>}
         </>
       ) : null,
       extra: invoices.length ? <FileLinks orderId={o.id} files={invoices} label={invoices.length > 1 ? "Invoice files" : "Invoice"} /> : null,
       action:
-        desk && st !== "customer" && st !== "completed" ? <NumbersForm orderId={o.id} po={o.ambit_po ?? null} invoice={o.invoice_no ?? null} /> : null,
+        desk && st !== "customer" && st !== "completed" ? <NumbersForm
+            orderId={o.id}
+            po={o.ambit_po ?? null}
+            invoice={o.invoice_no ?? null}
+            lines={lines.map((l) => ({ id: l.id, sku: l.sku, name: l.name, unit: l.unit, qty: Number(l.qty), price: l.unit_price === null ? null : Number(l.unit_price), cp: l.customer_priced }))}
+          /> : null,
     },
     {
       key: "credit",
