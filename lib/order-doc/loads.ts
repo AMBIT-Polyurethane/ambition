@@ -15,7 +15,7 @@ export function foamOf(i: { sku: string; unit: string }, category: string | null
 /** Where the warehouse takes a line's drums from (AMBIT staff only): brand SKU and lot. */
 export type LotPick = { id: number; qty: number; sku: string; lot_id: number | null; lot_no: string | null; exp: string | null; use_by: string | null; state: string };
 
-type Lineish = { sku: string; name: string; qty: number | string; unit: string; foam?: FoamSide; picks?: LotPick[] };
+type Lineish = { id?: number; sku: string; name: string; qty: number | string; unit: string; foam?: FoamSide; picks?: LotPick[] };
 
 /** ISO (A side) or resin (B side)? Uses the product's category when the loader knew it, else the SKU and name. */
 export function foamSide(it: Lineish): FoamSide {
@@ -35,6 +35,8 @@ export type LoadRow<T> = {
   with?: string;
   /** ISO left over after every resin has its drums. */
   extra?: boolean;
+  /** An ISO row in a mixed load: the order item id of the resin it goes with (null for leftover ISO). */
+  pair?: number | null;
   /** The lots this row's drums come from (staff copies only). */
   picks?: LotPick[];
 };
@@ -72,7 +74,7 @@ export function foamLoads<T extends Lineish>(items: T[]): LoadGroup<T>[] {
       if (need <= 0) break;
       if (p.left <= 0) continue;
       const take = Math.min(need, p.left);
-      rows.push({ item: p.item, qty: take, of: take < p.total ? p.total : undefined, with: r.name, picks: takePicks(p.queue, take) });
+      rows.push({ item: p.item, qty: take, of: take < p.total ? p.total : undefined, with: r.name, pair: r.id ?? null, picks: takePicks(p.queue, take) });
       p.left -= take;
       need -= take;
     }
@@ -83,7 +85,7 @@ export function foamLoads<T extends Lineish>(items: T[]): LoadGroup<T>[] {
   if (groups.length === 1) for (const row of groups[0].rows) delete row.with;
   const leftover = pool.filter((p) => p.left > 0);
   if (leftover.length) {
-    groups.push({ kind: "iso", rows: leftover.map((p) => ({ item: p.item, qty: p.left, of: p.left < p.total ? p.total : undefined, extra: true, picks: takePicks(p.queue, p.left) })) });
+    groups.push({ kind: "iso", rows: leftover.map((p) => ({ item: p.item, qty: p.left, of: p.left < p.total ? p.total : undefined, extra: true, pair: null, picks: takePicks(p.queue, p.left) })) });
   }
   const other = items.filter((i) => !foamSide(i));
   if (other.length) groups.push({ kind: "other", rows: other.map((item) => ({ item, qty: Number(item.qty), picks: item.picks })) });
@@ -99,6 +101,82 @@ export function splitNote(row: { qty: number; of?: number; with?: string; extra?
     row.extra ? "extra ISO, not paired with a resin" : null,
   ];
   return parts.filter(Boolean).join(", ");
+}
+
+// ------------------------------------------------------------------ prices
+// AMBIT prices spray foam by the set: the ISO (A side) going with a closed-cell resin can cost more than the
+// ISO going with an open-cell resin on the same order. So an ISO line split across foam sets gets one price
+// per set (0030), kept on the line as price_parts; its unit_price is the average and line_total the sum.
+
+/** One foam set's ISO price. with = the resin's order item id; null for leftover ISO not paired with a resin. */
+export type PricePart = { with: number | null; qty: number; price: number };
+
+type Priceish = { qty: number | string; unit_price: number | string | null; line_total: number | string | null; price_parts?: PricePart[] | null };
+
+const cents = (n: number) => Math.round(n * 100) / 100;
+
+/** The price each and the amount for one row of the order (a whole line, or an ISO line's share of one foam set). */
+export function rowPrice(it: Priceish, row: { qty: number; pair?: number | null }): { each: number | null; total: number | null } {
+  if (it.line_total === null || it.line_total === undefined) return { each: it.unit_price === null ? null : Number(it.unit_price), total: null };
+  const part = row.pair !== undefined ? it.price_parts?.find((p) => (p.with ?? null) === row.pair && Number(p.qty) === row.qty) : undefined;
+  if (part) return { each: Number(part.price), total: cents(Number(part.price) * row.qty) };
+  const each = it.unit_price === null ? null : Number(it.unit_price);
+  return { each, total: row.qty === Number(it.qty) ? Number(it.line_total) : cents((each ?? 0) * row.qty) };
+}
+
+/** One price box on the order desk. An ISO line split across foam sets gets one box per set. */
+export type PriceLine = {
+  /** "12" for a whole line; "12:34" for ISO line 12's drums going with resin line 34; "12:x" for its leftover ISO. */
+  key: string;
+  id: number;
+  sku: string;
+  name: string;
+  unit: string;
+  /** The quantity this box prices (the set's share of a split ISO line). */
+  qty: number;
+  /** A split ISO line: its full quantity, the resin line it goes with (null = not paired) and that resin's name. */
+  of?: number;
+  with?: number | null;
+  withName?: string;
+  price: number | null;
+  cp: boolean;
+};
+
+type PriceItem = Lineish & Priceish & { id: number; customer_priced: boolean };
+
+/**
+ * The order desk's price boxes, in the order the loads print (ISO for a set, then its resin, like the invoice).
+ * An ISO line that goes with more than one resin (or has drums left over) is split into one box per set.
+ */
+export function priceLines(items: PriceItem[]): PriceLine[] {
+  const groups = foamLoads(items);
+  const rowsOf = new Map<number, number>();
+  for (const g of groups) for (const r of g.rows) rowsOf.set(r.item.id, (rowsOf.get(r.item.id) ?? 0) + 1);
+  const names = new Map(items.map((i) => [i.id, i.name]));
+  const out: PriceLine[] = [];
+  for (const g of groups) {
+    for (const r of g.rows) {
+      const it = r.item;
+      const base = { id: it.id, sku: it.sku, name: it.name, unit: it.unit, cp: it.customer_priced };
+      const unit = it.unit_price === null ? null : Number(it.unit_price);
+      if ((rowsOf.get(it.id) ?? 0) > 1 && r.pair !== undefined) {
+        const pair = r.pair ?? null;
+        const part = it.price_parts?.find((p) => (p.with ?? null) === pair);
+        out.push({
+          ...base,
+          key: `${it.id}:${pair ?? "x"}`,
+          qty: r.qty,
+          of: Number(it.qty),
+          with: pair,
+          withName: pair === null ? undefined : shortName(names.get(pair) ?? ""),
+          price: part ? Number(part.price) : unit,
+        });
+      } else {
+        out.push({ ...base, key: String(it.id), qty: Number(it.qty), price: unit });
+      }
+    }
+  }
+  return out;
 }
 
 const fmt = (n: number) => (n % 1 === 0 ? n.toFixed(0) : String(n));

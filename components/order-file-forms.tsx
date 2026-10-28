@@ -5,6 +5,7 @@ import { Camera, FileUp, LoaderCircle, X } from "lucide-react";
 import { completeOrder, setOrderPo } from "@/app/(app)/orders/actions";
 import { uploadOrderFiles } from "@/lib/order-file-upload";
 import { qtyText } from "@/lib/format";
+import type { PriceLine } from "@/lib/order-doc/loads";
 
 /** Pick one or more files (PDF or photo). On a phone this offers the camera too. */
 function FilePick({ label, files, setFiles, required, camera }: { label: string; files: File[]; setFiles: (f: File[]) => void; required?: boolean; camera?: boolean }) {
@@ -48,7 +49,7 @@ function useSend() {
   return { busy, setBusy, error, setError };
 }
 
-export type PriceLine = { id: number; sku: string; name: string; unit: string; qty: number; price: number | null; cp: boolean };
+export type { PriceLine };
 
 const money2 = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const priceOk = (v: string) => /^\d+(\.\d{1,2})?$/.test(v.replace(/[$,\s]/g, ""));
@@ -57,23 +58,40 @@ const priceNum = (v: string) => Number(v.replace(/[$,\s]/g, ""));
 /**
  * Order desk: Sales Order # and Invoice # side by side (both required), the price of each line from the invoice
  * (required for spray foam, fiberglass and anything else priced per customer; list prices are filled in for the
- * rest and can be changed to match the invoice), plus the invoice file if it's ready.
+ * rest and can be changed to match the invoice), plus the invoice file if it's ready. ISO that goes with more than
+ * one foam set (closed cell and open cell, say) has a price box for each set, since each set has its own price.
  */
 export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: string; po: string | null; invoice: string | null; lines?: PriceLine[] }) {
   const [files, setFiles] = useState<File[]>([]);
-  const [prices, setPrices] = useState<Record<number, string>>(() => Object.fromEntries(lines.map((l) => [l.id, l.price === null ? "" : l.price.toFixed(2)])));
+  const [prices, setPrices] = useState<Record<string, string>>(() => Object.fromEntries(lines.map((l) => [l.key, l.price === null ? "" : l.price.toFixed(2)])));
   const { busy, setBusy, error, setError } = useSend();
-  const total = lines.reduce((a, l) => a + (priceOk(prices[l.id] ?? "") ? priceNum(prices[l.id]) * l.qty : 0), 0);
-  const missing = lines.filter((l) => !priceOk(prices[l.id] ?? ""));
+  const amount = (l: PriceLine) => Math.round(priceNum(prices[l.key]) * l.qty * 100) / 100;
+  const total = lines.reduce((a, l) => a + (priceOk(prices[l.key] ?? "") ? amount(l) : 0), 0);
+  const missing = lines.filter((l) => !priceOk(prices[l.key] ?? ""));
+  const split = lines.some((l) => l.with !== undefined);
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (!String(fd.get("po") ?? "").trim()) return setError("Enter the Sales Order #.");
     if (!String(fd.get("invoice") ?? "").trim()) return setError("Enter the Invoice # too.");
-    if (missing.length) return setError(`Enter the price for ${missing.map((l) => l.sku).join(", ")} (from the invoice).`);
+    if (missing.length) {
+      const what = missing.map((l) => (l.with === undefined ? l.sku : `${l.sku} ${l.withName ? `with ${l.withName}` : "(extra)"}`));
+      return setError(`Enter the price for ${[...new Set(what)].join(", ")} (from the invoice).`);
+    }
     setError(null);
     setBusy(true);
-    fd.set("prices", JSON.stringify(lines.map((l) => ({ id: l.id, price: priceNum(prices[l.id]) }))));
+    // One entry per order line; a split ISO line sends a price for each foam set.
+    const out = new Map<number, { id: number; price?: number; parts?: { with: number | null; qty: number; price: number }[] }>();
+    for (const l of lines) {
+      const price = priceNum(prices[l.key]);
+      if (l.with === undefined) out.set(l.id, { id: l.id, price });
+      else {
+        const e = out.get(l.id) ?? { id: l.id, parts: [] };
+        e.parts!.push({ with: l.with, qty: l.qty, price });
+        out.set(l.id, e);
+      }
+    }
+    fd.set("prices", JSON.stringify([...out.values()]));
     const up = await uploadOrderFiles(orderId, "invoice", files);
     if (up.error) {
       setBusy(false);
@@ -109,16 +127,20 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
             <span className="small">Total <b>{money2(total)}</b></span>
           </div>
           {lines.map((l) => {
-            const v = prices[l.id] ?? "";
+            const v = prices[l.key] ?? "";
             const bad = v !== "" && !priceOk(v);
+            const part = l.with !== undefined;
             return (
-              <label key={l.id} className={`price-line${l.cp && !priceOk(v) ? " need" : ""}`}>
+              <label key={l.key} className={`price-line${l.cp && !priceOk(v) ? " need" : ""}${part ? " part" : ""}`}>
                 <span className="grow" style={{ minWidth: 0 }}>
                   <span className="price-name">{l.name}</span>
+                  {part ? (
+                    <span className="price-set">{l.withName ? `ISO for the ${l.withName} set` : "Extra ISO (not with a resin)"}</span>
+                  ) : null}
                   <span className="tiny faint">
-                    {l.sku} · {qtyText(l.qty, l.unit)}
+                    {l.sku} · {part && l.of ? `${l.qty} of ${qtyText(l.of, l.unit)}` : qtyText(l.qty, l.unit)}
                     {l.cp ? " · customer pricing, required" : ""}
-                    {priceOk(v) ? ` · ${money2(priceNum(v) * l.qty)}` : ""}
+                    {priceOk(v) ? ` · ${money2(amount(l))}` : ""}
                   </span>
                 </span>
                 <span className="price-in">
@@ -128,14 +150,20 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
                     inputMode="decimal"
                     value={v}
                     placeholder={l.cp ? "Price" : "0.00"}
-                    aria-label={`Price each for ${l.sku}`}
+                    aria-label={part ? `Price each for ${l.sku} ${l.withName ? `with ${l.withName}` : "extra"}` : `Price each for ${l.sku}`}
                     aria-invalid={bad || undefined}
-                    onChange={(e) => setPrices((p) => ({ ...p, [l.id]: e.target.value }))}
+                    onChange={(e) => setPrices((p) => ({ ...p, [l.key]: e.target.value }))}
                   />
                 </span>
               </label>
             );
           })}
+          {split ? (
+            <span className="tiny faint">
+              The ISO (A side) is split by foam set, like the invoice, so each set gets its own price. Enter the price per drum: the
+              invoice amount for that line divided by its drums (for example $13,020 ÷ 12 drums = $1,085.00).
+            </span>
+          ) : null}
           <span className="tiny faint">Spray foam, fiberglass and other customer-priced items need their price. The others start at list price: change any to match the invoice. These prices count toward sales goals.</span>
         </div>
       ) : null}

@@ -269,6 +269,12 @@ before, spot checks per location).
 - **Invoice prices**: `order_set_numbers(order, po, invoice, prices)` saves the price each for every line with the
   Sales Order # and Invoice # (required for customer-priced lines: spray foam, fiberglass), recomputes
   `est_subtotal`, and stamps `priced_at` / `priced_by_name`. The order page, the PDF and the Sales card use them.
+- **ISO priced per foam set** (`0030_iso_set_prices.sql`): foam is sold by the set, so ISO going with a closed-cell
+  resin can cost more than ISO going with an open-cell resin on the same order. When an ISO line is split across
+  resins (`foamLoads`), the price form shows one box per set (`priceLines()` in `lib/order-doc/loads.ts`) and sends
+  `{ id, parts: [{ with: resin item id | null, qty, price }] }`. `order_items.price_parts` keeps the sets;
+  `line_total` is their sum and `unit_price` the average, so goals and reports are unchanged. `rowPrice()` gives each
+  printed row its own price on the order page, PDF, emails and approval page.
 - **Sales goals**: `categories.goal_group` (foam, fiberglass, ppe, roof, guns, intumescent, sealants, supplies;
   Admin → Products → Categories), `sales_goals` (person × group, monthly dollars; Admin → Sales goals,
   `admin_set_sales_goals`). `sales_goal_board(month, person)` returns each person's sales by group for the month (orders

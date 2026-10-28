@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, qtyText } from "@/lib/format";
 import { LOGO_ASPECT, LOGO_PNG } from "@/lib/order-doc/logo";
 import { awaitingCustomer, type OrderDoc } from "@/lib/order-doc/types";
-import { foamLoads, pickText, splitNote } from "@/lib/order-doc/loads";
+import { foamLoads, pickText, rowPrice, splitNote } from "@/lib/order-doc/loads";
 import { plural } from "@/lib/format";
 
 // The printed AMBIT order: white, one Letter page for most orders, more pages when it needs them.
@@ -416,8 +416,8 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
               </>
             ) : (
               <>
-                <Text style={[s.td, s.cPrice]}>{money(it.unit_price)}</Text>
-                <Text style={[s.td, s.cAmt]}>{money(row.qty === Number(it.qty) ? it.line_total : Number(it.unit_price ?? 0) * row.qty)}</Text>
+                <Text style={[s.td, s.cPrice]}>{money(rowPrice(it, row).each)}</Text>
+                <Text style={[s.td, s.cAmt]}>{money(rowPrice(it, row).total)}</Text>
               </>
             )}
           </View>

@@ -4,7 +4,7 @@ import { Check, CircleAlert, CircleCheck, FileDown, MailCheck, RefreshCw } from 
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
-import { foamLoads, foamOf, pickText, splitNote } from "@/lib/order-doc/loads";
+import { foamLoads, foamOf, pickText, rowPrice, splitNote } from "@/lib/order-doc/loads";
 import { orderPicks, showsPicks } from "@/lib/order-doc/load";
 import type { LotPick } from "@/lib/order-doc/loads";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
@@ -257,7 +257,7 @@ export default async function OrderDetailPage({
           tax={tax}
           files={files}
           variance={variance}
-          lines={lines}
+          lines={lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) }))}
         />
       ) : null}
 
@@ -296,8 +296,8 @@ export default async function OrderDetailPage({
                       <span className="cp-tag">Customer pricing</span>
                     ) : l.line_total !== null ? (
                       <>
-                        <div style={{ fontWeight: 800 }}>{money(row.qty === Number(l.qty) ? l.line_total : Number(l.unit_price ?? 0) * row.qty)}</div>
-                        <div className="tiny faint">{money(l.unit_price)} / {l.unit}</div>
+                        <div style={{ fontWeight: 800 }}>{money(rowPrice(l, row).total)}</div>
+                        <div className="tiny faint">{money(rowPrice(l, row).each)} / {l.unit}</div>
                       </>
                     ) : (
                       <span className="tiny faint">On invoice</span>

@@ -3,7 +3,7 @@ import { CircleAlert, CircleCheck, Clock, FileDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { docFromJson } from "@/lib/order-doc/load";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
-import { foamLoads, splitNote } from "@/lib/order-doc/loads";
+import { foamLoads, rowPrice, splitNote } from "@/lib/order-doc/loads";
 import { ApproveForm } from "./approve-form";
 
 // The link is the key: keep it out of search engines and out of Referer headers.
@@ -91,8 +91,8 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
                   <span className="cp-tag">Account pricing</span>
                 ) : i.line_total !== null ? (
                   <>
-                    <div style={{ fontWeight: 800 }}>{money(row.qty === Number(i.qty) ? i.line_total : Number(i.unit_price ?? 0) * row.qty)}</div>
-                    <div className="tiny faint">{money(i.unit_price)} / {i.unit}</div>
+                    <div style={{ fontWeight: 800 }}>{money(rowPrice(i, row).total)}</div>
+                    <div className="tiny faint">{money(rowPrice(i, row).each)} / {i.unit}</div>
                   </>
                 ) : (
                   <span className="tiny faint">On invoice</span>

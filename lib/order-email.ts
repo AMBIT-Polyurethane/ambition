@@ -1,6 +1,6 @@
 import "server-only";
 import { DELIVERY_LABEL, dateShort, dateTime, escapeHtml as h, firstName, money, orderNo, plural, qtyText } from "@/lib/format";
-import { foamLoads, splitNote } from "@/lib/order-doc/loads";
+import { foamLoads, rowPrice, splitNote } from "@/lib/order-doc/loads";
 import { wrapEmail } from "@/lib/email";
 import type { OrderDoc } from "@/lib/order-doc/types";
 
@@ -37,7 +37,7 @@ function itemRows(doc: OrderDoc, withSku = true): string {
         : i.unit_price === null
           ? `<span style="color:#71717a;">Price TBD</span>`
           : `${money(i.unit_price)} / ${h(i.unit)}`;
-      const total = i.line_total === null ? "" : money(row.qty === Number(i.qty) ? i.line_total : Number(i.unit_price ?? 0) * row.qty);
+      const total = i.line_total === null ? "" : money(rowPrice(i, row).total);
       const note = splitNote(row, plural(i.unit, 2));
       const top = brk ? "border-top:2px solid #18181b;" : "";
       return `<tr>

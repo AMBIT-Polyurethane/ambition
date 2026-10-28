@@ -122,11 +122,26 @@ export async function setOrderPo(form: FormData) {
   const po = String(form.get("po") ?? "").trim();
   const invoice = String(form.get("invoice") ?? "").trim();
   const { data: before } = await s.supabase.from("orders").select("credit_status").eq("id", id).maybeSingle<{ credit_status: string | null }>();
-  // Prices from the invoice: [{ id, price }] for every line (spray foam and fiberglass have none until now).
-  let prices: { id: number; price: number }[] | null = null;
+  // Prices from the invoice: [{ id, price }] for every line (spray foam and fiberglass have none until now). ISO that
+  // goes with more than one foam set has a price per set instead: { id, parts: [{ with, qty, price }] }.
+  type Part = { with: number | null; qty: number; price: number };
+  let prices: ({ id: number; price: number } | { id: number; parts: Part[] })[] | null = null;
   try {
     const raw = JSON.parse(String(form.get("prices") ?? "null"));
-    if (Array.isArray(raw)) prices = raw.map((p) => ({ id: Number(p.id), price: Number(p.price) })).filter((p) => Number.isFinite(p.id) && Number.isFinite(p.price));
+    if (Array.isArray(raw)) {
+      prices = raw
+        .map((p): { id: number; price: number } | { id: number; parts: Part[] } =>
+          Array.isArray(p?.parts)
+            ? {
+                id: Number(p.id),
+                parts: (p.parts as Part[]).map((x) => ({ with: x.with === null || x.with === undefined ? null : Number(x.with), qty: Number(x.qty), price: Number(x.price) })),
+              }
+            : { id: Number(p.id), price: Number(p.price) },
+        )
+        .filter((p) =>
+          Number.isFinite(p.id) && ("parts" in p ? p.parts.length > 0 && p.parts.every((x) => Number.isFinite(x.qty) && Number.isFinite(x.price)) : Number.isFinite(p.price)),
+        );
+    }
   } catch {
     prices = null;
   }

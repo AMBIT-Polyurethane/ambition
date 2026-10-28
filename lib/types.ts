@@ -159,6 +159,8 @@ export type OrderItem = {
   unit_price: number | null;
   customer_priced: boolean;
   line_total: number | null;
+  /** ISO priced per foam set (0030): [{ with: resin order item id or null, qty, price }]. */
+  price_parts?: { with: number | null; qty: number; price: number }[] | null;
   // Item variance (0025): what the customer ordered, when a different type is loaded
   ordered_product_id?: string | null;
   ordered_sku?: string | null;
