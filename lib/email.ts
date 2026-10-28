@@ -53,7 +53,8 @@ async function sendWithResend(msg: EmailMessage): Promise<SendResult> {
   return { status: "failed", error: `Resend ${res.status}: ${(await res.text()).slice(0, 300)}` };
 }
 
-async function graphToken(): Promise<string> {
+/** An app-only Microsoft Graph token (client credentials): what email sending uses. */
+export async function graphToken(): Promise<string> {
   const body = new URLSearchParams({
     client_id: process.env.MS_CLIENT_ID!,
     client_secret: process.env.MS_CLIENT_SECRET!,
@@ -94,7 +95,7 @@ async function sendWithGraph(msg: EmailMessage): Promise<SendResult> {
     }),
   });
   if (res.status === 202 || res.ok) return { status: "sent" };
-  return { status: "failed", error: `Microsoft ${res.status}: ${(await res.text()).slice(0, 300)}` };
+  return { status: "failed", error: `Microsoft ${res.status}: ${(await res.text()).slice(0, 1200)}` };
 }
 
 /**
