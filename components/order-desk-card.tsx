@@ -6,7 +6,7 @@ import { ItemVariance, VarianceLog, type VarianceData } from "@/components/item-
 import { dateShort, dateTime, money } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
 import type { Order, OrderItem } from "@/lib/types";
-import { priceLines, type FoamSide, type PricePart } from "@/lib/order-doc/loads";
+import { priceLines, type FoamSide, type LastPrices, type PricePart } from "@/lib/order-doc/loads";
 import { TAX_STATE, taxLine, type TaxInfo } from "@/lib/tax";
 
 type Step = {
@@ -50,10 +50,13 @@ export function OrderDeskCard({
   files = [],
   variance,
   lines = [],
+  lastPrices = null,
 }: {
   order: Order;
   /** The order's lines, with spray foam marked (ISO or resin) so ISO can be priced per foam set. */
   lines?: (OrderItem & { foam?: FoamSide; price_parts?: PricePart[] | null })[];
+  /** The customer's prices on their orders in the last 30 days (the price step starts from them). */
+  lastPrices?: LastPrices | null;
   desk: boolean;
   credit: boolean;
   warehouse: boolean;
@@ -135,7 +138,7 @@ export function OrderDeskCard({
             orderId={o.id}
             po={o.ambit_po ?? null}
             invoice={o.invoice_no ?? null}
-            lines={priceLines(lines)}
+            lines={priceLines(lines, { last: lastPrices, prefill: !o.priced_at })}
           /> : null,
     },
     {

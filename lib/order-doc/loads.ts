@@ -140,19 +140,74 @@ export type PriceLine = {
   withName?: string;
   price: number | null;
   cp: boolean;
+  /** This customer's price for the same SKU (or the same foam set) on their last order in the past 30 days. */
+  last?: LastPrice;
+  /** The box was filled in from that last order (the order wasn't priced yet). */
+  fromLast?: boolean;
 };
 
 type PriceItem = Lineish & Priceish & { id: number; customer_priced: boolean };
+
+/** A price the customer paid on a recent order: the price each, when it was entered and the order number. */
+export type LastPrice = { price: number; on: string; order: number };
+/** A customer's latest prices: by SKU, and ISO by the resin SKU it went with (foam is priced by the set). */
+export type LastPrices = { sku: Record<string, LastPrice>; iso: Record<string, LastPrice> };
+
+const skuKey = (s: string) => (s ?? "").trim().toUpperCase();
+
+type PastOrder = { id: string; order_no: number; priced_at: string | null };
+type PastItem = Lineish & { id: number; order_id: string; unit_price: number | string | null; price_parts?: PricePart[] | null };
+
+/**
+ * The newest price of each SKU over a customer's recent priced orders (newest order first). ISO is kept per
+ * foam set (the resin SKU it went with). An ISO line from before 0030 that covered several resins with one
+ * price is skipped: there's no telling which set that price was for.
+ */
+export function lastPricesFrom(orders: PastOrder[], items: PastItem[]): LastPrices {
+  const out: LastPrices = { sku: {}, iso: {} };
+  for (const o of orders) {
+    if (!o.priced_at) continue;
+    const its = items.filter((i) => i.order_id === o.id);
+    const skuOf = new Map(its.map((i) => [Number(i.id), i.sku]));
+    const resins = [...new Set(its.filter((i) => foamSide(i) === "resin").map((i) => skuKey(i.sku)))];
+    const put = (bucket: "sku" | "iso", key: string, price: number | string | null) => {
+      if (price === null || price === undefined || key === "" || out[bucket][key]) return;
+      out[bucket][key] = { price: Number(price), on: o.priced_at!, order: o.order_no };
+    };
+    for (const i of its) {
+      if (i.unit_price === null) continue;
+      if (foamSide(i) !== "iso") put("sku", skuKey(i.sku), i.unit_price);
+      else if (i.price_parts?.length) {
+        for (const p of i.price_parts) {
+          if (p.with === null || p.with === undefined) put("sku", skuKey(i.sku), p.price);
+          else put("iso", skuKey(skuOf.get(Number(p.with)) ?? ""), p.price);
+        }
+      } else if (resins.length === 1) put("iso", resins[0], i.unit_price);
+      else if (resins.length === 0) put("sku", skuKey(i.sku), i.unit_price);
+    }
+  }
+  return out;
+}
 
 /**
  * The order desk's price boxes, in the order the loads print (ISO for a set, then its resin, like the invoice).
  * An ISO line that goes with more than one resin (or has drums left over) is split into one box per set.
  */
-export function priceLines(items: PriceItem[]): PriceLine[] {
+export function priceLines(items: PriceItem[], opts: { last?: LastPrices | null; prefill?: boolean } = {}): PriceLine[] {
   const groups = foamLoads(items);
   const rowsOf = new Map<number, number>();
   for (const g of groups) for (const r of g.rows) rowsOf.set(r.item.id, (rowsOf.get(r.item.id) ?? 0) + 1);
-  const names = new Map(items.map((i) => [i.id, i.name]));
+  const byId = new Map(items.map((i) => [i.id, i]));
+  // The customer's last price for this box: ISO by the resin it goes with, everything else by SKU.
+  const lastFor = (it: PriceItem, pair: number | null | undefined): LastPrice | undefined => {
+    const last = opts.last;
+    if (!last) return undefined;
+    if (foamSide(it) === "iso" && pair !== undefined && pair !== null) return last.iso[skuKey(byId.get(pair)?.sku ?? "")];
+    return last.sku[skuKey(it.sku)];
+  };
+  // Not priced yet: start from the last price (when there is one) instead of empty or list price.
+  const start = (saved: number | null, last: LastPrice | undefined) =>
+    opts.prefill && last ? { price: last.price, fromLast: true } : { price: saved };
   const out: PriceLine[] = [];
   for (const g of groups) {
     for (const r of g.rows) {
@@ -162,17 +217,20 @@ export function priceLines(items: PriceItem[]): PriceLine[] {
       if ((rowsOf.get(it.id) ?? 0) > 1 && r.pair !== undefined) {
         const pair = r.pair ?? null;
         const part = it.price_parts?.find((p) => (p.with ?? null) === pair);
+        const last = lastFor(it, pair);
         out.push({
           ...base,
           key: `${it.id}:${pair ?? "x"}`,
           qty: r.qty,
           of: Number(it.qty),
           with: pair,
-          withName: pair === null ? undefined : shortName(names.get(pair) ?? ""),
-          price: part ? Number(part.price) : unit,
+          withName: pair === null ? undefined : shortName(byId.get(pair)?.name ?? ""),
+          ...start(part ? Number(part.price) : unit, last),
+          ...(last ? { last } : {}),
         });
       } else {
-        out.push({ ...base, key: String(it.id), qty: Number(it.qty), price: unit });
+        const last = lastFor(it, r.pair);
+        out.push({ ...base, key: String(it.id), qty: Number(it.qty), ...start(unit, last), ...(last ? { last } : {}) });
       }
     }
   }
@@ -180,7 +238,8 @@ export function priceLines(items: PriceItem[]): PriceLine[] {
 }
 
 const fmt = (n: number) => (n % 1 === 0 ? n.toFixed(0) : String(n));
-const shortName = (n: string) => n.replace(/\s+(Spray Foam|Resin.*)$/i, "").trim();
+/** "AMBI-SEAL 5.0 Spray Foam (Winter)" → "AMBI-SEAL 5.0 (Winter)"; "AMBI-TITE 204 HFO Resin (B-Side), …" → "AMBI-TITE 204 HFO". */
+const shortName = (n: string) => n.replace(/\s+Spray Foam\b/i, "").replace(/\s+Resin\b.*$/i, "").trim();
 
 // ------------------------------------------------------------------ lots (staff only)
 const shortDate = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}/${iso.slice(2, 4)}`;

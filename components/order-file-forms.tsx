@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Camera, FileUp, LoaderCircle, X } from "lucide-react";
 import { completeOrder, setOrderPo } from "@/app/(app)/orders/actions";
 import { uploadOrderFiles } from "@/lib/order-file-upload";
-import { qtyText } from "@/lib/format";
+import { dateShort, orderNo, qtyText } from "@/lib/format";
 import type { PriceLine } from "@/lib/order-doc/loads";
 
 /** Pick one or more files (PDF or photo). On a phone this offers the camera too. */
@@ -69,6 +69,7 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
   const total = lines.reduce((a, l) => a + (priceOk(prices[l.key] ?? "") ? amount(l) : 0), 0);
   const missing = lines.filter((l) => !priceOk(prices[l.key] ?? ""));
   const split = lines.some((l) => l.with !== undefined);
+  const filled = lines.filter((l) => l.fromLast);
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -126,26 +127,50 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
             <span className="label">Prices from the invoice (each)</span>
             <span className="small">Total <b>{money2(total)}</b></span>
           </div>
+          {filled.length ? (
+            <div className="price-note small">
+              {filled.length === lines.length ? "Every price is" : `${filled.length} of ${lines.length} prices are`} filled in from this customer&apos;s last
+              order in the past 30 days. Check each one against this invoice and change any that are different.
+            </div>
+          ) : null}
           {lines.map((l) => {
             const v = prices[l.key] ?? "";
             const bad = v !== "" && !priceOk(v);
             const part = l.with !== undefined;
             return (
-              <label key={l.key} className={`price-line${l.cp && !priceOk(v) ? " need" : ""}${part ? " part" : ""}`}>
+              <div key={l.key} className={`price-line${l.cp && !priceOk(v) ? " need" : ""}${part ? " part" : ""}`}>
                 <span className="grow" style={{ minWidth: 0 }}>
-                  <span className="price-name">{l.name}</span>
-                  {part ? (
-                    <span className="price-set">{l.withName ? `ISO for the ${l.withName} set` : "Extra ISO (not with a resin)"}</span>
+                  <label htmlFor={`price-${l.key}`} className="price-label">
+                    <span className="price-name">{l.name}</span>
+                    {part ? (
+                      <span className="price-set">{l.withName ? `ISO for the ${l.withName} set` : "Extra ISO (not with a resin)"}</span>
+                    ) : null}
+                    <span className="tiny faint">
+                      {l.sku} · {part && l.of ? `${l.qty} of ${qtyText(l.of, l.unit)}` : qtyText(l.qty, l.unit)}
+                      {l.cp ? " · customer pricing, required" : ""}
+                      {priceOk(v) ? ` · ${money2(amount(l))}` : ""}
+                    </span>
+                  </label>
+                  {l.last ? (
+                    <span className="price-last tiny">
+                      {l.fromLast && priceOk(v) && priceNum(v) === l.last.price ? "From" : `Last price ${money2(l.last.price)} on`} {orderNo(l.last.order)}, {dateShort(l.last.on)}
+                      {!priceOk(v) || priceNum(v) !== l.last.price ? (
+                        <button
+                          type="button"
+                          className="linkbtn tiny"
+                          aria-label={`Use the last price, ${money2(l.last.price)}, for ${l.sku}`}
+                          onClick={() => setPrices((p) => ({ ...p, [l.key]: l.last!.price.toFixed(2) }))}
+                        >
+                          Use it
+                        </button>
+                      ) : null}
+                    </span>
                   ) : null}
-                  <span className="tiny faint">
-                    {l.sku} · {part && l.of ? `${l.qty} of ${qtyText(l.of, l.unit)}` : qtyText(l.qty, l.unit)}
-                    {l.cp ? " · customer pricing, required" : ""}
-                    {priceOk(v) ? ` · ${money2(amount(l))}` : ""}
-                  </span>
                 </span>
                 <span className="price-in">
                   <span aria-hidden="true">$</span>
                   <input
+                    id={`price-${l.key}`}
                     className="input sm"
                     inputMode="decimal"
                     value={v}
@@ -155,7 +180,7 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
                     onChange={(e) => setPrices((p) => ({ ...p, [l.key]: e.target.value }))}
                   />
                 </span>
-              </label>
+              </div>
             );
           })}
           {split ? (

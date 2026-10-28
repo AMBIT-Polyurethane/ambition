@@ -5,7 +5,7 @@ import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
 import { foamLoads, foamOf, pickText, rowPrice, splitNote } from "@/lib/order-doc/loads";
-import { orderPicks, showsPicks } from "@/lib/order-doc/load";
+import { customerLastPrices, orderPicks, showsPicks } from "@/lib/order-doc/load";
 import type { LotPick } from "@/lib/order-doc/loads";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -37,7 +37,7 @@ export default async function OrderDetailPage({
   if (!order) notFound();
   // Everything else about the order, all at once.
   const staffOpen = emp && order.company_id && order.status !== "completed" && order.status !== "cancelled";
-  const [{ data: items }, { data: branch }, { data: company }, picks, { data: fileRows }, { data: varRows }, tax, { data: invRows }, { data: rep }] = await Promise.all([
+  const [{ data: items }, { data: branch }, { data: company }, picks, { data: fileRows }, { data: varRows }, tax, { data: invRows }, { data: rep }, lastPrices] = await Promise.all([
     supabase.from("order_items").select("*, product:products!order_items_product_id_fkey(image_url, category_id)").eq("order_id", id).order("id"),
     order.branch_id ? supabase.from("branches").select("*").eq("id", order.branch_id).maybeSingle<Branch>() : Promise.resolve({ data: null }),
     emp && order.company_id
@@ -61,6 +61,8 @@ export default async function OrderDetailPage({
     emp && order.sales_rep_id
       ? supabase.from("profiles").select("full_name, email").eq("id", order.sales_rep_id).maybeSingle<{ full_name: string | null; email: string }>()
       : Promise.resolve({ data: null }),
+    // Order desk: what this customer was invoiced on their orders in the last 30 days (starts the price step).
+    staffOpen && can(profile, "order_desk") ? customerLastPrices(supabase, order.company_id!, order.id) : Promise.resolve(null),
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
   const pickFor = (l: OrderItem) => {
@@ -258,6 +260,7 @@ export default async function OrderDetailPage({
           files={files}
           variance={variance}
           lines={lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) }))}
+          lastPrices={lastPrices}
         />
       ) : null}
 

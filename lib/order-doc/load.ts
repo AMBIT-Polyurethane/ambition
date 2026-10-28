@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Branch, Order } from "@/lib/types";
 import { docState, type DocCompany, type DocItem, type OrderDoc } from "@/lib/order-doc/types";
-import { foamOf, type LotPick } from "@/lib/order-doc/loads";
+import { foamOf, lastPricesFrom, type LastPrices, type LotPick, type PricePart } from "@/lib/order-doc/loads";
 
 /**
  * Brand and lot for each line of an order, by order item. Only AMBIT staff can read these (row-level
@@ -67,4 +67,31 @@ export function docFromJson(json: unknown): OrderDoc | null {
     company: j.company ?? null,
     state: j.state ?? docState(j.order),
   };
+}
+
+/**
+ * Order desk: the prices this customer was invoiced on their orders placed in the last 30 days (newest first),
+ * so the price step can start from them. Null when there are none.
+ */
+export async function customerLastPrices(supabase: SupabaseClient, companyId: string, orderId: string): Promise<LastPrices | null> {
+  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("id, order_no, priced_at")
+    .eq("company_id", companyId)
+    .neq("id", orderId)
+    .neq("status", "cancelled")
+    .not("priced_at", "is", null)
+    .gte("created_at", since)
+    .order("priced_at", { ascending: false })
+    .limit(25);
+  if (!orders?.length) return null;
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("id, order_id, sku, name, unit, qty, unit_price, price_parts, product:products!order_items_product_id_fkey(category_id)")
+    .in("order_id", orders.map((o) => o.id));
+  type Row = { id: number; order_id: string; sku: string; name: string; unit: string; qty: number; unit_price: number | null; price_parts: PricePart[] | null; product: { category_id: string | null } | null };
+  const rows = ((items ?? []) as unknown as Row[]).map(({ product, ...i }) => ({ ...i, foam: foamOf(i, product?.category_id) }));
+  const last = lastPricesFrom(orders as { id: string; order_no: number; priced_at: string | null }[], rows);
+  return Object.keys(last.sku).length || Object.keys(last.iso).length ? last : null;
 }

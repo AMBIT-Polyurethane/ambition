@@ -275,6 +275,11 @@ before, spot checks per location).
   `{ id, parts: [{ with: resin item id | null, qty, price }] }`. `order_items.price_parts` keeps the sets;
   `line_total` is their sum and `unit_price` the average, so goals and reports are unchanged. `rowPrice()` gives each
   printed row its own price on the order page, PDF, emails and approval page.
+- **Last prices**: until an order is priced, the price step starts from what the same customer was invoiced on their
+  orders placed in the last 30 days (`customerLastPrices()` in `lib/order-doc/load.ts`, `lastPricesFrom()` in
+  `loads.ts`): newest price per SKU, ISO per foam set (the resin SKU it went with; a pre-0030 ISO line that covered
+  several resins with one price is skipped). Each box shows "From ORD-…" or "Last price … · Use it"; a note asks the
+  desk to check them against the invoice. No database change.
 - **Sales goals**: `categories.goal_group` (foam, fiberglass, ppe, roof, guns, intumescent, sealants, supplies;
   Admin → Products → Categories), `sales_goals` (person × group, monthly dollars; Admin → Sales goals,
   `admin_set_sales_goals`). `sales_goal_board(month, person)` returns each person's sales by group for the month (orders
