@@ -38,7 +38,7 @@ export type Profile = {
   requested_account_no: string | null;
   created_at: string;
   approved_at: string | null;
-  company?: Pick<Company, "id" | "name" | "account_no" | "default_branch_id"> | null;
+  company?: (Pick<Company, "id" | "name" | "account_no" | "default_branch_id"> & { ops_enabled?: boolean }) | null;
   // Staff roles (migration 0011; missing until it's run)
   job_role?: string | null;
   perms?: string[] | null;
@@ -46,6 +46,10 @@ export type Profile = {
   home_apps?: unknown;
   monthly_goal?: number | null;
   home_layout?: unknown; // 0029: {"order": [...], "hidden": [...]} for the Home board // Sales widget goal, set by an admin (0027)
+  // AMBIT-OPS (0031): their role in their company's workspace; AMBIT admins: the workspace they're helping in
+  ops_role?: string | null;
+  ops_location_id?: string | null;
+  ops_workspace?: string | null;
 };
 
 export type Branch = {

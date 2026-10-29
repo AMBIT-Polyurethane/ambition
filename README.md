@@ -104,10 +104,34 @@ doesn't mistake it for the first box of the page and wipe it out.)
 
 ### AMBIT-OPS
 
-`/ops` (Home tile and left menu "AMBIT-OPS"): the contractor operations software being built inside AMBIT
-Intelligence. Takeoff is its first live module; Quoting & proposals, CRM, Dispatching, Job scheduling and Job costing
-are listed as planned. Open to people with the Takeoff box for now (contractors later). New modules go under
-`app/(app)/ops/`.
+`/ops`: the contractor's own operations software inside AMBIT Intelligence, built as one straight path: CRM (leads
+and customers), then quotes and proposals (Nov 12), scheduling and dispatch (Nov 19), crew work orders and invoices
+(Nov 26) and job costing / yield (Dec 1), for the December 2026 pilot. Database: `0031_ops_foundation.sql`. Code:
+`app/(app)/ops/`, `lib/ops/`, `components/ops/`, the public form in `app/lead/[token]/`.
+
+- **Workspaces**: a workspace is a `companies` row with `ops_enabled`. AMBIT turns it on (Admin > AMBIT-OPS
+  workspaces: pick the customer, pick or invite the owner); the owner invites the team. Contractor logins are
+  `role = 'customer'` with `ops_role` (owner, office, dispatcher, sales, crew_lead, crew, accounting, sub) and land on
+  `/ops`; they still have the AMBIT order store, docs and Academy. Demo workspaces (`ops_demo`) are for AMBIT staff.
+  AMBIT staff open a contractor's workspace only while the owner allows it (`ops_support_until`, Settings > Let AMBIT
+  help); every visit goes in `ops_support_log`. RLS: `ops_company()`, `ops_role()`, `ops_is(...)`; every OPS table has
+  `company_id` and is walled to the workspace. Crews and subs don't read customers, leads or products (no prices).
+  Sales reps read only their own leads (`rep_id` or `created_by`).
+- **Product library** (`ops_products`): seeded when OPS is turned on (`lib/ops/seed.ts`): AMBI-SEAL and AMBI-TITE sets
+  always (ROOF and JACK if bought), set cost = ISO price + resin price from the contractor's latest priced AMBIT
+  invoices, lb per set = 500 ISO + 450 (SEAL) or 475 (TITE); blown fiberglass always, batts if bought. Yield defaults
+  16,500 BF/set open cell, 3,700 closed cell (changing one needs a confirm). AMBIT costs aren't editable; "Refresh
+  AMBIT costs" re-reads the invoices.
+- **Settings** (`ops_settings` jsonb on companies, defaults in `lib/ops/defaults.ts`): labor (open cell $500/set,
+  closed cell $450/set, blown attic $0.05, BIBS mesh $0.05 + blow $0.05 (2x4) / $0.07 (2x6), batts $0.04 R-11/13,
+  $0.05 R-19, $0.06 R-30/38, intumescent $0.05 per sq ft), waste 10%, measure unit (lbs, gallons, strokes), stages,
+  sources, lost reasons, work areas (EW, PW, KW, CL, RL, RJ + custom), services, logo (`ops-logos` bucket).
+- **CRM**: `ops_customers`, `ops_properties`, `ops_leads` (numbers from 1001 per workspace, a stage note on every
+  move, Lost needs a reason), `ops_notes` (note, call, text, email, task, stage). Pipeline board with drag and drop
+  (phone: stage tabs and "Move to…"). Spreadsheet import (`ops_import_customers`, undo for 3 days with
+  `ops_undo_import`), repeats by phone/email skipped.
+- **Website lead form**: `/lead/<token>` (public, no sign-in; `ops_lead_form` / `ops_lead_submit`, rate-limited, a
+  hidden honeypot field); `?embed=1` for an iframe. New link = new token (the old one stops).
 
 ### Takeoff
 

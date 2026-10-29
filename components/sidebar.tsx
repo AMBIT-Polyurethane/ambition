@@ -16,8 +16,11 @@ import {
   Receipt,
   Ruler,
   ShieldCheck,
+  Contact,
+  Settings,
   ShoppingCart,
   Sparkles,
+  SquareKanban,
   Tag,
   Truck,
   User,
@@ -30,7 +33,7 @@ import { BrandImg } from "@/components/brand";
 // The computer layout: a menu down the left side instead of the phone's bottom tabs.
 // Same pages, same app; the screen width decides which one shows (globals.css, "Desktop").
 
-export type SideItem = { href: string; label: string; icon: keyof typeof ICONS; badge?: number };
+export type SideItem = { href: string; label: string; icon: keyof typeof ICONS; badge?: number; exact?: boolean };
 
 const ICONS = {
   home: House,
@@ -50,11 +53,15 @@ const ICONS = {
   complaints: MessageSquareWarning,
   admin: ShieldCheck,
   profile: User,
+  pipeline: SquareKanban,
+  customers: Contact,
+  settings: Settings,
 } satisfies Record<string, LucideIcon>;
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
-function isOn(href: string, path: string) {
+function isOn(href: string, path: string, exact?: boolean) {
+  if (exact) return path === href;
   if (href === "/") return path === "/";
   if (href === "/orders") return path === "/orders" || (path.startsWith("/orders/") && !path.startsWith("/orders/desk"));
   if (href === "/profile") return path.startsWith("/profile");
@@ -97,7 +104,7 @@ export function Sidebar({ items, name, sub }: { items: SideItem[]; name: string;
       <nav className="side-nav">
         {items.map((it) => {
           const I = ICONS[it.icon];
-          const on = isOn(it.href, path);
+          const on = isOn(it.href, path, it.exact);
           const badge = it.href === "/order" ? count : it.badge ?? 0;
           return (
             <Link key={it.href} href={it.href} className={on ? "on" : ""} aria-current={on ? "page" : undefined} title={compact ? it.label : undefined}>

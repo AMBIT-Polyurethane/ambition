@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
 import { Bell, CalendarClock, ChevronRight, Landmark, Plus, RefreshCw, Sparkles, UserCheck } from "lucide-react";
+import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
+import { opsMember } from "@/lib/ops/roles";
 import { firstName, greeting, initials, orderNo, dateShort } from "@/lib/format";
 import { BrandImg } from "@/components/brand";
 import { JumpBackIn, RecentLink } from "@/components/recent";
@@ -68,6 +70,8 @@ async function creditWaitingNow(supabase: Awaited<ReturnType<typeof requireActiv
 export default async function HomePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, profile } = await requireActive();
+  // AMBIT-OPS contractors: their business is home.
+  if (opsMember(profile)) redirect(sp.msg ? `/ops?msg=${encodeURIComponent(sp.msg)}` : "/ops");
   const emp = isEmployee(profile);
   const admin = profile.role === "admin";
   const canOrder = !emp || can(profile, "ordering");

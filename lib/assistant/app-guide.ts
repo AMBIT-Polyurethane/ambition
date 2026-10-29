@@ -5,7 +5,8 @@ import type { Profile } from "@/lib/types";
 // assistant only ever gets the sections the person asking can use: contractors never see staff screens.
 // Keep this in step with the app when screens change (README.md has the same features in more detail).
 
-type Section = { who: "all" | "staff" | "customer" | "admin"; perm?: Perm; anyPerm?: Perm[]; title: string; body: string };
+// ops: "crm" = contractors in an AMBIT-OPS workspace who work leads (not crews); "field" = crews and subs.
+type Section = { who: "all" | "staff" | "customer" | "admin"; perm?: Perm; anyPerm?: Perm[]; ops?: "crm" | "field"; title: string; body: string };
 
 const SECTIONS: Section[] = [
   {
@@ -153,6 +154,29 @@ Keys: V select, H move, S scale, A area, L linear, C count, X cutout, Enter fini
 Reading plans: sheet numbers start with a letter for the discipline (A architectural, S structural, M mechanical, E electrical, P plumbing); floor plans and roof plans give areas, building sections and wall sections show assemblies and ceiling heights, and energy or general notes list required R-values. The scale applies to the drawing it's written under; details on the same sheet can have their own scale.`,
   },
   {
+    who: "customer",
+    ops: "crm",
+    title: "AMBIT-OPS: leads, customers and settings (contractors)",
+    body: `[AMBIT-OPS](/ops) is the contractor's own business software inside the app: the work in order, left to right: Leads, Customers, then Quotes (coming Nov 12), Schedule (Nov 19), Work orders and Invoices (Nov 26) and Job costing (Dec 1). Home shows a "Get set up" checklist, your tasks for today and the latest leads.
+Leads ([Leads](/ops/pipeline)): a board with a column per stage (New lead, Contacted, Appointment set, Quote sent, Follow-up, Won, Lost). Drag a card to another column, or use its "Move to…" menu; on a phone pick the stage at the top and use "Move to…" on the card. Moving a lead to Lost always asks why (Price, Timing, Went with someone else…) so you can see later why jobs were lost. "+ New lead": type a name and phone (or pick an existing customer), the job address, what they need, where the lead came from, a rough value and a follow-up date. If the phone or email already belongs to a customer, it offers to use that customer instead of making a duplicate.
+A lead's page: the stage path across the top (tap a stage to move it), "Next step" button, a box to log a Note, Call, Text or Email to the timeline, Tasks ("Add a task" with a due date and who it's for; tick it when done), the customer's call / text / map buttons, Details (job name, services, rep, source, value, follow-up, job address), "Mark lost" and "Delete this lead".
+Sales reps see only their own leads (the ones assigned to them or that they added). Crews don't see leads, customers or prices.
+Customers ([Customers](/ops/customers)): search by name, phone or email; filter Homeowners or Builders & companies. A customer's page has their jobs and leads, addresses (with gate codes) and notes. "Import" brings in a spreadsheet (Excel or CSV from QuickBooks, Jobber, an old CRM): match the columns, check every row, and repeats (same phone or email) are skipped unless you tick "Import them anyway". "Undo that import" on the Customers page removes the whole import for 3 days.
+Website lead form: Settings > Website lead form gives a link (and a QR code and website code) that customers fill in to ask for a quote; each request lands on the Leads board as a New lead with the customer, address and what they need filled in. "Make a new link" stops the old one.
+Settings ([Settings](/ops/settings), owners and office managers): Company and logo (shows on everything customers see); Team (invite people by email and give each a role: Owner, Office manager, Scheduler/Dispatcher, Sales/estimator, Crew lead, Crew member, Accounting, Subcontractor); Pricing, margins and labor (labor defaults: open cell $500 a set, closed cell $450 a set, blown attic $0.05 a sq ft, BIBS mesh $0.05 plus blowing $0.05 (2x4) or $0.07 (2x6) a sq ft, batts $0.04 to $0.06 a sq ft by R-value, intumescent $0.05 a sq ft; all can be changed); Products and AMBIT costs (foam sets and fiberglass with your AMBIT invoice prices; yields default to 16,500 board feet a set open cell and 3,700 closed cell, and changing one asks you to confirm); Pipeline and lists (stages, lead sources, lost reasons, work areas, services); Locations; Let AMBIT help (owners only: lets AMBIT open your workspace for 1, 7 or 30 days to help; every visit is listed there).`,
+  },
+  {
+    who: "customer",
+    ops: "field",
+    title: "AMBIT-OPS for crews",
+    body: `Crew members, crew leads and subs open to their AMBIT-OPS home. Starting Nov 26 it shows each day's work orders (scope, address, materials), clock in and out, and logging the sets sprayed. Until then it links to Product docs and Academy. Crews never see prices, leads or customer lists.`,
+  },
+  {
+    who: "admin",
+    title: "Turning on AMBIT-OPS for a contractor (admins)",
+    body: `Admin > AMBIT-OPS workspaces ([AMBIT-OPS workspaces](/admin/ops)). "Turn on AMBIT-OPS for a customer": search the customer, pick who the owner is (one of their logins, or "Someone else: send them an invite" with email, name and cell), then "Turn on AMBIT-OPS". Their product library starts with AMBIT foam sets and fiberglass priced from their own AMBIT invoices. The owner then invites their own team. "Turn off" hides it (nothing is deleted); "Turn back on" restores it. "Demo workspace": name it and "Create and open" to try everything with made-up data. AMBIT staff can open a contractor's workspace only when the owner has turned on "Let AMBIT help" in their settings (or it's a demo); each visit is logged for the owner to see. A yellow bar shows while you're inside a workspace; "Leave" takes you back.`,
+  },
+  {
     who: "all",
     title: "Product docs and bulletins",
     body: `[Product docs](/docs) has AMBIT's technical data sheets, safety data sheets (SDS), code reports (ICC-ES ESR, CCRR), application guides, warranties and brochures, grouped by product, with filter chips (Data sheets, Safety (SDS), Code reports, Guides & warranties, Brochures, Bulletins). [Bulletins](/docs?type=tsb) are AMBIT's technical service bulletins (TSBs). Tap any document to open it.`,
@@ -211,9 +235,12 @@ Reading plans: sheet numbers start with a letter for the discipline (A architect
   },
 ];
 
-export function appGuideFor(p: Pick<Profile, "role" | "status"> & { perms?: string[] | null }): string {
+export function appGuideFor(p: Pick<Profile, "role" | "status"> & { perms?: string[] | null; ops_role?: string | null }): string {
   const staff = p.role === "employee" || p.role === "admin";
+  const field = ["crew", "crew_lead", "sub"].includes(p.ops_role ?? "");
   const keep = SECTIONS.filter((s) => {
+    if (s.ops === "crm" && (!p.ops_role || field)) return false;
+    if (s.ops === "field" && !field) return false;
     if (s.who === "admin") return p.role === "admin";
     if (s.who === "staff" && !staff) return false;
     if (s.who === "customer" && staff) return false;

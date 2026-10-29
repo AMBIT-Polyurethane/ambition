@@ -48,6 +48,6 @@ export function systemPrompt(profile: Profile, settings: AiSettings, webOn: bool
 
   const extra = settings.extra_rules?.trim() ? `\n\n# More rules from AMBIT's teacher\n${settings.extra_rules.trim()}` : "";
 
-  const rules = `${RULES}\n\n${web}${extra}\n\n# How the app works (only what this person can use)\n${appGuideFor(profile)}`;
+  const rules = `${RULES}\n\n${web}${extra}\n\n# How the app works (only what this person can use)\n${appGuideFor({ ...profile, ops_role: profile.company?.ops_enabled ? profile.ops_role : null })}`;
   return { rules, who: `${who} Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Chicago" })}.` };
 }

@@ -27,7 +27,7 @@ const SCRIPT = `(function () {
     var d = document, w = window, p = location.pathname;
     var BUILD = ${JSON.stringify(BUILD)};
     var LONG = 30 * 60 * 1000;
-    var skipHere = function () { return /^\\/(approve|auth)(\\/|$)/.test(location.pathname); };
+    var skipHere = function () { return /^\\/(approve|auth|lead)(\\/|$)/.test(location.pathname); };
 
     function spans(word) {
       var out = "";

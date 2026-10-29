@@ -4,6 +4,7 @@ import { requireActive, isEmployee } from "@/lib/session";
 import { can, roleLabel } from "@/lib/access";
 import { deskAccess } from "@/lib/order-desk";
 import { assistantAccess } from "@/lib/assistant/settings";
+import { opsCan, opsMember, opsRoleLabel } from "@/lib/ops/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { supabase, profile } = await requireActive();
   const emp = isEmployee(profile);
+  const ops = opsMember(profile);
   const ai = await assistantAccess(supabase, profile);
   const ask: SideItem | false = ai.on && { href: "/assistant", label: "Ask AMBIT", icon: "assistant", badge: ai.unread };
   const items: (SideItem | false)[] = emp
@@ -35,7 +37,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         profile.role === "admin" && { href: "/admin", label: "Admin", icon: "admin" },
         { href: "/profile", label: "Profile", icon: "profile" },
       ]
-    : [
+    : ops
+      ? opsCan.fieldOnly(profile.ops_role)
+        ? [
+            { href: "/ops", label: "Home", icon: "home", exact: true },
+            ask,
+            { href: "/docs", label: "Product docs", icon: "docs" },
+            { href: "/academy", label: "Academy", icon: "academy" },
+            { href: "/profile", label: "Profile", icon: "profile" },
+          ]
+        : [
+            { href: "/ops", label: "Home", icon: "home", exact: true },
+            ask,
+            opsCan.crm(profile.ops_role) && { href: "/ops/pipeline", label: "Leads", icon: "pipeline" },
+            opsCan.crm(profile.ops_role) && { href: "/ops/customers", label: "Customers", icon: "customers" },
+            opsCan.order(profile.ops_role) && { href: "/order", label: "Order from AMBIT", icon: "cart" },
+            opsCan.order(profile.ops_role) && { href: "/orders", label: "My AMBIT orders", icon: "orders" },
+            { href: "/docs", label: "Product docs", icon: "docs" },
+            { href: "/academy", label: "Academy", icon: "academy" },
+            opsCan.manage(profile.ops_role) && { href: "/ops/settings", label: "Settings", icon: "settings" },
+            { href: "/profile", label: "Profile", icon: "profile" },
+          ]
+      : [
         { href: "/", label: "Home", icon: "home" },
         ask,
         { href: "/order", label: "Order", icon: "cart" },
@@ -45,13 +68,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/profile", label: "Profile", icon: "profile" },
       ];
   const name = profile.full_name || profile.email;
-  const sub = emp ? roleLabel(profile.job_role) ?? (profile.role === "admin" ? "Admin" : "AMBIT") : profile.company?.name ?? "Contractor";
+  const sub = emp
+    ? roleLabel(profile.job_role) ?? (profile.role === "admin" ? "Admin" : "AMBIT")
+    : ops
+      ? `${opsRoleLabel(profile.ops_role)} · ${profile.company?.name ?? ""}`
+      : profile.company?.name ?? "Contractor";
 
   return (
     <div className="app-frame">
       <Sidebar items={items.filter(Boolean) as SideItem[]} name={name} sub={sub} />
       <div className="app-main">{children}</div>
-      <TabBar showOrder={profile.role === "customer" || can(profile, "ordering")} />
+      <TabBar
+        showOrder={ops ? opsCan.order(profile.ops_role) : profile.role === "customer" || can(profile, "ordering")}
+        mode={ops ? (opsCan.fieldOnly(profile.ops_role) ? "crew" : "ops") : "default"}
+      />
     </div>
   );
 }

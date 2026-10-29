@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FileText, GraduationCap, House, ShoppingCart, User } from "lucide-react";
+import { Contact, FileText, GraduationCap, House, ShoppingCart, SquareKanban, User } from "lucide-react";
 import { cartCount, onCartChange, readCart } from "@/lib/cart";
 
 const TABS = [
@@ -14,7 +14,23 @@ const TABS = [
   { href: "/profile", label: "Profile", icon: User, match: (p: string) => p.startsWith("/profile") || p.startsWith("/admin") },
 ];
 
-export function TabBar({ showOrder = true }: { showOrder?: boolean }) {
+// AMBIT-OPS contractors: their business first (Home is the OPS home), AMBIT ordering second.
+const OPS_TABS = [
+  { href: "/ops", label: "Home", icon: House, match: (p: string) => p === "/ops" || p === "/" },
+  { href: "/ops/pipeline", label: "Leads", icon: SquareKanban, match: (p: string) => p.startsWith("/ops/pipeline") || p.startsWith("/ops/leads") },
+  { href: "/ops/customers", label: "Customers", icon: Contact, match: (p: string) => p.startsWith("/ops/customers") },
+  { href: "/order", label: "Order", icon: ShoppingCart, match: (p: string) => p.startsWith("/order") },
+  { href: "/profile", label: "Profile", icon: User, match: (p: string) => p.startsWith("/profile") || p.startsWith("/ops/settings") },
+];
+// Crews: their work, then learning.
+const CREW_TABS = [
+  { href: "/ops", label: "Home", icon: House, match: (p: string) => p === "/ops" || p === "/" },
+  { href: "/academy", label: "Academy", icon: GraduationCap, match: (p: string) => p.startsWith("/academy") },
+  { href: "/docs", label: "Docs", icon: FileText, match: (p: string) => p.startsWith("/docs") },
+  { href: "/profile", label: "Profile", icon: User, match: (p: string) => p.startsWith("/profile") },
+];
+
+export function TabBar({ showOrder = true, mode = "default" }: { showOrder?: boolean; mode?: "default" | "ops" | "crew" }) {
   const path = usePathname() || "/";
   const [count, setCount] = useState(0);
 
@@ -24,10 +40,11 @@ export function TabBar({ showOrder = true }: { showOrder?: boolean }) {
     return onCartChange(update);
   }, []);
 
+  const tabs = mode === "ops" ? OPS_TABS.filter((t) => showOrder || t.href !== "/order") : mode === "crew" ? CREW_TABS : TABS.filter((t) => showOrder || t.href !== "/order");
   return (
     <div className="tabbar">
-      <nav aria-label="Main" style={{ gridTemplateColumns: `repeat(${showOrder ? 5 : 4}, 1fr)` }}>
-        {TABS.filter((t) => showOrder || t.href !== "/order").map((t) => {
+      <nav aria-label="Main" style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
+        {tabs.map((t) => {
           const on = t.match(path);
           const I = t.icon;
           return (
