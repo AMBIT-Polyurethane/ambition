@@ -7,6 +7,7 @@ import { SettingsShell } from "@/components/ops/settings-shell";
 import { Submit } from "@/components/forms";
 import { addFromCatalog, markProductsReviewed, refreshAmbitCosts, saveProduct } from "../actions";
 import { YieldField } from "./yield-field";
+import { COVERAGE, chartFor } from "@/lib/ops/coverage";
 
 export const metadata = { title: "Products and AMBIT costs" };
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export const dynamic = "force-dynamic";
 type P = {
   id: string; product_id: string | null; kind: string; name: string; sku: string | null; unit: string; cost: number | null; cost_source: string; cost_note: string | null;
   yield_bf: number | null; lb_per_set: number | null; r_value: number | null; sqft_per_unit: number | null; waste_pct: number; active: boolean;
+  coverage_key: string | null; description: string | null;
 };
 
 const GROUPS: { title: string; kinds: string[] }[] = [
@@ -26,6 +28,7 @@ const GROUPS: { title: string; kinds: string[] }[] = [
 const KINDS = [
   { key: "foam_oc", label: "Open cell foam (set)" },
   { key: "foam_cc", label: "Closed cell foam (set)" },
+  { key: "foam_roof", label: "Roofing foam (set)" },
   { key: "blown", label: "Blown fiberglass (bag)" },
   { key: "batt", label: "Batts (bag)" },
   { key: "coating", label: "Roof coating" },
@@ -68,7 +71,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <div className="list">
               {list.map((p) => {
                 const foam = p.kind.startsWith("foam");
-                const standard = p.kind === "foam_oc" ? YIELD_DEFAULTS.foam_oc : p.kind === "foam_cc" ? YIELD_DEFAULTS.foam_cc : null;
+                const standard = p.kind === "foam_oc" ? YIELD_DEFAULTS.foam_oc : p.kind === "foam_cc" ? YIELD_DEFAULTS.foam_cc : p.kind === "foam_roof" ? YIELD_DEFAULTS.foam_roof : null;
+                const chart = p.kind === "blown" ? chartFor(p.coverage_key) : null;
                 const perLb = foam && p.cost !== null && p.lb_per_set ? Number(p.cost) / Number(p.lb_per_set) : null;
                 return (
                   <details key={p.id} className={`ops-prod${p.active ? "" : " off"}`}>
@@ -76,7 +80,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                       <div className="grow" style={{ minWidth: 0 }}>
                         <div className="t ellipsis">{p.name}{!p.active ? <span className="pill grey" style={{ marginLeft: 8 }}>Hidden</span> : null}</div>
                         <div className="s ellipsis">
-                          {[p.sku, foam && p.yield_bf ? `${Number(p.yield_bf).toLocaleString()} bd ft/set` : null, p.kind === "batt" && p.sqft_per_unit ? `${Number(p.sqft_per_unit)} sq ft/bag` : null, `waste ${Number(p.waste_pct)}%`].filter(Boolean).join(" · ")}
+                          {[p.sku, foam && p.yield_bf ? `${Number(p.yield_bf).toLocaleString()} bd ft/set` : null, p.kind === "batt" && p.sqft_per_unit ? `${Number(p.sqft_per_unit)} sq ft/bag` : null, chart ? `${chart.maker} coverage chart` : p.kind === "blown" ? "No coverage chart" : null, `waste ${Number(p.waste_pct)}%`].filter(Boolean).join(" · ")}
                         </div>
                       </div>
                       <span className="col tight" style={{ alignItems: "flex-end", flex: "none" }}>
@@ -128,7 +132,36 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                         ) : null}
                       </div>
                       {foam ? <YieldField value={p.yield_bf === null ? null : Number(p.yield_bf)} standard={standard} /> : null}
-                      {p.kind === "blown" ? <span className="tiny faint">The coverage chart (bags per 1,000 sq ft for each R-value) loads with quoting on Nov 12.</span> : null}
+                      {p.kind === "blown" ? (
+                        <>
+                          <label className="field">
+                            <span className="label">Coverage chart</span>
+                            <select className="select sm" name="coverage_key" defaultValue={p.coverage_key ?? ""}>
+                              <option value="">None</option>
+                              {COVERAGE.map((c) => <option key={c.key} value={c.key}>{c.maker} {c.product}</option>)}
+                            </select>
+                          </label>
+                          {chart ? (
+                            <div className="ops-chart">
+                              <table className="ops-table tight">
+                                <thead><tr><th>R-value</th><th>Bags / 1,000 sq ft</th><th>Sq ft / bag</th><th>Inches</th></tr></thead>
+                                <tbody>{chart.attic.map((r) => <tr key={r.r}><td>R-{r.r}</td><td>{r.bags_per_1000}</td><td>{r.sqft_per_bag}</td><td>{r.inches}</td></tr>)}</tbody>
+                              </table>
+                              {chart.walls.length ? (
+                                <table className="ops-table tight">
+                                  <thead><tr><th>Walls</th><th>R-value</th><th>Density</th><th>Bags / 1,000 sq ft</th></tr></thead>
+                                  <tbody>{chart.walls.map((w, i) => <tr key={i}><td>{w.framing}</td><td>R-{w.r}</td><td>{w.pcf} lb/cu ft</td><td>{w.bags_per_1000}</td></tr>)}</tbody>
+                                </table>
+                              ) : null}
+                              <span className="tiny faint">{chart.source}. {chart.note ?? ""}</span>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : null}
+                      <label className="field">
+                        <span className="label">What customers read on the proposal (optional)</span>
+                        <input className="input sm" name="description" defaultValue={p.description ?? ""} maxLength={400} placeholder="e.g. AMBI-SEAL 5.0 open cell spray foam, Class 1 fire rated" />
+                      </label>
                       <label className="check"><input type="checkbox" name="active" defaultChecked={p.active} /> Show this product on quotes</label>
                       <Submit className="btn sm dark" pendingText="Saving…">Save</Submit>
                     </form>

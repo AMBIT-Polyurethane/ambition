@@ -2,12 +2,14 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { foamOf, lastPricesFrom, type LastPrice, type LastPrices, type PricePart } from "@/lib/order-doc/loads";
 import { DEFAULT_SETTINGS, YIELD_DEFAULTS } from "@/lib/ops/defaults";
+import { COVERAGE, chartKeyFor } from "@/lib/ops/coverage";
 import { dateShort, orderNo } from "@/lib/format";
 
 // AMBIT-OPS: the product library a contractor starts with, built from AMBIT's catalog and the prices
 // on the contractor's own AMBIT invoices (the order desk's invoice prices). Foam becomes sets
-// (ISO + that resin); blown fiberglass always; batts they've bought before. Everything else is added
-// from the AMBIT catalog when they first quote it.
+// (ISO + that resin); blown fiberglass always (with its maker's coverage chart); batts they've bought
+// before. Blown brands AMBIT doesn't stock are listed turned off, ready for a typed-in cost. Everything
+// else is added from the AMBIT catalog when they first quote it.
 
 export type StarterProduct = {
   product_id: string | null;
@@ -26,6 +28,9 @@ export type StarterProduct = {
   waste_pct: number;
   price_unit: string | null;
   active: boolean;
+  coverage_key: string | null;
+  labor_key: string | null;
+  description: string | null;
 };
 
 type CatalogRow = { id: string; sku: string; name: string; unit: string; category_id: string | null; sqft_per_unit: number | null };
@@ -104,13 +109,16 @@ export async function starterProducts(supabase: SupabaseClient, companyId: strin
       cost,
       cost_source: cost !== null ? "ambit" : "manual",
       cost_note: newer ? note(newer) : "No AMBIT invoice price yet",
-      yield_bf: line.kind === "foam_oc" ? YIELD_DEFAULTS.foam_oc : line.kind === "foam_cc" ? YIELD_DEFAULTS.foam_cc : null,
+      yield_bf: line.kind === "foam_oc" ? YIELD_DEFAULTS.foam_oc : line.kind === "foam_cc" ? YIELD_DEFAULTS.foam_cc : line.kind === "foam_roof" ? YIELD_DEFAULTS.foam_roof : null,
       lb_per_set: ISO_LB + resinLb(r.sku),
       r_value: null,
       sqft_per_unit: null,
       waste_pct: DEFAULT_SETTINGS.waste_pct,
       price_unit: "bf",
       active: true,
+      coverage_key: null,
+      labor_key: null,
+      description: null,
     });
   }
 
@@ -133,9 +141,38 @@ export async function starterProducts(supabase: SupabaseClient, companyId: strin
       lb_per_set: null,
       r_value: blown ? null : rOf(r.name),
       sqft_per_unit: r.sqft_per_unit === null ? null : Number(r.sqft_per_unit),
-      waste_pct: DEFAULT_SETTINGS.waste_pct,
+      // Blown: the chart already has the bag count per 1,000 sq ft, so no waste on top unless they add it.
+      waste_pct: blown ? 0 : DEFAULT_SETTINGS.waste_pct,
       price_unit: "sqft",
       active: true,
+      coverage_key: blown ? chartKeyFor(r.name) : null,
+      labor_key: null,
+      description: null,
+    });
+  }
+  // The other blown brands (charts loaded), turned off until they type a cost and turn one on.
+  for (const c of COVERAGE) {
+    if (out.some((x) => x.coverage_key === c.key)) continue;
+    out.push({
+      product_id: null,
+      ambit_skus: [],
+      kind: "blown",
+      name: `${c.maker} ${c.product}`,
+      sku: null,
+      unit: "bag",
+      cost: null,
+      cost_source: "manual",
+      cost_note: "Not stocked by AMBIT: type your cost to use it",
+      yield_bf: null,
+      lb_per_set: null,
+      r_value: null,
+      sqft_per_unit: null,
+      waste_pct: 0,
+      price_unit: "sqft",
+      active: false,
+      coverage_key: c.key,
+      labor_key: null,
+      description: null,
     });
   }
   return out;

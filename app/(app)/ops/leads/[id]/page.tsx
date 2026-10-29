@@ -23,13 +23,16 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
   const { supabase, profile, ws } = await requireOps(opsCan.crm);
   const { data: lead } = await supabase.from("ops_leads").select("*").eq("id", id).maybeSingle<OpsLead>();
   if (!lead) notFound();
-  const [{ data: cust }, { data: props }, { data: noteRows }, team, locations] = await Promise.all([
+  const [{ data: cust }, { data: props }, { data: noteRows }, team, locations, { data: quoteRows }] = await Promise.all([
     supabase.from("ops_customers").select("id, name, phone, phone2, email, kind, price_level").eq("id", lead.customer_id).maybeSingle(),
     supabase.from("ops_properties").select("*").eq("customer_id", lead.customer_id).order("created_at"),
     supabase.from("ops_notes").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(200),
     teamOf(supabase, ws.company.id),
     locationsOf(supabase, ws.company.id),
+    supabase.from("ops_quotes").select("id, number, title, status, totals, signed_total, viewed_at, sent_at, updated_at").eq("lead_id", id).order("created_at", { ascending: false }),
   ]);
+  const quotes = (quoteRows ?? []) as { id: string; number: number; title: string | null; status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; viewed_at: string | null; sent_at: string | null; updated_at: string }[];
+  const quoteTotal = (q: (typeof quotes)[number]) => q.signed_total ?? Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => o.total));
   const c = cust as { id: string; name: string; phone: string | null; phone2: string | null; email: string | null; kind: string; price_level: string } | null;
   const properties = (props ?? []) as OpsProperty[];
   const property = properties.find((p) => p.id === lead.property_id) ?? null;
@@ -99,7 +102,34 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                   <Submit className="btn sm" pendingText="…">{nextStage.key === "won" ? <><Trophy size={15} /> Mark won</> : <>{nextStage.name} <ArrowRight size={15} /></>}</Submit>
                 </form>
               ) : null}
-              <span className="ops-next-soon tiny faint"><FileSignature size={14} /> Build the quote from here starting Nov 12.</span>
+              {opsCan.quote(ws.role) && !quotes.length ? (
+                <Link href={`/ops/quotes/new?lead=${lead.id}`} className="btn sm dark"><FileSignature size={15} /> Build the quote</Link>
+              ) : null}
+            </section>
+          ) : null}
+
+          {quotes.length || opsCan.quote(ws.role) ? (
+            <section className="card col" style={{ gap: 10 }}>
+              <div className="row between">
+                <b>Quotes</b>
+                {opsCan.quote(ws.role) ? <Link href={`/ops/quotes/new?lead=${lead.id}`} className="linkbtn small">New quote</Link> : null}
+              </div>
+              {quotes.length ? (
+                <div className="list">
+                  {quotes.map((q) => (
+                    <Link key={q.id} href={`/ops/quotes/${q.id}`} className="item">
+                      <span className="ops-q-ic" aria-hidden="true"><FileSignature size={16} /></span>
+                      <div className="grow" style={{ minWidth: 0 }}>
+                        <div className="t ellipsis">#{q.number}{q.title ? ` · ${q.title}` : ""}</div>
+                        <div className="s ellipsis">{q.status === "signed" ? "Signed" : q.viewed_at ? `Opened ${dateShort(q.viewed_at)}` : q.sent_at ? `Sent ${dateShort(q.sent_at)}` : "Draft"}</div>
+                      </div>
+                      <b>{money0(quoteTotal(q))}</b>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <span className="small muted">No quote yet. Measure on site or from plans, then price it.</span>
+              )}
             </section>
           ) : null}
 

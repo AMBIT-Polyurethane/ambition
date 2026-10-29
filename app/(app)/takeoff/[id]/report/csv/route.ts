@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getSession } from "@/lib/session";
-import { can } from "@/lib/access";
+import { takeoffAccess } from "@/lib/takeoff/access";
 import { loadReport } from "@/lib/takeoff/load";
 import { materialLabel, pitchFactor } from "@/lib/takeoff/calc";
 
@@ -17,8 +16,8 @@ const cell = (v: unknown) => {
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const s = await getSession();
-  if (!s?.profile || !can(s.profile, "takeoff")) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  const s = await takeoffAccess();
+  if (!s) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   const r = await loadReport(s.supabase, id);
   if (!r) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const { t, items, totals, bySheet } = r;

@@ -9,6 +9,7 @@ import {
   CircleHelp,
   Eye,
   EyeOff,
+  FileSignature,
   FileText,
   FileUp,
   Hand,
@@ -21,8 +22,11 @@ import {
   Plus,
   RulerDimensionLine,
   Scissors,
+  ShoppingCart,
+  Sparkles,
   Spline,
   Tag,
+  Redo2,
   Trash2,
   Undo2,
   X,
@@ -30,6 +34,9 @@ import {
 } from "lucide-react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createClient } from "@/lib/supabase/client";
+import { DEFAULT_WORK_AREAS, type WorkArea } from "@/lib/ops/defaults";
+import { PrescanDialog } from "@/components/takeoff/prescan";
+import type { ScanResult } from "@/lib/takeoff/prescan";
 import {
   COLORS,
   MATERIALS,
@@ -55,12 +62,68 @@ import {
 } from "@/lib/takeoff/calc";
 
 export type TFile = { id: string; path: string; file_name: string; size: number | null; pages: number | null; url: string | null };
-export type TakeoffInfo = { id: string; name: string; customer: string | null; address: string | null; due_date: string | null; status: string };
+export type TakeoffInfo = {
+  id: string;
+  name: string;
+  customer: string | null;
+  address: string | null;
+  due_date: string | null;
+  status: string;
+  ops_company_id?: string | null;
+  lead_id?: string | null;
+  ops_customer_id?: string | null;
+  ai_scan?: unknown;
+};
 
 type Tool = "select" | "pan" | "scale" | "area" | "linear" | "count" | "cutout";
 type View = { z: number; x: number; y: number };
 type Toast = { kind: "ok" | "err" | "info"; text: string } | null;
 type Draft = Partial<TItem> & { id?: string };
+
+// ---------------------------------------------------------------- undo / redo
+// Every change to the takeoff is a step that can be undone and redone (shapes, corners, items, scales).
+// New rows get their id here, so undoing a delete puts back the very same row.
+type SheetScale = { id: string; ft_per_pt: number | null; scale_label: string | null; scale_source: string | null };
+type ItemFields = Partial<Omit<TItem, "id">>;
+type Change =
+  | { t: "addMark"; mark: TMark }
+  | { t: "delMark"; mark: TMark }
+  | { t: "movePts"; id: string; before: Pt[]; after: Pt[] }
+  | { t: "addItem"; item: TItem; marks: TMark[] }
+  | { t: "delItem"; item: TItem; marks: TMark[] }
+  | { t: "editItem"; id: string; before: ItemFields; after: ItemFields }
+  | { t: "scale"; before: SheetScale[]; after: SheetScale[] };
+type Step = { label: string; changes: Change[] };
+const HISTORY = 60;
+
+function invert(c: Change): Change {
+  switch (c.t) {
+    case "addMark":
+      return { t: "delMark", mark: c.mark };
+    case "delMark":
+      return { t: "addMark", mark: c.mark };
+    case "movePts":
+      return { t: "movePts", id: c.id, before: c.after, after: c.before };
+    case "addItem":
+      return { t: "delItem", item: c.item, marks: c.marks };
+    case "delItem":
+      return { t: "addItem", item: c.item, marks: c.marks };
+    case "editItem":
+      return { t: "editItem", id: c.id, before: c.after, after: c.before };
+    case "scale":
+      return { t: "scale", before: c.after, after: c.before };
+  }
+}
+
+/** The closest point on the segment a-b to p. */
+function onSegment(p: Pt, a: Pt, b: Pt): { q: Pt; d: number } {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const k = len2 ? Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+  const q: Pt = [a[0] + k * dx, a[1] + k * dy];
+  return { q, d: Math.hypot(p[0] - q[0], p[1] - q[1]) };
+}
 
 const TOOLS: { id: Tool; label: string; key: string; icon: LucideIcon; hint: string }[] = [
   { id: "select", label: "Select", key: "V", icon: MousePointer2, hint: "Click a shape to select it (Delete removes it). Drag to move around; scroll to zoom." },
@@ -76,12 +139,14 @@ const TOOL_KIND: Partial<Record<Tool, TItem["kind"]>> = { area: "area", cutout: 
 const toolFor = (it: Pick<TItem, "kind">): Tool => (it.kind === "area" ? "area" : it.kind === "linear" ? "linear" : "count");
 
 const PRESETS: { label: string; item: Draft }[] = [
-  { label: "Exterior walls", item: { name: "Exterior walls", kind: "linear", material: "open_cell", thickness_in: 5.5, height_ft: 9 } },
-  { label: "Attic floor / ceiling", item: { name: "Ceiling, vented attic", kind: "area", material: "blown_fiberglass" } },
-  { label: "Roof deck", item: { name: "Roof deck", kind: "area", material: "open_cell", thickness_in: 7, pitch: 6 } },
-  { label: "Vaulted ceiling", item: { name: "Vaulted ceiling", kind: "area", material: "closed_cell", thickness_in: 3, pitch: 6 } },
-  { label: "Rim joist", item: { name: "Rim joist", kind: "linear", material: "closed_cell", thickness_in: 3, height_ft: 1 } },
-  { label: "Garage common wall", item: { name: "Garage common wall", kind: "linear", material: "fiberglass_batts", height_ft: 9 } },
+  { label: "Exterior walls", item: { name: "Exterior walls", kind: "linear", material: "open_cell", thickness_in: 5.5, height_ft: 9, area_code: "EW" } },
+  { label: "Attic floor / ceiling", item: { name: "Ceiling, vented attic", kind: "area", material: "blown_fiberglass", area_code: "CL" } },
+  { label: "Roof deck", item: { name: "Roof deck", kind: "area", material: "open_cell", thickness_in: 7, pitch: 6, area_code: "RL" } },
+  { label: "Vaulted ceiling", item: { name: "Vaulted ceiling", kind: "area", material: "closed_cell", thickness_in: 3, pitch: 6, area_code: "RL" } },
+  { label: "Knee walls", item: { name: "Knee walls", kind: "linear", material: "open_cell", thickness_in: 5.5, height_ft: 4, area_code: "KW" } },
+  { label: "Rim joist", item: { name: "Rim joist", kind: "linear", material: "closed_cell", thickness_in: 3, height_ft: 1, area_code: "RJ" } },
+  { label: "Garage common wall", item: { name: "Garage common wall", kind: "linear", material: "fiberglass_batts", height_ft: 9, area_code: "EW" } },
+  { label: "Attic demising wall", item: { name: "Attic demising wall", kind: "linear", material: "open_cell", thickness_in: 5.5, shape: "gable", pitch: 6, area_code: "RL" } },
   { label: "Can lights (count)", item: { name: "Recessed lights", kind: "count", material: "other" } },
 ];
 
@@ -120,7 +185,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; sheets: TSheet[]; items: TItem[]; marks: TMark[] }) {
+export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; sheets: TSheet[]; items: TItem[]; marks: TMark[]; workAreas?: WorkArea[]; ops?: boolean }) {
   const t = props.takeoff;
   const supabase = useMemo(() => createClient(), []);
   const [files, setFiles] = useState(props.files);
@@ -146,12 +211,15 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
   const [help, setHelp] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [sheetQ, setSheetQ] = useState("");
+  const [scanOpen, setScanOpen] = useState(false);
 
   const vpRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const docs = useRef(new Map<string, Promise<PDFDocumentProxy>>());
-  const undoStack = useRef<string[]>([]);
+  const hist = useRef<{ undo: Step[]; redo: Step[]; draftRedo: Pt[]; busy: boolean }>({ undo: [], redo: [], draftRedo: [], busy: false });
+  const [, setHistV] = useState(0);
+  const vertexDrag = useRef<{ markId: string; index: number; before: Pt[]; inserted: boolean; moved: boolean } | null>(null);
   const pending = useRef<{ points: Pt[]; cutout: boolean; kind: TItem["kind"] } | null>(null);
   const keys = useRef({ shift: false, space: false });
   const viewRef = useRef(view);
@@ -297,6 +365,145 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     return [x0 + Math.cos(a) * len, y0 + Math.sin(a) * len];
   };
 
+  // ---------------------------------------------------------------- history: every change goes through here
+  const itemRow = (it: TItem) => ({
+    id: it.id,
+    takeoff_id: t.id,
+    name: it.name,
+    kind: it.kind,
+    color: it.color,
+    material: it.material,
+    thickness_in: it.thickness_in,
+    r_value: it.r_value,
+    height_ft: it.height_ft,
+    pitch: it.pitch,
+    deduct_sqft: it.deduct_sqft ?? 0,
+    hidden: it.hidden ?? false,
+    sort: it.sort ?? 0,
+    area_code: it.area_code ?? null,
+    shape: it.shape ?? null,
+  });
+  const markRow = (m: TMark) => ({ id: m.id, takeoff_id: t.id, item_id: m.item_id, sheet_id: m.sheet_id, points: m.points, cutout: m.cutout });
+
+  /** Makes one change: on screen right away, then saved. False if it didn't save (the screen is put back). */
+  const run = async (c: Change): Promise<boolean> => {
+    let error: { message: string } | null = null;
+    switch (c.t) {
+      case "addMark": {
+        setMarks((m) => [...m.filter((x) => x.id !== c.mark.id), c.mark]);
+        ({ error } = await supabase.from("takeoff_marks").insert(markRow(c.mark)));
+        if (error) setMarks((m) => m.filter((x) => x.id !== c.mark.id));
+        break;
+      }
+      case "delMark": {
+        setMarks((m) => m.filter((x) => x.id !== c.mark.id));
+        setSelMark((s) => (s === c.mark.id ? null : s));
+        ({ error } = await supabase.from("takeoff_marks").delete().eq("id", c.mark.id));
+        if (error) setMarks((m) => [...m, c.mark]);
+        break;
+      }
+      case "movePts": {
+        setMarks((m) => m.map((x) => (x.id === c.id ? { ...x, points: c.after } : x)));
+        ({ error } = await supabase.from("takeoff_marks").update({ points: c.after }).eq("id", c.id));
+        if (error) setMarks((m) => m.map((x) => (x.id === c.id ? { ...x, points: c.before } : x)));
+        break;
+      }
+      case "addItem": {
+        setItems((l) => [...l.filter((x) => x.id !== c.item.id), c.item].sort((a, b) => a.sort - b.sort));
+        setMarks((m) => [...m.filter((x) => !c.marks.some((y) => y.id === x.id)), ...c.marks]);
+        ({ error } = await supabase.from("takeoff_items").insert(itemRow(c.item)));
+        if (!error && c.marks.length) ({ error } = await supabase.from("takeoff_marks").insert(c.marks.map(markRow)));
+        if (error) {
+          setItems((l) => l.filter((x) => x.id !== c.item.id));
+          setMarks((m) => m.filter((x) => x.item_id !== c.item.id));
+          await supabase.from("takeoff_items").delete().eq("id", c.item.id);
+        }
+        break;
+      }
+      case "delItem": {
+        setItems((l) => l.filter((x) => x.id !== c.item.id));
+        setMarks((m) => m.filter((x) => x.item_id !== c.item.id));
+        setItemId((cur) => (cur === c.item.id ? null : cur));
+        ({ error } = await supabase.from("takeoff_items").delete().eq("id", c.item.id));
+        if (error) {
+          setItems((l) => [...l, c.item].sort((a, b) => a.sort - b.sort));
+          setMarks((m) => [...m, ...c.marks]);
+        }
+        break;
+      }
+      case "editItem": {
+        setItems((l) => l.map((x) => (x.id === c.id ? { ...x, ...c.after } : x)));
+        ({ error } = await supabase.from("takeoff_items").update(c.after).eq("id", c.id));
+        if (error) setItems((l) => l.map((x) => (x.id === c.id ? { ...x, ...c.before } : x)));
+        break;
+      }
+      case "scale": {
+        const by = new Map(c.after.map((x) => [x.id, x]));
+        setSheets((s) => s.map((x) => (by.has(x.id) ? { ...x, ...by.get(x.id)! } : x)));
+        for (const x of c.after) {
+          const r = await supabase.from("takeoff_sheets").update({ ft_per_pt: x.ft_per_pt, scale_label: x.scale_label, scale_source: x.scale_source }).eq("id", x.id);
+          if (r.error) error = r.error;
+        }
+        break;
+      }
+    }
+    if (error) flash("err", `Didn't save: ${error.message}`);
+    return !error;
+  };
+
+  const bump = () => setHistV((v) => v + 1);
+
+  /** A new change: made, saved, and remembered so it can be undone. */
+  const commit = async (step: Step) => {
+    const h = hist.current;
+    let ok = true;
+    for (const c of step.changes) if (!(await run(c))) ok = false;
+    if (!ok) return false;
+    h.undo.push(step);
+    if (h.undo.length > HISTORY) h.undo.shift();
+    h.redo = [];
+    bump();
+    return true;
+  };
+
+  const undo = async () => {
+    const h = hist.current;
+    if (draft.length) {
+      h.draftRedo.push(draft[draft.length - 1]);
+      setDraft((d) => d.slice(0, -1));
+      return;
+    }
+    if (h.busy) return;
+    const step = h.undo.pop();
+    if (!step) return flash("info", "Nothing to undo.");
+    h.busy = true;
+    bump();
+    for (const c of [...step.changes].reverse().map(invert)) await run(c);
+    h.redo.push(step);
+    h.busy = false;
+    bump();
+    flash("info", `Undone: ${step.label}`);
+  };
+
+  const redo = async () => {
+    const h = hist.current;
+    if (draft.length && h.draftRedo.length) {
+      const p = h.draftRedo.pop()!;
+      setDraft((d) => [...d, p]);
+      return;
+    }
+    if (h.busy) return;
+    const step = h.redo.pop();
+    if (!step) return flash("info", "Nothing to redo.");
+    h.busy = true;
+    bump();
+    for (const c of step.changes) await run(c);
+    h.undo.push(step);
+    h.busy = false;
+    bump();
+    flash("info", `Redone: ${step.label}`);
+  };
+
   // ---------------------------------------------------------------- saving shapes
   const addMark = async (points: Pt[], cutout = false, forItem?: TItem) => {
     if (!sheet) return;
@@ -320,34 +527,16 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
       return;
     }
     const pts = points.map((p) => [round2(p[0]), round2(p[1])] as Pt);
-    const tmp: TMark = { id: `tmp-${Math.random().toString(36).slice(2)}`, item_id: target.id, sheet_id: sheet.id, points: pts, cutout };
-    setMarks((m) => [...m, tmp]);
-    const { data, error } = await supabase
-      .from("takeoff_marks")
-      .insert({ takeoff_id: t.id, item_id: target.id, sheet_id: sheet.id, points: pts, cutout })
-      .select("id")
-      .single<{ id: string }>();
-    if (error || !data) {
-      setMarks((m) => m.filter((x) => x.id !== tmp.id));
-      flash("err", `Didn't save: ${error?.message ?? "try again"}`);
-      return;
-    }
-    setMarks((m) => m.map((x) => (x.id === tmp.id ? { ...x, id: data.id } : x)));
-    undoStack.current.push(data.id);
-    if (!sheet.ft_per_pt && target.kind !== "count") flash("info", "Saved. This sheet has no scale yet, so it has no size until you set one (Scale tool).");
+    const mark: TMark = { id: crypto.randomUUID(), item_id: target.id, sheet_id: sheet.id, points: pts, cutout };
+    const saved = await commit({ label: `${cutout ? "cutout from" : target.kind === "count" ? "count on" : "shape on"} ${target.name}`, changes: [{ t: "addMark", mark }] });
+    if (saved && !sheet.ft_per_pt && target.kind !== "count") flash("info", "Saved. This sheet has no scale yet, so it has no size until you set one (Scale tool).");
   };
 
   const deleteMark = async (id: string) => {
     const gone = marks.find((m) => m.id === id);
     if (!gone) return;
-    setMarks((m) => m.filter((x) => x.id !== id));
     setSelMark(null);
-    if (id.startsWith("tmp-")) return;
-    const { error } = await supabase.from("takeoff_marks").delete().eq("id", id);
-    if (error) {
-      setMarks((m) => [...m, gone]);
-      flash("err", `Didn't delete: ${error.message}`);
-    }
+    await commit({ label: `deleted shape on ${itemMap.get(gone.item_id)?.name ?? "an item"}`, changes: [{ t: "delMark", mark: gone }] });
   };
 
   const finish = () => {
@@ -355,15 +544,56 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     else if (tool === "linear" && draft.length >= 2) void addMark(draft);
     else if (draft.length) flash("info", tool === "linear" ? "A line needs at least 2 points." : "An area needs at least 3 corners.");
     setDraft([]);
+    hist.current.draftRedo = [];
   };
 
-  const undo = () => {
-    if (draft.length) {
-      setDraft((d) => d.slice(0, -1));
+  // ---------------------------------------------------------------- editing corners of a shape (Select tool)
+  /** Starts dragging corner `index` of a shape; `insertAt` adds a new corner there first (clicked on a side). */
+  const lastPress = useRef<{ key: string; at: number } | null>(null);
+  const startVertex = (e: React.PointerEvent, m: TMark, index: number, insertAt?: Pt) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!insertAt) {
+      // A second press on the same corner within a moment: remove that corner.
+      const key = `${m.id}:${index}`;
+      const now = Date.now();
+      if (lastPress.current && lastPress.current.key === key && now - lastPress.current.at < 400) {
+        lastPress.current = null;
+        const kind = itemMap.get(m.item_id)?.kind ?? "area";
+        removeVertex(m, index, kind);
+        return;
+      }
+      lastPress.current = { key, at: now };
+    }
+    const before = m.points.map((p) => [p[0], p[1]] as Pt);
+    let pts = before;
+    if (insertAt) {
+      pts = [...before.slice(0, index), insertAt, ...before.slice(index)];
+      setMarks((list) => list.map((x) => (x.id === m.id ? { ...x, points: pts } : x)));
+    }
+    vertexDrag.current = { markId: m.id, index, before, inserted: Boolean(insertAt), moved: false };
+    vpRef.current?.setPointerCapture(e.pointerId);
+  };
+
+  const removeVertex = (m: TMark, index: number, kind: TItem["kind"]) => {
+    const min = kind === "area" ? 3 : kind === "linear" ? 2 : 1;
+    if (m.points.length <= min) {
+      flash("info", kind === "count" ? "Delete the shape instead (Delete key)." : `A${kind === "area" ? "n area needs at least 3 corners" : " line needs at least 2 points"}.`);
       return;
     }
-    const last = undoStack.current.pop();
-    if (last) void deleteMark(last);
+    const after = m.points.filter((_, i) => i !== index);
+    void commit({ label: "removed a corner", changes: [{ t: "movePts", id: m.id, before: m.points, after }] });
+  };
+
+  const finishVertex = () => {
+    const d = vertexDrag.current;
+    vertexDrag.current = null;
+    if (!d) return;
+    const m = marks.find((x) => x.id === d.markId);
+    if (!m) return;
+    if (!d.moved && !d.inserted) return;
+    const after = m.points.map((p) => [round2(p[0]), round2(p[1])] as Pt);
+    void commit({ label: d.inserted ? "added a corner" : "moved a corner", changes: [{ t: "movePts", id: m.id, before: d.before, after }] });
   };
 
   const pickTool = (id: Tool) => {
@@ -384,6 +614,13 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     if (pan) (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onMove = (e: React.PointerEvent) => {
+    const vd = vertexDrag.current;
+    if (vd) {
+      const p = toPt(e);
+      vd.moved = true;
+      setMarks((list) => list.map((x) => (x.id === vd.markId ? { ...x, points: x.points.map((q, i) => (i === vd.index ? p : q)) } : x)));
+      return;
+    }
     const d = drag.current;
     if (d) {
       const dx = e.clientX - d.x;
@@ -394,6 +631,10 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     if (tool !== "select" && tool !== "pan" && sheet) setHover(snap(toPt(e)));
   };
   const onUp = (e: React.PointerEvent) => {
+    if (vertexDrag.current) {
+      finishVertex();
+      return;
+    }
     const d = drag.current;
     drag.current = null;
     if (!d || d.moved || !sheet) return;
@@ -442,7 +683,12 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        undo();
+        void (e.shiftKey ? redo() : undo());
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        void redo();
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -571,7 +817,8 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     if (!sheet) return;
     const ids =
       scope === "this" ? [sheet.id] : scope === "all" ? sheets.map((s) => s.id) : sheets.filter((s) => !s.ft_per_pt || s.id === sheet.id).map((s) => s.id);
-    void saveSheets(ids, { ft_per_pt: ftPt, scale_label: label, scale_source: source });
+    const before: SheetScale[] = sheets.filter((s) => ids.includes(s.id)).map((s) => ({ id: s.id, ft_per_pt: s.ft_per_pt, scale_label: s.scale_label, scale_source: s.scale_source }));
+    void commit({ label: `scale ${label}`, changes: [{ t: "scale", before, after: ids.map((id) => ({ id, ft_per_pt: ftPt, scale_label: label, scale_source: source })) }] });
     setScaleDlg(null);
     setDraft([]);
     setTool("select");
@@ -589,54 +836,55 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     setMarks((m) => m.filter((x) => !gone.has(x.sheet_id)));
     setFiles((x) => x.filter((y) => y.id !== f.id));
     if (sheetId && gone.has(sheetId)) setSheetId(sheets.find((s) => !gone.has(s.id))?.id ?? null);
+    // Steps that touched those sheets can't come back now.
+    hist.current = { undo: [], redo: [], draftRedo: [], busy: false };
+    bump();
   };
 
   // ---------------------------------------------------------------- items
   const saveItem = async (d: Draft) => {
-    const row = {
+    const kind = d.kind ?? "area";
+    const row: ItemFields = {
       name: (d.name || "").trim() || "Untitled item",
-      kind: d.kind ?? "area",
+      kind,
       color: d.color ?? COLORS[0],
       material: d.material || null,
       thickness_in: d.thickness_in ?? null,
       r_value: d.r_value?.toString().trim() || null,
-      height_ft: d.kind === "linear" ? d.height_ft ?? null : null,
-      pitch: d.kind === "area" ? d.pitch ?? null : null,
-      deduct_sqft: d.kind === "linear" ? Number(d.deduct_sqft ?? 0) : 0,
+      height_ft: kind === "linear" && d.shape !== "gable" ? d.height_ft ?? null : null,
+      pitch: kind === "area" || d.shape === "gable" ? d.pitch ?? null : null,
+      deduct_sqft: kind === "linear" ? Number(d.deduct_sqft ?? 0) : 0,
+      area_code: d.area_code || null,
+      shape: kind === "linear" && d.shape === "gable" ? "gable" : null,
     };
     if (d.id) {
-      const { error } = await supabase.from("takeoff_items").update(row).eq("id", d.id);
-      if (error) return flash("err", `Didn't save: ${error.message}`);
-      setItems((list) => list.map((x) => (x.id === d.id ? { ...x, ...row } : x)));
-      setEditor(null);
+      const cur = itemMap.get(d.id);
+      if (!cur) return;
+      const before = Object.fromEntries(Object.keys(row).map((k) => [k, cur[k as keyof TItem] ?? null])) as ItemFields;
+      if (await commit({ label: `changes to ${row.name}`, changes: [{ t: "editItem", id: d.id, before, after: row }] })) setEditor(null);
       return;
     }
-    const { data, error } = await supabase
-      .from("takeoff_items")
-      .insert({ ...row, takeoff_id: t.id, sort: items.length + 1 })
-      .select("*")
-      .single<TItem>();
-    if (error || !data) return flash("err", `Didn't save: ${error?.message ?? "try again"}`);
-    const it: TItem = { ...data, thickness_in: data.thickness_in === null ? null : Number(data.thickness_in), height_ft: data.height_ft === null ? null : Number(data.height_ft), pitch: data.pitch === null ? null : Number(data.pitch), deduct_sqft: Number(data.deduct_sqft ?? 0) };
-    setItems((list) => [...list, it]);
-    setItemId(it.id);
-    setEditor(null);
+    const it: TItem = { ...(row as Omit<TItem, "id">), id: crypto.randomUUID(), hidden: false, sort: Math.max(0, ...items.map((x) => x.sort)) + 1 } as TItem;
     const p = pending.current;
     pending.current = null;
-    if (p && p.kind === it.kind) void addMark(p.points, p.cutout, it);
-    else {
+    // The shape that was traced before the item had a name joins it in the same step.
+    const first: TMark[] =
+      p && p.kind === it.kind && sheet
+        ? [{ id: crypto.randomUUID(), item_id: it.id, sheet_id: sheet.id, points: p.points.map((q) => [round2(q[0]), round2(q[1])] as Pt), cutout: p.cutout }]
+        : [];
+    if (!(await commit({ label: `new item ${it.name}`, changes: [{ t: "addItem", item: it, marks: first }] }))) return;
+    setItemId(it.id);
+    setEditor(null);
+    if (!first.length) {
       setDraft([]);
       setTool(toolFor(it));
     }
   };
 
   const deleteItem = async (id: string) => {
-    const { error } = await supabase.from("takeoff_items").delete().eq("id", id);
-    if (error) return flash("err", error.message);
-    setItems((l) => l.filter((x) => x.id !== id));
-    setMarks((m) => m.filter((x) => x.item_id !== id));
-    if (itemId === id) setItemId(null);
-    setEditor(null);
+    const it = itemMap.get(id);
+    if (!it) return;
+    if (await commit({ label: `deleted ${it.name}`, changes: [{ t: "delItem", item: it, marks: marks.filter((m) => m.item_id === id) }] })) setEditor(null);
   };
 
   const toggleHidden = async (it: TItem) => {
@@ -648,6 +896,76 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     setStatus(s);
     const { error } = await supabase.from("takeoffs").update({ status: s }).eq("id", t.id);
     if (error) flash("err", error.message);
+  };
+
+  // ---------------------------------------------------------------- AI pre-scan
+  /** A sheet as pictures Claude can read (whole, plus two larger halves on big sheets) and its own text. */
+  const sheetForAi = async (sh: TSheet): Promise<{ images: string[]; text: string }> => {
+    const doc = await loadDoc(sh.file_id);
+    const page = await doc.getPage(sh.page);
+    const base = page.getViewport({ scale: 1 });
+    const LONG = 1568;
+    const jpeg = (c: HTMLCanvasElement) => c.toDataURL("image/jpeg", 0.72);
+    const render = async (scale: number) => {
+      const vp = page.getViewport({ scale });
+      const c = document.createElement("canvas");
+      c.width = Math.floor(vp.width);
+      c.height = Math.floor(vp.height);
+      const g = c.getContext("2d")!;
+      g.fillStyle = "#fff";
+      g.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvas: c, viewport: vp }).promise;
+      return c;
+    };
+    const whole = await render(LONG / Math.max(base.width, base.height));
+    const images = [jpeg(whole)];
+    if (Math.max(base.width, base.height) > 1100) {
+      const wide = base.width >= base.height;
+      const halfW = wide ? base.width / 2 : base.width;
+      const halfH = wide ? base.height : base.height / 2;
+      const big = await render(LONG / Math.max(halfW, halfH));
+      for (const k of [0, 1]) {
+        const c = document.createElement("canvas");
+        c.width = wide ? Math.floor(big.width / 2) : big.width;
+        c.height = wide ? big.height : Math.floor(big.height / 2);
+        c.getContext("2d")!.drawImage(big, wide ? -k * c.width : 0, wide ? 0 : -k * c.height);
+        images.push(jpeg(c));
+      }
+    }
+    let text = "";
+    try {
+      const tc = await page.getTextContent();
+      text = (tc.items as TextItem[]).map((i) => i.str ?? "").join(" ");
+    } catch {
+      // a scanned sheet has no text
+    }
+    page.cleanup();
+    return { images, text };
+  };
+
+  const createFromScan = async (list: Partial<TItem>[]) => {
+    let sort = Math.max(0, ...items.map((x) => x.sort));
+    const made: TItem[] = list.map((d, i) => ({
+      id: crypto.randomUUID(),
+      name: d.name ?? "Item",
+      kind: d.kind ?? "area",
+      color: COLORS[(items.length + i) % COLORS.length],
+      material: d.material ?? null,
+      thickness_in: d.thickness_in ?? null,
+      r_value: d.r_value ?? null,
+      height_ft: d.kind === "linear" && d.shape !== "gable" ? d.height_ft ?? null : null,
+      pitch: d.kind === "area" || d.shape === "gable" ? d.pitch ?? null : null,
+      deduct_sqft: 0,
+      hidden: false,
+      sort: ++sort,
+      area_code: d.area_code ?? null,
+      shape: d.shape ?? null,
+    }));
+    if (await commit({ label: `${made.length} items from the AI pre-scan`, changes: made.map((it) => ({ t: "addItem" as const, item: it, marks: [] })) })) {
+      setItemId(made[0]?.id ?? null);
+      if (made[0]) pickTool(toolFor(made[0]));
+      flash("ok", `${made.length} items set up. Pick one and trace it on the plan.`);
+    }
   };
 
   // ---------------------------------------------------------------- what's on screen
@@ -720,8 +1038,16 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
         <button type="button" className="to-iconbtn" onClick={() => setHelp((h) => !h)} aria-label="Shortcuts and tips" aria-expanded={help}>
           <CircleHelp size={18} />
         </button>
+        <Link href={`/ops/materials?takeoff=${t.id}`} className="btn sm dark to-hide-sm" title="Turn what's measured into an AMBIT order">
+          <ShoppingCart size={16} /> <span>Material order</span>
+        </Link>
+        {props.ops ? (
+          <Link href={`/ops/quotes/new?takeoff=${t.id}${t.lead_id ? `&lead=${t.lead_id}` : ""}`} className="btn sm dark" title="Price this takeoff for the customer">
+            <FileSignature size={16} /> <span>Quote it</span>
+          </Link>
+        ) : null}
         <Link href={`/takeoff/${t.id}/report`} className="btn sm">
-          <FileText size={16} /> Report
+          <FileText size={16} /> <span>Report</span>
         </Link>
       </header>
 
@@ -814,15 +1140,32 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
             );
           })}
           <span className="grow" />
+          <div className="to-history" role="group" aria-label="Undo and redo">
+            <button
+              type="button"
+              className="to-tool"
+              onClick={() => void undo()}
+              disabled={!drawing && !hist.current.undo.length}
+              title={drawing ? "Take back the last point (Ctrl/⌘ Z)" : hist.current.undo.length ? `Undo ${hist.current.undo[hist.current.undo.length - 1].label} (Ctrl/⌘ Z)` : "Nothing to undo"}
+            >
+              <Undo2 size={16} /> <span>{drawing ? "Undo point" : "Undo"}</span>
+              {!drawing && hist.current.undo.length ? <i className="to-count">{hist.current.undo.length}</i> : null}
+            </button>
+            <button
+              type="button"
+              className="to-tool"
+              onClick={() => void redo()}
+              disabled={drawing ? !hist.current.draftRedo.length : !hist.current.redo.length}
+              title={hist.current.redo.length && !drawing ? `Redo ${hist.current.redo[hist.current.redo.length - 1].label} (Ctrl/⌘ Shift Z)` : "Redo (Ctrl/⌘ Shift Z)"}
+            >
+              <Redo2 size={16} /> <span>Redo</span>
+              {!drawing && hist.current.redo.length ? <i className="to-count">{hist.current.redo.length}</i> : null}
+            </button>
+          </div>
           {drawing ? (
-            <>
-              <button type="button" className="to-tool" onClick={undo} title="Take back the last point (Backspace)">
-                <Undo2 size={16} /> <span>Undo point</span>
-              </button>
-              <button type="button" className="to-tool on" onClick={finish} title="Finish (Enter)">
-                <Check size={16} /> <span>Finish</span>
-              </button>
-            </>
+            <button type="button" className="to-tool on" onClick={finish} title="Finish (Enter)">
+              <Check size={16} /> <span>Finish</span>
+            </button>
           ) : null}
           <button type="button" className={`to-tool${labels ? " on2" : ""}`} onClick={() => setLabels((v) => !v)} aria-pressed={labels} title="Show sizes on the plan">
             <Tag size={16} /> <span>Sizes</span>
@@ -912,6 +1255,51 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                     />
                   );
                 })}
+                {(() => {
+                  // The selected shape's corners: drag to move, click a side to add one, double-click to remove.
+                  if (tool !== "select" || !selMark) return null;
+                  const m = sheetMarks.find((x) => x.id === selMark);
+                  const it = m ? itemMap.get(m.item_id) : null;
+                  if (!m || !it || it.hidden) return null;
+                  const closedShape = it.kind === "area";
+                  const sides = it.kind === "count" ? 0 : closedShape ? m.points.length : m.points.length - 1;
+                  return (
+                    <g className="to-edit">
+                      {Array.from({ length: sides }, (_, i) => {
+                        const a = m.points[i];
+                        const b = m.points[(i + 1) % m.points.length];
+                        return (
+                          <line
+                            key={`s${i}`}
+                            x1={a[0]}
+                            y1={a[1]}
+                            x2={b[0]}
+                            y2={b[1]}
+                            className="to-side"
+                            strokeWidth={14 / z}
+                            onPointerDown={(e) => startVertex(e, m, i + 1, onSegment(toPt(e), a, b).q)}
+                          >
+                            <title>Click to add a corner here</title>
+                          </line>
+                        );
+                      })}
+                      {m.points.map((p, i) => (
+                        <circle
+                          key={`v${i}`}
+                          cx={p[0]}
+                          cy={p[1]}
+                          r={6 / z}
+                          className="to-vertex"
+                          stroke={it.color}
+                          strokeWidth={2.2 / z}
+                          onPointerDown={(e) => startVertex(e, m, i)}
+                        >
+                          <title>Drag to move · double-click to remove</title>
+                        </circle>
+                      ))}
+                    </g>
+                  );
+                })()}
                 {labels
                   ? sheetMarks.map((m) => {
                       const it = itemMap.get(m.item_id);
@@ -989,7 +1377,9 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
               <button type="button" className="linkbtn" onClick={() => setScaleDlg({ dist: null })}>Change</button>
             ) : null}
           </span>
-          <span className="grow ellipsis faint">{activeTool.hint}</span>
+          <span className="grow ellipsis faint">
+            {tool === "select" && selMark ? "Drag a corner to move it · click a side to add a corner · double-click a corner to remove it · Delete removes the shape" : activeTool.hint}
+          </span>
           {selMark ? (
             <button type="button" className="linkbtn" onClick={() => void deleteMark(selMark)}>
               <Trash2 size={13} /> Delete shape
@@ -1002,13 +1392,21 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
       <aside className="to-items" aria-label="Measured items">
         <div className="to-panel-head">
           <span className="eyebrow">Items · {items.length}</span>
-          <button type="button" className="to-mini" onClick={() => setEditor({ kind: "area", color: COLORS[items.length % COLORS.length] })}>
-            <Plus size={14} /> New item
-          </button>
+          <span className="row" style={{ gap: 6 }}>
+            <button type="button" className="to-mini ai" onClick={() => setScanOpen(true)} disabled={!sheets.length} title="AI reads the plans and sets up the items">
+              <Sparkles size={14} /> AI pre-scan
+            </button>
+            <button type="button" className="to-mini" onClick={() => setEditor({ kind: "area", color: COLORS[items.length % COLORS.length] })}>
+              <Plus size={14} /> New item
+            </button>
+          </span>
         </div>
         <div className="to-item-list">
           {items.length === 0 ? (
             <div className="to-hint">
+              {sheets.length ? (
+                <button type="button" className="btn sm" onClick={() => setScanOpen(true)}><Sparkles size={15} /> Let AI read the plans first</button>
+              ) : null}
               <b>Start with what you&apos;re measuring.</b>
               <span>Pick one to start, then trace it on the plan:</span>
               <div className="to-presets">
@@ -1081,7 +1479,8 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
             <li><kbd>Enter</kbd> finish the shape</li>
             <li><kbd>Esc</kbd> cancel</li>
             <li><kbd>Backspace</kbd> take back a point, or delete the selected shape</li>
-            <li><kbd>Ctrl/⌘ Z</kbd> undo</li>
+            <li><kbd>Ctrl/⌘ Z</kbd> undo · <kbd>Ctrl/⌘ Shift Z</kbd> redo (up to {HISTORY} steps)</li>
+            <li>Select a shape, then drag a corner, click a side to add a corner, or double-click a corner to remove it</li>
             <li><kbd>Shift</kbd> straight lines (every 45°)</li>
             <li><kbd>Space</kbd> + drag to move while drawing</li>
             <li><kbd>F</kbd> fit the sheet · scroll to zoom</li>
@@ -1089,10 +1488,22 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
         </div>
       ) : null}
 
+      {scanOpen ? (
+        <PrescanDialog
+          takeoffId={t.id}
+          sheets={sheets}
+          saved={(t.ai_scan as ScanResult | null) ?? null}
+          snap={sheetForAi}
+          onCreate={createFromScan}
+          onClose={() => setScanOpen(false)}
+        />
+      ) : null}
+
       {editor ? (
         <ItemEditor
           draft={editor}
           used={editor.id ? marks.filter((m) => m.item_id === editor.id).length : 0}
+          areas={props.workAreas ?? DEFAULT_WORK_AREAS}
           onCancel={() => {
             pending.current = null;
             setEditor(null);
@@ -1121,7 +1532,7 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
 
 // ======================================================================================
 
-function ItemEditor({ draft, used, onCancel, onSave, onDelete }: { draft: Draft; used: number; onCancel: () => void; onSave: (d: Draft) => void; onDelete?: () => void }) {
+function ItemEditor({ draft, used, areas, onCancel, onSave, onDelete }: { draft: Draft; used: number; areas: WorkArea[]; onCancel: () => void; onSave: (d: Draft) => void; onDelete?: () => void }) {
   const [d, setD] = useState<Draft>(draft);
   const [sure, setSure] = useState(false);
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }));
@@ -1166,6 +1577,24 @@ function ItemEditor({ draft, used, onCancel, onSave, onDelete }: { draft: Draft;
           </div>
           {used > 0 ? <span className="tiny faint">{used} shape{used === 1 ? "" : "s"} drawn, so this can&apos;t change.</span> : null}
         </div>
+        <label className="field">
+          <span className="label">Work area</span>
+          <select className="select sm" value={d.area_code ?? ""} onChange={(e) => set({ area_code: e.target.value || null })}>
+            <option value="">Pick one (quotes group by it)</option>
+            {areas.map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+            {d.area_code && !areas.some((a) => a.code === d.area_code) ? <option value={d.area_code}>{d.area_code}</option> : null}
+          </select>
+        </label>
+        {d.kind === "linear" ? (
+          <div className="field">
+            <span className="label">Wall shape</span>
+            <div className="seg" role="radiogroup" aria-label="Wall shape">
+              <button type="button" role="radio" aria-checked={d.shape !== "gable"} className={d.shape !== "gable" ? "on" : ""} onClick={() => set({ shape: null })}>Wall height</button>
+              <button type="button" role="radio" aria-checked={d.shape === "gable"} className={d.shape === "gable" ? "on" : ""} onClick={() => set({ shape: "gable", pitch: d.pitch ?? 6 })}>Gable (attic demising wall)</button>
+            </div>
+            {d.shape === "gable" ? <span className="tiny faint">Trace the bottom of the wall. Its height comes from the roof pitch: a triangle up to the ridge.</span> : null}
+          </div>
+        ) : null}
         <div className="grid2">
           <label className="field">
             <span className="label">Material</span>
@@ -1184,7 +1613,7 @@ function ItemEditor({ draft, used, onCancel, onSave, onDelete }: { draft: Draft;
             <span className="label">R-value</span>
             <input className="input sm" value={d.r_value ?? ""} onChange={(e) => set({ r_value: e.target.value })} placeholder="Optional, e.g. R-21" maxLength={20} />
           </label>
-          {d.kind === "linear" ? (
+          {d.kind === "linear" && d.shape !== "gable" ? (
             <label className="field">
               <span className="label">Wall height</span>
               <input
@@ -1195,7 +1624,15 @@ function ItemEditor({ draft, used, onCancel, onSave, onDelete }: { draft: Draft;
               />
             </label>
           ) : null}
-          {d.kind === "linear" && d.height_ft ? (
+          {d.kind === "linear" && d.shape === "gable" ? (
+            <label className="field">
+              <span className="label">Roof pitch</span>
+              <select className="select sm" value={d.pitch ?? ""} onChange={(e) => set({ pitch: numOrNull(e.target.value) })}>
+                {[3, 4, 5, 6, 7, 8, 9, 10, 12].map((r) => <option key={r} value={r}>{r}/12</option>)}
+              </select>
+            </label>
+          ) : null}
+          {d.kind === "linear" && (d.height_ft || d.shape === "gable") ? (
             <label className="field">
               <span className="label">Openings to take out (sq ft)</span>
               <input className="input sm" inputMode="decimal" value={d.deduct_sqft ?? ""} onChange={(e) => set({ deduct_sqft: numOrNull(e.target.value) ?? 0 })} placeholder="Windows and doors" />

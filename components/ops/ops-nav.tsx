@@ -11,7 +11,7 @@ const STEPS = [
   { href: "/ops", label: "Home", icon: House, exact: true },
   { href: "/ops/pipeline", label: "Leads", icon: SquareKanban, also: ["/ops/leads"] },
   { href: "/ops/customers", label: "Customers", icon: Contact },
-  { href: "/ops/quotes", label: "Quotes", icon: FileSignature, soon: "Nov 12" },
+  { href: "/ops/quotes", label: "Quotes", icon: FileSignature, also: ["/takeoff"] },
   { href: "/ops/schedule", label: "Schedule", icon: CalendarRange, soon: "Nov 19" },
   { href: "/ops/work-orders", label: "Work orders", icon: ClipboardCheck, soon: "Nov 26" },
   { href: "/ops/invoices", label: "Invoices", icon: Receipt, soon: "Nov 26" },

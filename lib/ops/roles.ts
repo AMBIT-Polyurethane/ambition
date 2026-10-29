@@ -32,6 +32,10 @@ export const opsCan = {
   remove: (r: string | null | undefined) => has(r, ["owner", "office"]),
   /** Crews and subs: work orders only, never prices. */
   fieldOnly: (r: string | null | undefined) => has(r, ["crew_lead", "crew", "sub"]),
+  /** Build and send quotes. */
+  quote: (r: string | null | undefined) => has(r, ["owner", "office", "dispatcher", "sales"]),
+  /** OK a quote that's under the lowest margin. */
+  approve: (r: string | null | undefined) => has(r, ["owner", "office"]),
   /** Order from AMBIT. */
   order: (r: string | null | undefined) => has(r, ["owner", "office", "dispatcher", "sales", "accounting"]),
 };

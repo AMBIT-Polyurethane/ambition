@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { requirePerm } from "@/lib/session";
+import { requireTakeoff } from "@/lib/takeoff/access";
+import { DEFAULT_WORK_AREAS } from "@/lib/ops/defaults";
 import { TakeoffWorkspace, type TFile, type TakeoffInfo } from "@/components/takeoff/workspace";
 import type { TItem, TMark, TSheet } from "@/lib/takeoff/calc";
 
@@ -9,9 +10,10 @@ export const dynamic = "force-dynamic";
 export default async function TakeoffPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const { supabase } = await requirePerm("takeoff");
-  const { data: t } = await supabase.from("takeoffs").select("id, name, customer, address, due_date, status").eq("id", id).maybeSingle<TakeoffInfo>();
+  const { supabase, ws } = await requireTakeoff();
+  const { data: t } = await supabase.from("takeoffs").select("id, name, customer, address, due_date, status, ops_company_id, lead_id, ops_customer_id, ai_scan").eq("id", id).maybeSingle<TakeoffInfo>();
   if (!t) notFound();
+  const mine = Boolean(t.ops_company_id && ws && ws.company.id === t.ops_company_id);
 
   const [{ data: files }, { data: sheets }, { data: items }, { data: marks }] = await Promise.all([
     supabase.from("takeoff_files").select("id, path, file_name, size, pages").eq("takeoff_id", id).order("created_at"),
@@ -41,6 +43,8 @@ export default async function TakeoffPage({ params }: { params: Promise<{ id: st
         deduct_sqft: Number(i.deduct_sqft ?? 0),
       }))}
       marks={(marks ?? []) as TMark[]}
+      workAreas={mine ? ws!.settings.work_areas : DEFAULT_WORK_AREAS}
+      ops={mine}
     />
   );
 }

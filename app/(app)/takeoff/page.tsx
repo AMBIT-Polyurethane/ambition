@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CircleAlert, CircleCheck, Plus, Ruler } from "lucide-react";
-import { requirePerm } from "@/lib/session";
+import { requireTakeoff } from "@/lib/takeoff/access";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { dateShort } from "@/lib/format";
@@ -33,7 +33,9 @@ const FILTERS = [
 
 export default async function TakeoffListPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const { supabase } = await requirePerm("takeoff");
+  const { supabase, ws, staff } = await requireTakeoff();
+  // A contractor sees their workspace's takeoffs; AMBIT staff see AMBIT's (or, helping a contractor, theirs with ?ops=1).
+  const inWs = Boolean(ws) && (!staff || sp.ops === "1");
   const f = FILTERS.some((x) => x.id === sp.f) ? sp.f! : "all";
   const q = (sp.q ?? "").trim().slice(0, 80);
   let query = supabase
@@ -41,6 +43,7 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
     .select("id, name, customer, address, due_date, status, updated_at, created_by_name, takeoff_sheets(count), takeoff_items(count)")
     .order("updated_at", { ascending: false })
     .limit(300);
+  query = inWs ? query.eq("ops_company_id", ws!.company.id) : query.is("ops_company_id", null);
   if (f !== "all") query = query.eq("status", f);
   if (q) {
     const like = `%${q.replace(/[\\%_,()]/g, " ")}%`;
@@ -48,14 +51,16 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
   }
   const [{ data, error }, { data: companies }] = await Promise.all([
     query,
-    supabase.from("companies").select("name").eq("active", true).order("name").limit(2000),
+    inWs
+      ? supabase.from("ops_customers").select("name").eq("company_id", ws!.company.id).order("name").limit(2000)
+      : supabase.from("companies").select("name").eq("active", true).order("name").limit(2000),
   ]);
   const rows = (data ?? []) as unknown as Row[];
   const today = new Date().toISOString().slice(0, 10);
 
   return (
     <main className="shell wide">
-      <TopBar title="Takeoff" back="/ops" />
+      <TopBar title={inWs ? "Takeoffs" : "Takeoff"} back={inWs ? "/ops/quotes" : "/ops"} />
       {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
       {sp.err ? <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div> : null}
       {error ? <div className="alert warn small">Run supabase/migrations/0019_takeoff.sql in Supabase first (SQL Editor).</div> : null}
@@ -69,6 +74,7 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
           </span>
         </summary>
         <form action={createTakeoff} className="to-new-form">
+          {inWs ? <input type="hidden" name="ops" value="1" /> : null}
           <label className="field">
             <span className="label">Project or job name</span>
             <input className="input" name="name" required maxLength={120} placeholder="Smith Residence" autoComplete="off" />
@@ -98,10 +104,11 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
           <input className="input" type="search" name="q" defaultValue={q} placeholder="Search jobs, customers, addresses" aria-label="Search takeoffs" />
         </div>
         {f !== "all" ? <input type="hidden" name="f" value={f} /> : null}
+        {inWs && staff ? <input type="hidden" name="ops" value="1" /> : null}
       </form>
       <div className="chips" role="tablist" aria-label="Show">
         {FILTERS.map((x) => (
-          <Link key={x.id} href={`/takeoff?f=${x.id}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={`chip${x.id === f ? " on" : ""}`} role="tab" aria-selected={x.id === f}>
+          <Link key={x.id} href={`/takeoff?f=${x.id}${q ? `&q=${encodeURIComponent(q)}` : ""}${inWs && staff ? "&ops=1" : ""}`} className={`chip${x.id === f ? " on" : ""}`} role="tab" aria-selected={x.id === f}>
             {x.label}
           </Link>
         ))}

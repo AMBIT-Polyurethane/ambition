@@ -8,6 +8,7 @@ import {
   Boxes,
   ClipboardList,
   Download,
+  FileSignature,
   FileText,
   GraduationCap,
   House,
@@ -55,6 +56,7 @@ const ICONS = {
   profile: User,
   pipeline: SquareKanban,
   customers: Contact,
+  quotes: FileSignature,
   settings: Settings,
 } satisfies Record<string, LucideIcon>;
 

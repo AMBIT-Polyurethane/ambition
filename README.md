@@ -105,9 +105,10 @@ doesn't mistake it for the first box of the page and wipe it out.)
 ### AMBIT-OPS
 
 `/ops`: the contractor's own operations software inside AMBIT Intelligence, built as one straight path: CRM (leads
-and customers), then quotes and proposals (Nov 12), scheduling and dispatch (Nov 19), crew work orders and invoices
-(Nov 26) and job costing / yield (Dec 1), for the December 2026 pilot. Database: `0031_ops_foundation.sql`. Code:
-`app/(app)/ops/`, `lib/ops/`, `components/ops/`, the public form in `app/lead/[token]/`.
+and customers), quotes, proposals and e-sign (with Takeoff), then scheduling and dispatch (Nov 19), crew work orders
+and invoices (Nov 26) and job costing / yield (Dec 1), for the December 2026 pilot. Database:
+`0031_ops_foundation.sql`, `0032_ops_quotes.sql`. Code: `app/(app)/ops/`, `lib/ops/`, `components/ops/`, the public
+form in `app/lead/[token]/`, the public proposal in `app/p/[token]/`.
 
 - **Workspaces**: a workspace is a `companies` row with `ops_enabled`. AMBIT turns it on (Admin > AMBIT-OPS
   workspaces: pick the customer, pick or invite the owner); the owner invites the team. Contractor logins are
@@ -120,8 +121,11 @@ and customers), then quotes and proposals (Nov 12), scheduling and dispatch (Nov
 - **Product library** (`ops_products`): seeded when OPS is turned on (`lib/ops/seed.ts`): AMBI-SEAL and AMBI-TITE sets
   always (ROOF and JACK if bought), set cost = ISO price + resin price from the contractor's latest priced AMBIT
   invoices, lb per set = 500 ISO + 450 (SEAL) or 475 (TITE); blown fiberglass always, batts if bought. Yield defaults
-  16,500 BF/set open cell, 3,700 closed cell (changing one needs a confirm). AMBIT costs aren't editable; "Refresh
-  AMBIT costs" re-reads the invoices.
+  16,500 BF/set open cell, 3,700 closed cell, 2,800 AMBI-ROOF (changing one needs a confirm). AMBIT costs aren't
+  editable; "Refresh AMBIT costs" re-reads the invoices. Blown fiberglass has a `coverage_key` for the maker's chart
+  (`lib/ops/coverage.ts`: Knauf Jet Stream Ultra, JM Climate Pro B-7700, Owens Corning L77 (May 2026 PDS),
+  CertainTeed InsulSafe SP (10/25 fact sheet); attic rows by R-value, wall rows by framing); waste 0 for blown since
+  the charts already give bags. Chart brands AMBIT doesn't stock are seeded inactive with no cost.
 - **Settings** (`ops_settings` jsonb on companies, defaults in `lib/ops/defaults.ts`): labor (open cell $500/set,
   closed cell $450/set, blown attic $0.05, BIBS mesh $0.05 + blow $0.05 (2x4) / $0.07 (2x6), batts $0.04 R-11/13,
   $0.05 R-19, $0.06 R-30/38, intumescent $0.05 per sq ft), waste 10%, measure unit (lbs, gallons, strokes), stages,
@@ -132,6 +136,25 @@ and customers), then quotes and proposals (Nov 12), scheduling and dispatch (Nov
   `ops_undo_import`), repeats by phone/email skipped.
 - **Website lead form**: `/lead/<token>` (public, no sign-in; `ops_lead_form` / `ops_lead_submit`, rate-limited, a
   hidden honeypot field); `?embed=1` for an iframe. New link = new token (the old one stops).
+- **Quotes** (`ops_quotes`, `ops_quote_options`, `ops_quote_lines`, `ops_packages`; `opsCan.quote` = owner, office,
+  dispatcher, sales; sales see their own or their leads'). Math in `lib/ops/quote-calc.ts` (direct margin: price =
+  cost / (1 − margin); labor × (1 + burden)): foam board feet = sq ft × inches, sets = BF × (1 + waste) / yield;
+  blown bags from the chart row at or above the R (attic) or the framing row (walls) × area / 1000; batts = area ×
+  (1 + waste) / sq ft per bag; BIBS walls add mesh labor; per option a minimum-job adjustment, tax on materials
+  (or everything if `tax_labor`), deposit. Lines carry a work area; options (Good/Better/Best) and add-ons
+  (`option_id` null). The server re-prices every save (`persist()` in `app/(app)/ops/quotes/actions.ts`) and calls
+  `ops_quote_save`; an option under the floor margin sets `needs_approval` (owner/office `ops_quote_approve`).
+  Lines from a takeoff: `linesFromTakeoff` in `lib/ops/quotes.ts` (foam product picked by season, winter Nov–Mar).
+- **Proposals and e-sign**: `ops_quote_mark_sent` makes `public_token` and `valid_until`, lead → Quote sent. `/p/<token>`
+  (public, in `PUBLIC_PATHS`) reads `ops_proposal` (counts views, notes the first open) and `ops_proposal_docs` (AMBIT
+  TDS / ESR / CCRR / warranty for the product families on the quote). `ops_proposal_sign` checks expiry and the
+  signature (PNG data URL), and the signed total comes from the saved `totals` in SQL, never from the browser; IP and
+  user agent saved, lead → Won. `ops_proposal_decline` keeps the reason. PDFs: `lib/ops/proposal-pdf.tsx`
+  (`/ops/quotes/<id>/pdf`, `/p/<token>/pdf`). Email via `sendEmail` with the rep as reply-to; "Just get the link"
+  works without email.
+- **Material order** (`/ops/materials?quote=<id>&option=<id>` or `?takeoff=<id>`, `lib/ops/materials.ts`): foam →
+  whole sets of ISO + resin drums from `ambit_skus`, other AMBIT products by SKU, the rest listed as "buy elsewhere";
+  the button adds them to the Order cart (merged with anything already there).
 
 ### Takeoff
 
@@ -144,6 +167,28 @@ openings) or Count, each with a material, thickness and R-value; spray foam show
 H move, S scale, A area, L linear, C count, X cutout, Enter finish, Esc cancel, Backspace undo a point, Shift for
 straight lines, scroll to zoom. The report totals by item, material and sheet, prints to PDF and downloads for Excel.
 Plans are stored in the private "plans" bucket. Needs `supabase/migrations/0019_takeoff.sql`.
+
+Contractors in an AMBIT-OPS workspace (owner, office, dispatcher, sales) use the same Takeoff for their own jobs
+(`lib/takeoff/access.ts`; `takeoffs.ops_company_id` walls them to the workspace, null = AMBIT staff takeoffs; staff
+see a workspace's takeoffs only with `?ops=1` while inside it). "Quote it" starts a quote from a takeoff.
+
+- **Undo / Redo**: up to 60 steps back and forward (`hist` in `components/takeoff/workspace.tsx`): add or delete a
+  shape, move or add or remove corners, add / change / delete an item (its shapes come back with it), set the scale.
+  Each step is a list of changes with its inverse; the screen changes at once and the database follows.
+  Ctrl/⌘ Z, Ctrl/⌘ Shift Z or Ctrl Y.
+- **Corner editing**: with Select, a selected shape shows its corners; drag one to move it, click its edge to add a
+  corner there (and drag it), double-click a corner to remove it (areas keep at least 3, lines 2).
+- **Work areas and gables**: items have an `area_code` (EW, CL, RL…, for the quote). A linear item with
+  `shape = 'gable'` is an attic demising wall: area = base² × pitch / 48 per traced run (`gableSqft` in
+  `lib/takeoff/calc.ts`).
+- **AI pre-scan** (`components/takeoff/prescan.tsx`, `app/(app)/takeoff/prescan-actions.ts`, `lib/takeoff/prescan*.ts`):
+  each chosen sheet (A sheets first, up to 20) goes to Claude as images (whole page at 1568 px plus halves on big
+  sheets) and the PDF's text, with a strict schema: insulation callouts with the exact words, roof pitches, wall
+  heights, framing, garage, porch, attic. `mergeScans` combines them, a few questions follow (garage conditioned?
+  sealed or vented attic? porch/garage attics walled off? pitch, framing, heights) and `proposeItems` lists the items
+  (one exterior-wall item per height, roof deck or ceiling, demising gables, garage wall, floor over garage, knee
+  walls, rim joist). Foam depth from R: open cell R/3.7, closed cell R/6.9, rounded up to ½". The result is saved in
+  `takeoffs.ai_scan`. Model from Ask AMBIT settings.
 
 ### Ask AMBIT (AI assistant)
 
@@ -470,7 +515,8 @@ npm run dev
 
 ```
 app/(auth)/        sign in, request access, forgot password + server actions
-app/(app)/         signed-in screens (home, order, orders, takeoff, inventory, docs, academy, directory, profile, admin)
+app/(app)/         signed-in screens (home, order, orders, takeoff, inventory, docs, academy, directory, profile, admin, ops)
+app/p/, app/lead/  public pages: a customer's proposal (sign online) and the website lead form
 app/api/           Ask AMBIT answers, inventory sync timer, Microsoft connect / callback, version check
 app/auth/          OAuth/email-link callback and sign out
 components/        UI pieces (order builder, tab bar, CSV import, doc upload)

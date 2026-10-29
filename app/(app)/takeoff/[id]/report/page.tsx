@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft, CircleAlert, CircleCheck, Download, Ruler } from "lucide-react";
-import { requirePerm } from "@/lib/session";
+import { requireTakeoff } from "@/lib/takeoff/access";
 import { Submit } from "@/components/forms";
 import { PrintButton } from "@/components/print-button";
 import { dateShort } from "@/lib/format";
@@ -16,7 +16,7 @@ export default async function TakeoffReportPage({ params, searchParams }: { para
   const { id } = await params;
   const sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const { supabase, profile } = await requirePerm("takeoff");
+  const { supabase, profile } = await requireTakeoff();
   const r = await loadReport(supabase, id);
   if (!r) notFound();
   const { t, items, totals, bySheet, materials, sheets } = r;

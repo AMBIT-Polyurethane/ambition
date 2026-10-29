@@ -10,6 +10,7 @@ import { currentOrigin } from "@/lib/origin";
 import { newToken, type InviteResult } from "@/lib/invites";
 import { sendOpsInvite } from "@/lib/ops/invite";
 import { dateShort, orderNo } from "@/lib/format";
+import { chartFor, chartKeyFor } from "@/lib/ops/coverage";
 
 // AMBIT-OPS settings (owner and office). Saved with the person's own login; the database checks the role.
 
@@ -66,7 +67,7 @@ export async function setLogo(path: string | null): Promise<{ ok: boolean; error
 // ------------------------------------------------------------------ pricing, defaults and labor
 export async function savePricing(f: FormData) {
   const back = "/ops/settings/pricing";
-  const fields = { target_margin: 99, floor_margin: 99, burden_pct: 200, waste_pct: 100, deposit_pct: 100, min_job: 1e7, tax_rate: 30 } as const;
+  const fields = { target_margin: 99, builder_margin: 99, floor_margin: 99, burden_pct: 200, waste_pct: 100, deposit_pct: 100, min_job: 1e7, tax_rate: 30 } as const;
   const patch: Record<string, unknown> = {};
   for (const [k, max] of Object.entries(fields)) {
     const v = numOrNull(s(f, k), max);
@@ -175,6 +176,8 @@ export async function saveProduct(f: FormData) {
   if (s(f, "lb_per_set") !== "") row.lb_per_set = num("lb_per_set", 10000);
   if (s(f, "sqft_per_unit") !== "") row.sqft_per_unit = num("sqft_per_unit", 100000);
   if (s(f, "r_value") !== "") row.r_value = num("r_value", 100);
+  if (f.has("coverage_key")) row.coverage_key = chartFor(s(f, "coverage_key"))?.key ?? null;
+  if (f.has("description")) row.description = s(f, "description").slice(0, 400) || null;
   // AMBIT products cost what the contractor's AMBIT invoices say; other brands are typed in.
   if (!cur || cur.cost_source !== "ambit") {
     row.cost = num("cost");
@@ -209,7 +212,7 @@ export async function addFromCatalog(f: FormData) {
   const prices = await ambitPrices(supabase, ws.company.id);
   const last = prices.sku[String(p!.sku).trim().toUpperCase()];
   const cost = last ? last.price : p!.list_price === null ? null : Number(p!.list_price);
-  const kind = p!.category_id === "fiberglass" ? (/jet ?stream|climate ?pro|blow|loose/i.test(String(p!.name)) ? "blown" : "batt") : /intumescent/.test(String(p!.category_id)) ? "intumescent" : /roof/.test(String(p!.category_id)) ? "coating" : "supply";
+  const kind = p!.category_id === "fiberglass" ? (/jet ?stream|climate ?pro|blow|loose|\bl77\b|propink|insul ?safe/i.test(String(p!.name)) ? "blown" : "batt") : /intumescent/.test(String(p!.category_id)) ? "intumescent" : /roof/.test(String(p!.category_id)) ? "coating" : "supply";
   const { error } = await supabase.from("ops_products").insert({
     company_id: ws.company.id,
     product_id: p!.id,
@@ -222,8 +225,9 @@ export async function addFromCatalog(f: FormData) {
     cost_source: last ? "ambit" : "manual",
     cost_note: last ? `From your AMBIT invoice on ${orderNo(last.order)} (${dateShort(last.on)})` : cost !== null ? "AMBIT list price" : null,
     sqft_per_unit: p!.sqft_per_unit,
-    waste_pct: 10,
+    waste_pct: kind === "blown" ? 0 : 10,
     price_unit: kind === "supply" ? "each" : "sqft",
+    coverage_key: kind === "blown" ? chartKeyFor(String(p!.name)) : null,
   });
   if (error) go(back, "err", error.message);
   revalidatePath(back);

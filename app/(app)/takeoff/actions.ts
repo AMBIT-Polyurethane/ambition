@@ -2,17 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/session";
-import { can } from "@/lib/access";
+import { takeoffAccess } from "@/lib/takeoff/access";
 
 const clip = (v: FormDataEntryValue | null, n = 200) => String(v ?? "").trim().slice(0, n);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUSES = ["in_progress", "sent", "won", "lost"];
 
 async function team() {
-  const s = await getSession();
-  if (!s?.profile || !can(s.profile, "takeoff")) return null;
-  return s;
+  return takeoffAccess();
 }
 
 /** New takeoff: the workspace opens next, ready for the plans. */
@@ -22,6 +19,10 @@ export async function createTakeoff(form: FormData) {
   const name = clip(form.get("name"), 120);
   if (!name) redirect("/takeoff?err=" + encodeURIComponent("Give the takeoff a name (the project or job)."));
   const due = clip(form.get("due"), 10);
+  // A contractor's takeoff goes in their workspace (AMBIT staff helping one choose it with "ops").
+  const inWs = Boolean(s.ws) && (!s.staff || form.get("ops") === "1");
+  const lead = clip(form.get("lead_id"), 40);
+  const cust = clip(form.get("ops_customer_id"), 40);
   const { data, error } = await s.supabase
     .from("takeoffs")
     .insert({
@@ -31,6 +32,9 @@ export async function createTakeoff(form: FormData) {
       due_date: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
       created_by: s.user.id,
       created_by_name: s.profile!.full_name || s.profile!.email,
+      ops_company_id: inWs ? s.ws!.company.id : null,
+      lead_id: inWs && UUID.test(lead) ? lead : null,
+      ops_customer_id: inWs && UUID.test(cust) ? cust : null,
     })
     .select("id")
     .single<{ id: string }>();

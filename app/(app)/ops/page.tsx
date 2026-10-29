@@ -6,6 +6,7 @@ import {
 import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
 import { loadWorkspace, type Workspace } from "@/lib/ops/server";
+import { money0 } from "@/lib/ops/crm";
 import { opsCan, opsMember } from "@/lib/ops/roles";
 import { CLOSED, stageName } from "@/lib/ops/defaults";
 import { TopBar } from "@/components/ui";
@@ -67,7 +68,7 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
 
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
   const co = ws.company.id;
-  const [{ data: leadRows }, { data: tasks }, { count: customers }, { count: team }, { count: products }, { count: invites }] = await Promise.all([
+  const [{ data: leadRows }, { data: tasks }, { count: customers }, { count: team }, { count: products }, { count: invites }, { data: quoteRows }] = await Promise.all([
     supabase.from("ops_leads").select("id, number, title, stage, next_at, created_at, stage_changed_at, customer:ops_customers(name)").eq("company_id", co).order("created_at", { ascending: false }).limit(400),
     supabase
       .from("ops_notes")
@@ -82,7 +83,14 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("company_id", co).not("ops_role", "is", null),
     supabase.from("ops_products").select("id", { count: "exact", head: true }).eq("company_id", co).eq("active", true),
     opsCan.manage(role) ? supabase.from("invites").select("id", { count: "exact", head: true }).eq("company_id", co).is("accepted_at", null).is("cancelled_at", null) : Promise.resolve({ count: 0 }),
+    supabase.from("ops_quotes").select("status, totals, signed_total, signed_at").eq("company_id", co).in("status", ["draft", "sent", "viewed", "signed"]).order("updated_at", { ascending: false }).limit(500),
   ]);
+  type Qr = { status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; signed_at: string | null };
+  const qs = (quoteRows ?? []) as Qr[];
+  const qTop = (q: Qr) => Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => Number(o.total) || 0));
+  const outQ = qs.filter((q) => q.status === "sent" || q.status === "viewed");
+  const draftQ = qs.filter((q) => q.status === "draft").length;
+  const signedMonth = qs.filter((q) => q.status === "signed" && q.signed_at && q.signed_at.slice(0, 10) >= today.slice(0, 8) + "01");
   type L = { id: string; number: number; title: string | null; stage: string; next_at: string | null; created_at: string; stage_changed_at: string; customer: { name: string } | null };
   const leads = (leadRows ?? []) as unknown as L[];
   const open = leads.filter((l) => !CLOSED.includes(l.stage));
@@ -110,7 +118,20 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
 
   const path = [
     { icon: SquareKanban, title: "Leads", value: `${open.length}`, sub: fresh ? `${fresh} new · ${due} to follow up` : due ? `${due} to follow up today` : "open in your pipeline", href: "/ops/pipeline", live: true },
-    { icon: FileSignature, title: "Quotes", value: "Nov 12", sub: "Takeoff to a branded proposal", live: false },
+    {
+      icon: FileSignature,
+      title: "Quotes",
+      value: outQ.length ? money0(outQ.reduce((a, q) => a + qTop(q), 0)) : draftQ ? `${draftQ}` : signedMonth.length ? money0(signedMonth.reduce((a, q) => a + Number(q.signed_total ?? 0), 0)) : "0",
+      sub: outQ.length
+        ? `${outQ.length} waiting on the customer${draftQ ? ` · ${draftQ} draft${draftQ === 1 ? "" : "s"}` : ""}`
+        : draftQ
+          ? `draft${draftQ === 1 ? "" : "s"} to finish`
+          : signedMonth.length
+            ? `signed this month (${signedMonth.length})`
+            : "Takeoff to a signed proposal",
+      href: "/ops/quotes",
+      live: true,
+    },
     { icon: CalendarRange, title: "Schedule", value: "Nov 19", sub: "Rigs and crews by day", live: false },
     { icon: ClipboardCheck, title: "Work orders", value: "Nov 26", sub: "Time, sets and lots from the field", live: false },
     { icon: Receipt, title: "Invoices", value: "Nov 26", sub: "Deposit to final", live: false },

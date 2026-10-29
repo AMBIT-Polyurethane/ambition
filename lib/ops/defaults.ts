@@ -17,6 +17,7 @@ export type OpsSettings = {
   color: string;
   measure_unit: MeasureUnit;
   target_margin: number | null;
+  builder_margin: number | null;
   floor_margin: number | null;
   burden_pct: number | null;
   waste_pct: number;
@@ -90,8 +91,8 @@ export const MEASURE_UNITS: { key: MeasureUnit; label: string; hint: string }[] 
   { key: "strokes", label: "Stroke counter", hint: "Crews enter the proportioner's stroke counter start and end" },
 ];
 
-/** Yield defaults (board feet per set). Changing them shows a caution first. */
-export const YIELD_DEFAULTS = { foam_oc: 16500, foam_cc: 3700 } as const;
+/** Yield defaults (board feet per set). Changing them shows a caution first. AMBI-ROOF: AMBIT's published 2,800. */
+export const YIELD_DEFAULTS = { foam_oc: 16500, foam_cc: 3700, foam_roof: 2800 } as const;
 
 export const DEFAULT_SETTINGS: OpsSettings = {
   display_name: "",
@@ -103,6 +104,7 @@ export const DEFAULT_SETTINGS: OpsSettings = {
   color: "",
   measure_unit: "lbs",
   target_margin: null,
+  builder_margin: null,
   floor_margin: null,
   burden_pct: null,
   waste_pct: 10,
@@ -148,6 +150,7 @@ export function settingsOf(raw: unknown): OpsSettings {
     color: /^#[0-9a-f]{6}$/i.test(String(r.color ?? "")) ? String(r.color) : "",
     measure_unit: (["lbs", "gallons", "strokes"] as const).includes(r.measure_unit as MeasureUnit) ? (r.measure_unit as MeasureUnit) : "lbs",
     target_margin: num(r.target_margin, null),
+    builder_margin: num(r.builder_margin, null),
     floor_margin: num(r.floor_margin, null),
     burden_pct: num(r.burden_pct, null),
     waste_pct: num(r.waste_pct, 10) ?? 10,

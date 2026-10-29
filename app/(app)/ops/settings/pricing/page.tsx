@@ -26,6 +26,10 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
               <input className="input" name="target_margin" inputMode="decimal" defaultValue={v(s.target_margin)} placeholder="e.g. 45" />
             </label>
             <label className="field">
+              <span className="label">Builder target margin %</span>
+              <input className="input" name="builder_margin" inputMode="decimal" defaultValue={v(s.builder_margin)} placeholder="Blank = same as target" />
+            </label>
+            <label className="field">
               <span className="label">Lowest margin %</span>
               <input className="input" name="floor_margin" inputMode="decimal" defaultValue={v(s.floor_margin)} placeholder="e.g. 30" />
             </label>

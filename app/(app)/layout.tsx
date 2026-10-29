@@ -51,6 +51,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             ask,
             opsCan.crm(profile.ops_role) && { href: "/ops/pipeline", label: "Leads", icon: "pipeline" },
             opsCan.crm(profile.ops_role) && { href: "/ops/customers", label: "Customers", icon: "customers" },
+            opsCan.quote(profile.ops_role) && { href: "/ops/quotes", label: "Quotes", icon: "quotes" },
+            opsCan.quote(profile.ops_role) && { href: "/takeoff", label: "Takeoffs", icon: "takeoff" },
             opsCan.order(profile.ops_role) && { href: "/order", label: "Order from AMBIT", icon: "cart" },
             opsCan.order(profile.ops_role) && { href: "/orders", label: "My AMBIT orders", icon: "orders" },
             { href: "/docs", label: "Product docs", icon: "docs" },

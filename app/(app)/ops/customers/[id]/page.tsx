@@ -20,11 +20,13 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const { supabase, profile, ws } = await requireOps(opsCan.crm);
   const { data: c } = await supabase.from("ops_customers").select("*").eq("id", id).maybeSingle<OpsCustomer>();
   if (!c) notFound();
-  const [{ data: props }, { data: leadRows }, { data: noteRows }] = await Promise.all([
+  const [{ data: props }, { data: leadRows }, { data: noteRows }, { data: quoteRows }] = await Promise.all([
     supabase.from("ops_properties").select("*").eq("customer_id", id).order("created_at"),
     supabase.from("ops_leads").select("id, number, title, stage, services, value_est, created_at, property_id").eq("customer_id", id).order("created_at", { ascending: false }),
     supabase.from("ops_notes").select("*").eq("customer_id", id).is("lead_id", null).neq("kind", "task").order("created_at", { ascending: false }).limit(100),
+    supabase.from("ops_quotes").select("id, number, title, status, totals, signed_total, updated_at").eq("customer_id", id).order("created_at", { ascending: false }),
   ]);
+  const quotes = (quoteRows ?? []) as { id: string; number: number; title: string | null; status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; updated_at: string }[];
   const properties = (props ?? []) as OpsProperty[];
   const leads = (leadRows ?? []) as { id: string; number: number; title: string | null; stage: string; services: string[]; value_est: number | null; created_at: string; property_id: string | null }[];
   const notes = (noteRows ?? []) as OpsNote[];
@@ -71,6 +73,24 @@ export default async function CustomerPage({ params, searchParams }: { params: P
               <span className="small muted">No leads yet.</span>
             )}
           </section>
+
+          {quotes.length ? (
+            <section className="col" style={{ gap: 8 }}>
+              <div className="eyebrow">Quotes ({quotes.length})</div>
+              <div className="list">
+                {quotes.map((q) => (
+                  <Link key={q.id} href={`/ops/quotes/${q.id}`} className="item">
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <div className="t ellipsis">#{q.number}{q.title ? ` · ${q.title}` : ""}</div>
+                      <div className="s ellipsis">{dateShort(q.updated_at)}</div>
+                    </div>
+                    <b>{money0(q.signed_total ?? Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => o.total)))}</b>
+                    <span className={`pill${q.status === "signed" ? " ok" : q.status === "draft" || q.status === "declined" ? " grey" : " warn"}`}>{q.status === "viewed" ? "Opened" : q.status[0].toUpperCase() + q.status.slice(1)}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="col" style={{ gap: 8 }}>
             <div className="eyebrow">Addresses ({properties.length})</div>

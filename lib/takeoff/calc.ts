@@ -29,6 +29,10 @@ export type TItem = {
   deduct_sqft: number;
   hidden: boolean;
   sort: number;
+  /** Work area code (EW exterior walls, CL ceiling ...); quotes group by it. */
+  area_code?: string | null;
+  /** Linear items: "gable" = a triangle wall under the roof (attic demising wall), sized from its pitch. */
+  shape?: "gable" | null;
 };
 
 export type TMark = { id: string; item_id: string; sheet_id: string; points: Pt[]; cutout: boolean };
@@ -95,6 +99,12 @@ export function polylineLength(p: Pt[]): number {
 
 export const pitchFactor = (rise: number | null | undefined) => (rise && rise > 0 ? Math.sqrt(1 + (rise / 12) ** 2) : 1);
 
+/**
+ * A gable-shaped wall (an attic demising wall between a conditioned attic and a vented porch or garage
+ * attic): the line drawn is its bottom, the roof pitch gives its peak. Triangle: base x (base / 2 x pitch / 12) / 2.
+ */
+export const gableSqft = (base: number, pitch: number | null | undefined) => (pitch && pitch > 0 ? (base * base * pitch) / 48 : 0);
+
 /** One shape's raw size: square feet (area, before pitch) or feet (linear) or 1 (count). */
 export function markSize(m: TMark, kind: TItem["kind"], ftPt: number | null): number | null {
   if (kind === "count") return m.points.length;
@@ -119,6 +129,7 @@ export function itemTotals(item: TItem, marks: TMark[], sheets: Map<string, TShe
   let lf = 0;
   let count = 0;
   let unscaled = 0;
+  let gable = 0;
   for (const m of mine) {
     const s = sheets.get(m.sheet_id);
     const size = markSize(m, item.kind, s?.ft_per_pt ? Number(s.ft_per_pt) : null);
@@ -127,14 +138,19 @@ export function itemTotals(item: TItem, marks: TMark[], sheets: Map<string, TShe
       continue;
     }
     if (item.kind === "area") area += m.cutout ? -size : size;
-    else if (item.kind === "linear") lf += m.cutout ? -size : size;
-    else count += size;
+    else if (item.kind === "linear") {
+      lf += m.cutout ? -size : size;
+      if (item.shape === "gable") gable += gableSqft(size, item.pitch);
+    } else count += size;
   }
   const out: Totals = { sqft: null, lf: null, count: null, bf: null, marks: mine.length, unscaled };
   if (item.kind === "area") out.sqft = Math.max(0, area) * pitchFactor(item.pitch);
   if (item.kind === "linear") {
     out.lf = Math.max(0, lf);
-    if (item.height_ft && item.height_ft > 0) {
+    if (item.shape === "gable") {
+      const deduct = onlySheet ? 0 : Number(item.deduct_sqft || 0);
+      out.sqft = item.pitch ? Math.max(0, gable - deduct) : null;
+    } else if (item.height_ft && item.height_ft > 0) {
       // Openings come out of the whole item, not out of one sheet's share.
       const deduct = onlySheet ? 0 : Number(item.deduct_sqft || 0);
       out.sqft = Math.max(0, out.lf * Number(item.height_ft) - deduct);
@@ -167,7 +183,8 @@ export function mainQty(item: TItem, t: Totals): string {
 
 export function subQty(item: TItem, t: Totals): string {
   const bits: string[] = [];
-  if (item.kind === "linear" && t.lf !== null && t.sqft !== null) bits.push(`${num(t.lf, 1)} ft × ${feetInches(Number(item.height_ft))}`);
+  if (item.kind === "linear" && t.lf !== null && t.sqft !== null)
+    bits.push(item.shape === "gable" ? `${num(t.lf, 1)} ft wide, gable at ${num(Number(item.pitch), 1)}/12` : `${num(t.lf, 1)} ft × ${feetInches(Number(item.height_ft))}`);
   if (t.bf !== null) bits.push(`${num(t.bf)} board ft`);
   if (t.unscaled) bits.push(`${t.unscaled} on sheets with no scale`);
   return bits.join(" · ");
@@ -178,7 +195,8 @@ export function assembly(item: TItem): string {
   if (item.thickness_in) bits.push(`${num(Number(item.thickness_in), 2)}"`);
   if (item.r_value) bits.push(/^r-?/i.test(item.r_value) ? item.r_value.toUpperCase().replace(/^R(?!-)/, "R-") : `R-${item.r_value}`);
   if (item.pitch) bits.push(`${num(Number(item.pitch), 1)}/12 pitch`);
-  return item.material || item.thickness_in || item.r_value ? bits.join(" · ") : "";
+  if (item.shape === "gable") bits.push("gable wall");
+  return item.material || item.thickness_in || item.r_value || item.shape ? bits.join(" · ") : "";
 }
 
 /** Reads a typed length: 12'-6", 12' 6", 12.5, 150" -> feet. */
