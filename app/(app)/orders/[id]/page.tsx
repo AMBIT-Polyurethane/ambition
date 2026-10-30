@@ -458,11 +458,11 @@ export default async function OrderDetailPage({
           </div>
           {profile.role === "admin" ? (
             <details className="danger-zone">
-              <summary>Delete this order for good</summary>
+              <summary>Delete this order</summary>
               <form action={deleteOrder} className="col" style={{ gap: 10, marginTop: 10 }}>
                 <input type="hidden" name="id" value={order.id} />
                 <label className="check small">
-                  <input type="checkbox" name="sure" /> I understand {orderNo(order.order_no)} and its items are removed from the app permanently. This can&apos;t be undone.
+                  <input type="checkbox" name="sure" /> I understand {orderNo(order.order_no)} leaves the app. It&apos;s saved in the Deleted orders log, and only Jeremiah can put it back.
                 </label>
                 <Submit className="btn sm danger" pendingText="Deleting…">Delete order</Submit>
               </form>

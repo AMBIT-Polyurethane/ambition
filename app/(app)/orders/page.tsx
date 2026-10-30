@@ -119,13 +119,25 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     return `/orders?${u.toString()}`;
   };
   const deskBack = emp && access ? "/orders/desk" : "/";
+  // Jeremiah (the order keepers) sees the deleted orders log, with how many are waiting there.
+  const keeper = emp ? Boolean((await supabase.rpc("is_order_keeper")).data) : false;
+  const deletedCount = keeper
+    ? ((await supabase.from("orders_deleted").select("id", { count: "exact", head: true }).is("restored_at", null)).count ?? 0)
+    : 0;
 
   return (
     <main className="shell">
       <TopBar
         title={emp ? (access === "mine" ? "My orders" : "Orders") : "My orders"}
         back={keepDesk || emp ? deskBack : "/"}
-        right={emp && access ? <Link href="/orders/desk" className="btn sm dark">Order desk</Link> : null}
+        right={
+          emp && (access || keeper) ? (
+            <span className="row" style={{ gap: 8, marginLeft: "auto" }}>
+              {keeper ? <Link href="/orders/deleted" className="btn sm">Deleted orders{deletedCount ? ` (${deletedCount})` : ""}</Link> : null}
+              {access ? <Link href="/orders/desk" className="btn sm dark">Order desk</Link> : null}
+            </span>
+          ) : null
+        }
       />
       {sp.msg ? <div className="alert ok small" role="status">{sp.msg}</div> : null}
       {emp ? (

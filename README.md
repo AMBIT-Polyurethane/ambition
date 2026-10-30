@@ -358,6 +358,13 @@ before, spot checks per location).
 - **Invoice prices**: `order_set_numbers(order, po, invoice, prices)` saves the price each for every line with the
   Sales Order # and Invoice # (required for customer-priced lines: spray foam, fiberglass), recomputes
   `est_subtotal`, and stamps `priced_at` / `priced_by_name`. The order page, the PDF and the Sales card use them.
+- **Deleted orders log** (`0034_order_delete_log.sql`): `order_delete` saves the whole order (`orders` row,
+  `order_items`, `inventory_lines` with their lots and sheet rows, `order_variances`, `order_files`, linked
+  `order_drafts`) as JSON in `orders_deleted`, then deletes it. Only the people in `order_keepers` (Jeremiah; no
+  policies, so nobody can change that list from the app) can read the log (`is_order_keeper()`) and call
+  `order_restore(log, reopen)`, which re-inserts the rows with the same ids and order # (`restore_rows()`), then by
+  default reopens it to `status_before_cancel` (saved by `order_cancel`) so the inventory trigger reserves its stock
+  again and the sheet rows go back to Pending Pickup. Page: `/orders/deleted` (button on Orders for keepers).
 - **ISO priced per foam set** (`0030_iso_set_prices.sql`): foam is sold by the set, so ISO going with a closed-cell
   resin can cost more than ISO going with an open-cell resin on the same order. When an ISO line is split across
   resins (`foamLoads`), the price form shows one box per set (`priceLines()` in `lib/order-doc/loads.ts`) and sends

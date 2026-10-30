@@ -264,7 +264,24 @@ export async function deleteOrder(form: FormData) {
   if (error) back(id, "err", error.message);
   revalidatePath("/orders");
   revalidatePath("/orders/desk");
-  redirect(`/orders?msg=${encodeURIComponent(`${no} was deleted.`)}`);
+  revalidatePath("/orders/deleted");
+  redirect(`/orders?msg=${encodeURIComponent(`${no} was deleted. It's saved in the Deleted orders log, so Jeremiah can put it back.`)}`);
+}
+
+/** The order keepers (Jeremiah): put a deleted order back, open again (or as cancelled, for the record). */
+export async function restoreDeleted(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const log = String(form.get("log") ?? "");
+  const reopen = form.get("reopen") !== "0";
+  const { data: no, error } = await s.supabase.rpc("order_restore", { p_log: log, p_reopen: reopen });
+  revalidatePath("/orders");
+  revalidatePath("/orders/desk");
+  revalidatePath("/orders/deleted");
+  if (error) redirect(`/orders/deleted?err=${encodeURIComponent(error.message)}`);
+  const { data: o } = await s.supabase.from("orders").select("id, branch_id").eq("order_no", Number(String(no).replace(/\D/g, ""))).maybeSingle<{ id: string; branch_id: string | null }>();
+  if (o) await kickForOrder(s.supabase, o.id, "order put back");
+  redirect(o ? `/orders/${o.id}?msg=${encodeURIComponent(`${no} is back${reopen ? " and open again; its stock is held again" : " (as cancelled)"}.`)}` : "/orders/deleted");
 }
 
 
