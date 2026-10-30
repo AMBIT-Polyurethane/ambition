@@ -1,9 +1,12 @@
 import "server-only";
+import { ORDERS_EMAIL } from "@/lib/env";
 
 export type EmailAttachment = { filename: string; content: Buffer; contentType?: string };
 
 export type EmailMessage = {
   to: string[];
+  /** The name people see it from (a contractor's company on their proposals). The address stays the app's. */
+  fromName?: string;
   cc?: string[];
   replyTo?: string;
   subject: string;
@@ -28,8 +31,16 @@ function clean(list: (string | null | undefined)[] | undefined): string[] {
   return out;
 }
 
+/** "Lopez Home Performance <orders@ambit-intelligence.com>": the sending address with another name on it. */
+function fromWithName(from: string, name?: string): string {
+  const n = (name ?? "").replace(/["<>\r\n]/g, "").trim().slice(0, 70);
+  if (!n) return from;
+  const addr = from.match(/<([^>]+)>/)?.[1] ?? from.trim();
+  return `"${n}" <${addr}>`;
+}
+
 async function sendWithResend(msg: EmailMessage): Promise<SendResult> {
-  const from = process.env.EMAIL_FROM || "AMBIT Intelligence <onboarding@resend.dev>";
+  const from = fromWithName(process.env.EMAIL_FROM || "AMBIT Intelligence <onboarding@resend.dev>", msg.fromName);
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -40,7 +51,8 @@ async function sendWithResend(msg: EmailMessage): Promise<SendResult> {
       from,
       to: msg.to,
       cc: msg.cc && msg.cc.length ? msg.cc : undefined,
-      reply_to: msg.replyTo || undefined,
+      // The app's address only sends; with no reply-to, answers go straight to AMBIT's orders inbox.
+      reply_to: msg.replyTo || ORDERS_EMAIL,
       subject: msg.subject,
       html: msg.html,
       text: msg.text,

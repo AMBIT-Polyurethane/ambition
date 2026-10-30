@@ -205,7 +205,7 @@ export async function sendQuote(id: string, opts: { email: boolean; to?: string 
 <p style="font-size:13px;line-height:1.5;color:#52525b;margin:0;">Questions? Just reply to this email${ws.settings.phone ? ` or call ${h(ws.settings.phone)}` : ""}.</p>
 <p style="font-size:11px;color:#a1a1aa;margin:16px 0 0;word-break:break-all;">Button not working? Copy this into your browser: ${h(link)}</p>`,
   );
-  const res = await sendEmail({ to: [to], replyTo, subject: `Your proposal from ${brand}${q.number ? ` (#${q.number})` : ""}`, html, text: `Hi ${hi}, ${msg || `here's your proposal from ${brand}.`}\n${link}` });
+  const res = await sendEmail({ to: [to], replyTo, fromName: brand, subject: `Your proposal from ${brand}${q.number ? ` (#${q.number})` : ""}`, html, text: `Hi ${hi}, ${msg || `here's your proposal from ${brand}.`}\n${link}` });
   if (res.status === "sent") {
     await supabase.from("ops_notes").insert({ company_id: ws.company.id, lead_id: q.lead_id, customer_id: q.customer_id, kind: "email", body: `Emailed quote #${q.number} to ${to}`, created_by: profile.id, created_by_name: profile.full_name || profile.email });
     return { ok: true, link, emailed: to };
