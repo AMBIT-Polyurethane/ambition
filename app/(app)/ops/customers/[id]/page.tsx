@@ -20,12 +20,14 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const { supabase, profile, ws } = await requireOps(opsCan.crm);
   const { data: c } = await supabase.from("ops_customers").select("*").eq("id", id).maybeSingle<OpsCustomer>();
   if (!c) notFound();
-  const [{ data: props }, { data: leadRows }, { data: noteRows }, { data: quoteRows }] = await Promise.all([
+  const [{ data: props }, { data: leadRows }, { data: noteRows }, { data: quoteRows }, { data: jobRows }] = await Promise.all([
     supabase.from("ops_properties").select("*").eq("customer_id", id).order("created_at"),
     supabase.from("ops_leads").select("id, number, title, stage, services, value_est, created_at, property_id").eq("customer_id", id).order("created_at", { ascending: false }),
     supabase.from("ops_notes").select("*").eq("customer_id", id).is("lead_id", null).neq("kind", "task").order("created_at", { ascending: false }).limit(100),
     supabase.from("ops_quotes").select("id, number, title, status, totals, signed_total, updated_at").eq("customer_id", id).order("created_at", { ascending: false }),
+    opsCan.jobs(ws.role) ? supabase.from("ops_jobs").select("id, number, title, status, sold_total, created_at").eq("customer_id", id).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
   ]);
+  const jobs = (jobRows ?? []) as { id: string; number: number; title: string | null; status: string; sold_total: number | null; created_at: string }[];
   const quotes = (quoteRows ?? []) as { id: string; number: number; title: string | null; status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; updated_at: string }[];
   const properties = (props ?? []) as OpsProperty[];
   const leads = (leadRows ?? []) as { id: string; number: number; title: string | null; stage: string; services: string[]; value_est: number | null; created_at: string; property_id: string | null }[];
@@ -86,6 +88,24 @@ export default async function CustomerPage({ params, searchParams }: { params: P
                     </div>
                     <b>{money0(q.signed_total ?? Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => o.total)))}</b>
                     <span className={`pill${q.status === "signed" ? " ok" : q.status === "draft" || q.status === "declined" ? " grey" : " warn"}`}>{q.status === "viewed" ? "Opened" : q.status[0].toUpperCase() + q.status.slice(1)}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {jobs.length ? (
+            <section className="col" style={{ gap: 8 }}>
+              <div className="eyebrow">Jobs ({jobs.length})</div>
+              <div className="list">
+                {jobs.map((j) => (
+                  <Link key={j.id} href={`/ops/jobs/${j.id}`} className="item">
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <div className="t ellipsis">Job #{j.number}{j.title ? ` · ${j.title}` : ""}</div>
+                      <div className="s ellipsis">Sold {dateShort(j.created_at)}</div>
+                    </div>
+                    {j.sold_total !== null ? <b>{money0(j.sold_total)}</b> : null}
+                    <span className={`pill${j.status === "done" ? " ok" : j.status === "cancelled" ? " grey" : " info"}`}>{j.status === "open" ? "Open" : j.status === "done" ? "Done" : "Cancelled"}</span>
                   </Link>
                 ))}
               </div>

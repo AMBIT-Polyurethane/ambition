@@ -18,13 +18,14 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
   const loaded = await loadQuote(supabase, id);
   if (!loaded) notFound();
   const q = loaded.quote;
-  const [products, team, { data: cust }, { data: lead }, { data: packages }, { data: takeoffs }] = await Promise.all([
+  const [products, team, { data: cust }, { data: lead }, { data: packages }, { data: takeoffs }, { data: job }] = await Promise.all([
     loadProducts(supabase, ws.company.id),
     teamOf(supabase, ws.company.id),
     supabase.from("ops_customers").select("id, name, phone, email, kind, price_level, tax_exempt, properties:ops_properties(id, label, street, city, state, zip)").eq("id", q.customer_id).maybeSingle(),
     q.lead_id ? supabase.from("ops_leads").select("id, number, title, stage").eq("id", q.lead_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("ops_packages").select("id, name, lines").eq("company_id", ws.company.id).order("name"),
     supabase.from("takeoffs").select("id, name, customer, updated_at").eq("ops_company_id", ws.company.id).order("updated_at", { ascending: false }).limit(30),
+    q.status === "signed" ? supabase.from("ops_jobs").select("id, number").eq("quote_id", q.id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const origin = await currentOrigin();
   const s = ws.settings;
@@ -47,6 +48,8 @@ export default async function QuotePage({ params, searchParams }: { params: Prom
         can={{ edit: opsCan.quote(ws.role) && q.status !== "signed", approve: opsCan.approve(ws.role), remove: opsCan.manage(ws.role), order: opsCan.order(ws.role) }}
         emailReady={canEmailCustomers()}
         me={profile.id}
+        job={(job as { id: string; number: number } | null) ?? null}
+        canDispatch={opsCan.dispatch(ws.role)}
       />
     </main>
   );

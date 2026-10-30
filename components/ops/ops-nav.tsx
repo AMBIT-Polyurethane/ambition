@@ -12,7 +12,7 @@ const STEPS = [
   { href: "/ops/pipeline", label: "Leads", icon: SquareKanban, also: ["/ops/leads"] },
   { href: "/ops/customers", label: "Customers", icon: Contact },
   { href: "/ops/quotes", label: "Quotes", icon: FileSignature, also: ["/takeoff"] },
-  { href: "/ops/schedule", label: "Schedule", icon: CalendarRange, soon: "Nov 19" },
+  { href: "/ops/schedule", label: "Schedule", icon: CalendarRange, also: ["/ops/jobs", "/ops/stock"] },
   { href: "/ops/work-orders", label: "Work orders", icon: ClipboardCheck, soon: "Nov 26" },
   { href: "/ops/invoices", label: "Invoices", icon: Receipt, soon: "Nov 26" },
   { href: "/ops/costing", label: "Job costing", icon: Gauge, soon: "Dec 1" },

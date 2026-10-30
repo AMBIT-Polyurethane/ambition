@@ -105,9 +105,9 @@ doesn't mistake it for the first box of the page and wipe it out.)
 ### AMBIT-OPS
 
 `/ops`: the contractor's own operations software inside AMBIT Intelligence, built as one straight path: CRM (leads
-and customers), quotes, proposals and e-sign (with Takeoff), then scheduling and dispatch (Nov 19), crew work orders
+and customers), quotes, proposals and e-sign (with Takeoff), jobs, the rig board and stock, then crew work orders
 and invoices (Nov 26) and job costing / yield (Dec 1), for the December 2026 pilot. Database:
-`0031_ops_foundation.sql`, `0032_ops_quotes.sql`. Code: `app/(app)/ops/`, `lib/ops/`, `components/ops/`, the public
+`0031_ops_foundation.sql`, `0032_ops_quotes.sql`, `0033_ops_schedule.sql`. Code: `app/(app)/ops/`, `lib/ops/`, `components/ops/`, the public
 form in `app/lead/[token]/`, the public proposal in `app/p/[token]/`.
 
 - **Workspaces**: a workspace is a `companies` row with `ops_enabled`. AMBIT turns it on (Admin > AMBIT-OPS
@@ -152,6 +152,26 @@ form in `app/lead/[token]/`, the public proposal in `app/p/[token]/`.
   user agent saved, lead → Won. `ops_proposal_decline` keeps the reason. PDFs: `lib/ops/proposal-pdf.tsx`
   (`/ops/quotes/<id>/pdf`, `/p/<token>/pdf`). Email via `sendEmail` with the rep as reply-to; "Just get the link"
   works without email.
+- **Jobs and trips** (`ops_jobs`, `ops_job_lines`, `ops_trips`, `ops_trip_crew`): `ops_make_job(quote)` copies the signed
+  option and add-ons into a job with one trip; it runs inside `ops_proposal_sign` and `ops_quote_mark_sold` (the office
+  records a yes on paper / in person: `signed_method = 'office'`, `signed_note`, `signed_by_name`), and once for quotes
+  signed before 0033. `ops_lines_to_trip` moves picked lines into another or a new trip (names follow the work unless
+  typed: `name_auto`); empty unscheduled trips go away. `ops_trip_schedule(trip, rig, start, days, time, crew)` (copies
+  the rig's regular crew when none is given), `ops_trip_unschedule`, `ops_trip_set_crew`. `end_date` is generated from
+  `start_date + days - 1`. Screens: `/ops/jobs`, `/ops/jobs/<id>`, `/ops/schedule` (`board.tsx`: week grid, lanes per
+  rig, HTML5 drag and drop, a day list on phones), `lib/ops/schedule.ts` (`suggestDays` = open cell sets / rig rate +
+  closed cell and roofing sets / rig rate + sq ft of blown, batts, coatings and removal / rig rate, rounded up).
+- **Rigs and crews** (`ops_rigs` with `does`, `oc_sets_day` 1, `cc_sets_day` 2, `sqft_day` 4000, `color`; `ops_crew`, a
+  login optional; `ops_rig_crew` regular crew with a lead): `/ops/schedule/rigs`. `ops_crew_sync()` adds crew, crew
+  lead and sub logins. `opsCan.dispatch` = owner, office, dispatcher; sales see the jobs from their own quotes.
+- **Crews' next 7 days**: `ops_my_trips(days)` (security definer, no prices) on the crew's OPS home.
+- **Stock** (`ops_stock` per place (`location` or `rig`), `item_key` = AMBIT SKU (ISO drums keyed `ISO` with `maker`) or
+  `OPS:<product id>`, `lot_no`, partial `qty`; `ops_stock_moves` log; `ops_stock_min` reorder points). Changes only
+  through `ops_stock_add`, `ops_stock_count`, `ops_stock_move`. AMBIT deliveries: trigger `ops_orders_delivered` on
+  `orders` → `ops_ambit_delivery(order)` adds a completed order's items (not guns, parts or tools) to the first shop by
+  the lots in `inventory_lines` (ISO-COVESTRO → `ISO` / Covestro), once per order. `/ops/stock`, and the stock check
+  `/ops/stock/check?trip=<id>` or `?from=&to=` (`materialNeeds` on the trips' job lines vs rig, shop and open AMBIT
+  orders; "Order what's short" fills the cart).
 - **Material order** (`/ops/materials?quote=<id>&option=<id>` or `?takeoff=<id>`, `lib/ops/materials.ts`): foam →
   whole sets of ISO + resin drums from `ambit_skus`, other AMBIT products by SKU, the rest listed as "buy elsewhere";
   the button adds them to the Order cart (merged with anything already there).

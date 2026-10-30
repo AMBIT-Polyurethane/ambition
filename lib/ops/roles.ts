@@ -36,6 +36,10 @@ export const opsCan = {
   quote: (r: string | null | undefined) => has(r, ["owner", "office", "dispatcher", "sales"]),
   /** OK a quote that's under the lowest margin. */
   approve: (r: string | null | undefined) => has(r, ["owner", "office"]),
+  /** Rigs, crews, trips and stock: schedule and change them. */
+  dispatch: (r: string | null | undefined) => has(r, ["owner", "office", "dispatcher"]),
+  /** See jobs and the rig board (sales see the jobs from their own quotes). */
+  jobs: (r: string | null | undefined) => has(r, ["owner", "office", "dispatcher", "accounting", "sales"]),
   /** Order from AMBIT. */
   order: (r: string | null | undefined) => has(r, ["owner", "office", "dispatcher", "sales", "accounting"]),
 };

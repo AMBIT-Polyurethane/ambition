@@ -12,6 +12,7 @@ import { CLOSED, stageName } from "@/lib/ops/defaults";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { dateShort, firstName, greeting } from "@/lib/format";
+import { addDays, lineText, rangeText, timeText } from "@/lib/ops/schedule";
 import { enterWorkspace } from "./workspace-actions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/types";
@@ -50,13 +51,15 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
   );
 
   if (opsCan.fieldOnly(role)) {
+    const { data: mine } = await supabase.rpc("ops_my_trips", { p_days: 7 });
     return (
       <main className="shell wide">
         {alerts}
         {head}
+        <CrewWeek trips={(mine ?? []) as CrewTrip[]} />
         <div className="card col" style={{ gap: 8 }}>
-          <b><ClipboardCheck size={18} style={{ verticalAlign: -3, marginRight: 6 }} />Your work orders show up here</b>
-          <span className="small muted">Starting Nov 26 you&apos;ll see each day&apos;s jobs with the scope, address and materials, clock in and out, and log the sets you spray. Nothing to do until then.</span>
+          <b><ClipboardCheck size={18} style={{ verticalAlign: -3, marginRight: 6 }} />Work orders are coming</b>
+          <span className="small muted">Starting Nov 26 you&apos;ll also clock in and out, log the sets you spray with their lots, and take the job photos right here.</span>
         </div>
         <div className="list">
           <Link href="/docs" className="item"><div className="grow"><div className="t">Product docs</div><div className="s">TDS, SDS and install guides</div></div><ChevronRight size={18} className="chev" /></Link>
@@ -85,6 +88,13 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
     opsCan.manage(role) ? supabase.from("invites").select("id", { count: "exact", head: true }).eq("company_id", co).is("accepted_at", null).is("cancelled_at", null) : Promise.resolve({ count: 0 }),
     supabase.from("ops_quotes").select("status, totals, signed_total, signed_at").eq("company_id", co).in("status", ["draft", "sent", "viewed", "signed"]).order("updated_at", { ascending: false }).limit(500),
   ]);
+  const weekEnd = addDays(today, 6);
+  const [{ count: toSchedule }, { count: thisWeek }] = opsCan.jobs(role)
+    ? await Promise.all([
+        supabase.from("ops_trips").select("id, job:ops_jobs!inner(status)", { count: "exact", head: true }).eq("company_id", co).eq("status", "unscheduled").eq("job.status", "open"),
+        supabase.from("ops_trips").select("id", { count: "exact", head: true }).eq("company_id", co).in("status", ["scheduled", "in_progress"]).lte("start_date", weekEnd).gte("end_date", today),
+      ])
+    : [{ count: 0 }, { count: 0 }];
   type Qr = { status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; signed_at: string | null };
   const qs = (quoteRows ?? []) as Qr[];
   const qTop = (q: Qr) => Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => Number(o.total) || 0));
@@ -132,7 +142,14 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
       href: "/ops/quotes",
       live: true,
     },
-    { icon: CalendarRange, title: "Schedule", value: "Nov 19", sub: "Rigs and crews by day", live: false },
+    {
+      icon: CalendarRange,
+      title: "Schedule",
+      value: toSchedule ? `${toSchedule}` : `${thisWeek ?? 0}`,
+      sub: toSchedule ? `trip${toSchedule === 1 ? "" : "s"} to schedule${thisWeek ? ` · ${thisWeek} in the next 7 days` : ""}` : thisWeek ? `trip${thisWeek === 1 ? "" : "s"} in the next 7 days` : "Rigs and crews by day",
+      href: "/ops/schedule",
+      live: opsCan.jobs(role),
+    },
     { icon: ClipboardCheck, title: "Work orders", value: "Nov 26", sub: "Time, sets and lots from the field", live: false },
     { icon: Receipt, title: "Invoices", value: "Nov 26", sub: "Deposit to final", live: false },
     { icon: Gauge, title: "Job costing", value: "Dec 1", sub: "Yield and margin on every job", live: false },
@@ -320,5 +337,68 @@ async function StaffHome({ supabase, profile, alerts }: { supabase: SupabaseClie
         ))}
       </div>
     </main>
+  );
+}
+
+// ------------------------------------------------------------------ a crew member's next 7 days
+type CrewTrip = {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  days: number;
+  start_time: string | null;
+  status: string;
+  notes: string | null;
+  job_number: number;
+  crew_notes: string | null;
+  customer: string;
+  phone: string | null;
+  address: string | null;
+  gate_code: string | null;
+  property_notes: string | null;
+  rig: string | null;
+  crew: { name: string; lead: boolean }[] | null;
+  work: { area: string | null; name: string; detail: string | null; sqft: number | null; depth_in: number | null; r_value: number | null; units: number | null; unit: string | null; kind: string }[] | null;
+};
+
+function CrewWeek({ trips }: { trips: CrewTrip[] }) {
+  return (
+    <section className="col" style={{ gap: 10 }}>
+      <div className="row between"><b style={{ fontSize: 17 }}>Your next 7 days</b><span className="tiny faint">{trips.length} trip{trips.length === 1 ? "" : "s"}</span></div>
+      {trips.length ? (
+        trips.map((t) => (
+          <article key={t.id} className="card col crew-trip" style={{ gap: 8 }}>
+            <div className="row between" style={{ gap: 8, alignItems: "flex-start" }}>
+              <span className="col tight" style={{ minWidth: 0 }}>
+                <b>{rangeText(t.start_date, t.days)}{t.start_time ? ` · ${timeText(t.start_time)}` : ""}</b>
+                <span className="small">{t.customer} · job #{t.job_number}</span>
+              </span>
+              {t.rig ? <span className="pill info">{t.rig}</span> : null}
+            </div>
+            {t.address ? (
+              <a className="small" href={`https://maps.google.com/?q=${encodeURIComponent(t.address)}`} target="_blank" rel="noopener">{t.address}</a>
+            ) : null}
+            {t.gate_code ? <span className="small">Gate code <b>{t.gate_code}</b></span> : null}
+            <ul className="job-lines compact">
+              {(t.work ?? []).map((w, i) => (
+                <li key={i}>
+                  {w.area ? <span className="q-code">{w.area}</span> : null}
+                  <span className="grow col tight" style={{ minWidth: 0 }}>
+                    <span className="small ellipsis">{w.name}</span>
+                    <span className="tiny faint ellipsis">{lineText(w)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {t.crew?.length ? <span className="tiny faint">Crew: {t.crew.map((c) => `${c.name}${c.lead ? " (lead)" : ""}`).join(", ")}</span> : null}
+            {[t.crew_notes, t.property_notes, t.notes].filter(Boolean).length ? <span className="small muted">{[t.crew_notes, t.property_notes, t.notes].filter(Boolean).join(" · ")}</span> : null}
+            {t.phone ? <a className="btn sm dark" href={`tel:${t.phone}`} style={{ alignSelf: "flex-start" }}>Call the customer</a> : null}
+          </article>
+        ))
+      ) : (
+        <div className="card small muted">Nothing on your schedule for the next 7 days. When the office puts you on a trip, it shows up here.</div>
+      )}
+    </section>
   );
 }

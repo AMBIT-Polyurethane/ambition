@@ -162,7 +162,7 @@ function ProposalPdf({ p, logo, link }: { p: Proposal; logo: string | null; link
           <View style={{ flex: 1 }}>
             {/* eslint-disable-next-line jsx-a11y/alt-text */}
             {signed && q.signature ? <Image src={q.signature} style={s.sigImg} /> : <View style={{ height: 60 }} />}
-            <View style={s.signBox}><Text>{signed ? `${q.signed_name}, signed online ${day(q.signed_at)}` : "Customer signature"}</Text></View>
+            <View style={s.signBox}><Text>{signed ? (q.signature ? `${q.signed_name}, signed online ${day(q.signed_at)}` : `${q.signed_name}, accepted ${day(q.signed_at)}`) : "Customer signature"}</Text></View>
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ height: 60 }} />

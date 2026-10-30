@@ -71,7 +71,7 @@ export function ProposalView({ p, token, logo, docs }: { p: Proposal; token: str
       {signed || done ? (
         <div className="alert ok">
           <CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} />
-          <span>{done ? "Thank you! Your proposal is signed." : `Signed by ${q.signed_name} on ${day(q.signed_at)}.`} {p.company.name} will reach out to schedule the work.{done ? " Reload the page any time to see it." : ""}</span>
+          <span>{done ? "Thank you! Your proposal is signed." : q.signature ? `Signed by ${q.signed_name} on ${day(q.signed_at)}.` : `Accepted on ${day(q.signed_at)}.`} {p.company.name} will reach out to schedule the work.{done ? " Reload the page any time to see it." : ""}</span>
         </div>
       ) : declined ? (
         <div className="alert warn"><span>You declined this proposal. If that changed, contact {p.company.name}{p.company.phone ? ` at ${p.company.phone}` : ""}.</span></div>

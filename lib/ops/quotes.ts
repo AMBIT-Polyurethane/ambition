@@ -45,6 +45,9 @@ export type QuoteRow = {
   signed_option_id: string | null;
   signed_addons: string[];
   signed_total: number | null;
+  signed_method: string | null;
+  signed_note: string | null;
+  signed_by_name: string | null;
   declined_at: string | null;
   decline_reason: string | null;
   totals: Record<string, unknown>;

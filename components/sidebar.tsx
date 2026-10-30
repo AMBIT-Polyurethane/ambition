@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import {
   Blocks,
   Boxes,
+  CalendarRange,
+  Package,
   ClipboardList,
   Download,
   FileSignature,
@@ -57,6 +59,8 @@ const ICONS = {
   pipeline: SquareKanban,
   customers: Contact,
   quotes: FileSignature,
+  schedule: CalendarRange,
+  stock: Package,
   settings: Settings,
 } satisfies Record<string, LucideIcon>;
 

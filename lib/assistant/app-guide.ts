@@ -163,7 +163,7 @@ ${TAKEOFF}`,
     who: "customer",
     ops: "crm",
     title: "AMBIT-OPS: leads, customers and settings (contractors)",
-    body: `[AMBIT-OPS](/ops) is the contractor's own business software inside the app: the work in order, left to right: Leads, Customers, Quotes (with Takeoff for measuring plans), then Schedule (coming Nov 19), Work orders and Invoices (Nov 26) and Job costing (Dec 1). Home shows a "Get set up" checklist, your tasks for today and the latest leads.
+    body: `[AMBIT-OPS](/ops) is the contractor's own business software inside the app: the work in order, left to right: Leads, Customers, Quotes (with Takeoff for measuring plans), Schedule (jobs, the rig board and stock), then Work orders and Invoices (coming Nov 26) and Job costing (Dec 1). Home shows a "Get set up" checklist, your tasks for today and the latest leads.
 Leads ([Leads](/ops/pipeline)): a board with a column per stage (New lead, Contacted, Appointment set, Quote sent, Follow-up, Won, Lost). Drag a card to another column, or use its "Move to…" menu; on a phone pick the stage at the top and use "Move to…" on the card. Moving a lead to Lost always asks why (Price, Timing, Went with someone else…) so you can see later why jobs were lost. "+ New lead": type a name and phone (or pick an existing customer), the job address, what they need, where the lead came from, a rough value and a follow-up date. If the phone or email already belongs to a customer, it offers to use that customer instead of making a duplicate.
 A lead's page: the stage path across the top (tap a stage to move it), "Next step" button, a box to log a Note, Call, Text or Email to the timeline, Tasks ("Add a task" with a due date and who it's for; tick it when done), the customer's call / text / map buttons, Details (job name, services, rep, source, value, follow-up, job address), "Mark lost" and "Delete this lead".
 Sales reps see only their own leads (the ones assigned to them or that they added). Crews don't see leads, customers or prices.
@@ -186,6 +186,18 @@ The customer's proposal page (works on a phone, no login): their options and add
   {
     who: "customer",
     ops: "crm",
+    title: "AMBIT-OPS: jobs, the rig board and stock (contractors)",
+    body: `Jobs: when a customer signs a quote online, the job is made by itself with all the signed work (the option and add-ons they picked) in one trip. If the customer said yes another way (a signed paper proposal, in person, by phone), open the quote and tap "Customer said yes another way": pick the option and add-ons, say how they said yes, "Mark it sold". [Jobs](/ops/jobs) lists them ("Not scheduled" first); a job's page has the customer, address and gate code, the trips, "Notes for the crew" (shown on every trip), and "Cancel this job".
+Trips: one job can need more than one visit (foam at rough-in, blown attic after drywall). On the job page tick the work that goes later and "Move" it to "A new trip" (or another trip). Each trip goes on the board on its own.
+Rigs and crews ([Rigs and crews](/ops/schedule/rigs), owner, office and dispatcher): add each rig with its name, home shop, what it does (open cell, closed cell, roofing foam, blown-in, batts, coatings) and "A day's work": open cell sets, closed cell sets and square feet of blown or batts it usually does in a day (they start at 1 open cell set, 2 closed cell sets, 4,000 sq ft). Pick its color and its regular crew (tick people, pick the lead). Crew list: people with a crew login (crew lead, crew member or sub on the Team page) are added by themselves; add helpers by name with "Add someone by name".
+The rig board ([Schedule](/ops/schedule)): rigs down the side, the week across (arrows for other weeks). "Not scheduled" on the left lists sold trips with their work and about how many days they take. Drag one onto a rig and day (on a phone, tap it): it takes the suggested number of days for that rig, and the rig's regular crew goes on it. Tap any trip to change the rig, first day, how many days ("Use it" puts back the suggested days), start time, crew and lead, and a note for the crew; "Take off the board" puts it back in Not scheduled. A small number on a day means that rig has more than one trip that day. Phones show the week day by day.
+Stock ([Stock](/ops/stock)): the shop and every rig hold stock: ISO drums by maker (Covestro, Wanhua) and lot, resin drums by lot, bags and supplies. AMBIT orders are added to the first shop by themselves when AMBIT marks them picked up or delivered, with the lots AMBIT loaded. "Add stock" is for a starting count or anything bought elsewhere (where, what, how many: half a drum is 0.5, ISO maker, lot #). "Count or move" on any line: save what's really there, or move drums to a rig. "Reorder at" sets a reorder point; anything below it shows under "Running low" with "Order what's low from AMBIT". "On the way from AMBIT" lists open AMBIT orders.
+Stock check: "Stock check" on a trip (or "Stock check for this week" on the board) compares what the work needs (foam in whole sets: one ISO drum and one resin drum each; bags) with what's on the rig, in the shop and on the way, shows what's short and what to load onto the rig first, and "Order what's short from AMBIT" puts it in the order cart.
+Crews see their own next 7 days on their AMBIT-OPS home (no prices). The OPS Home "Schedule" card counts trips to schedule and trips in the next 7 days.`,
+  },
+  {
+    who: "customer",
+    ops: "crm",
     title: "Takeoff: measuring plans (contractors)",
     body: `[Takeoff](/takeoff) measures plans for your quotes (Quotes > "Takeoffs"). Works best on a computer. "Quote it" at the top of a takeoff starts a quote with every item already in it.
 ${TAKEOFF}`,
@@ -194,7 +206,7 @@ ${TAKEOFF}`,
     who: "customer",
     ops: "field",
     title: "AMBIT-OPS for crews",
-    body: `Crew members, crew leads and subs open to their AMBIT-OPS home. Starting Nov 26 it shows each day's work orders (scope, address, materials), clock in and out, and logging the sets sprayed. Until then it links to Product docs and Academy. Crews never see prices, leads or customer lists.`,
+    body: `Crew members, crew leads and subs open to their AMBIT-OPS home. "Your next 7 days" lists every trip they're on: the day(s) and start time, the rig, the customer, the address (tap for the map), the gate code, the work by area (square feet, depth or R-value, sets or bags), who else is on the crew, the office's notes and a button to call the customer. Starting Nov 26 they'll also clock in and out, log the sets sprayed with their lots, and take the job photos there. Crews never see prices, leads or customer lists.`,
   },
   {
     who: "admin",

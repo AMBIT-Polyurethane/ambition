@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
+  CalendarPlus,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -12,6 +13,7 @@ import {
   ExternalLink,
   FileDown,
   FileSignature,
+  Handshake,
   Layers,
   LoaderCircle,
   MessageSquare,
@@ -45,6 +47,7 @@ import { addressLine } from "@/lib/ops/crm";
 import { dateShort, dateTime } from "@/lib/format";
 import { Submit } from "@/components/forms";
 import { approveQuote, copyQuote, deletePackage, deleteQuote, saveQuote, savePackage, sendQuote, takeoffLines, type QuoteFields, type QuoteRow } from "../actions";
+import { makeJob, markSold } from "../../schedule/actions";
 
 type Customer = { id: string; name: string; phone: string | null; email: string | null; kind: string; price_level: string; tax_exempt: boolean; properties: { id: string; label: string | null; street: string | null; city: string | null; state: string | null; zip: string | null }[] };
 type Settings = { labor: LaborRate[]; builder_margin: number | null; work_areas: WorkArea[]; min_job: number | null; quote_days: number; target_margin: number | null; floor_margin: number | null };
@@ -137,6 +140,8 @@ export function QuoteEditor(props: {
   can: Can;
   emailReady: boolean;
   me: string;
+  job: { id: string; number: number } | null;
+  canDispatch: boolean;
 }) {
   const q = props.quote;
   const st = props.settings;
@@ -164,6 +169,7 @@ export function QuoteEditor(props: {
   const [needsOk, setNeedsOk] = useState(q.needs_approval && !q.approved_at);
   const [picker, setPicker] = useState<{ addon: boolean } | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
+  const [soldOpen, setSoldOpen] = useState(false);
   const [pkgOpen, setPkgOpen] = useState(false);
   const [toOpen, setToOpen] = useState(false);
   const [packages, setPackages] = useState(props.packages);
@@ -512,10 +518,29 @@ export function QuoteEditor(props: {
         <div className="alert ok">
           <CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} />
           <span>
-            Signed by <b>{q.signed_name}</b> on {q.signed_at ? dateTime(q.signed_at) : ""}: {options.find((o) => o.id === q.signed_option_id)?.name ?? "option"}
+            {q.signed_method === "office" ? (
+              <>Sold on {q.signed_at ? dateTime(q.signed_at) : ""}{q.signed_note ? ` (${q.signed_note})` : ""}, recorded by {q.signed_by_name ?? "the office"}: </>
+            ) : (
+              <>Signed by <b>{q.signed_name}</b> on {q.signed_at ? dateTime(q.signed_at) : ""}: </>
+            )}
+            {options.find((o) => o.id === q.signed_option_id)?.name ?? "option"}
             {q.signed_addons.length ? ` + ${q.signed_addons.length} add-on${q.signed_addons.length === 1 ? "" : "s"}` : ""}, <b>{money(q.signed_total)}</b>. It can&apos;t be changed now; make a copy for changes.
           </span>
         </div>
+      ) : null}
+      {signed ? (
+        props.job ? (
+          <div className="q-job">
+            <span className="small">This sale is <b>job #{props.job.number}</b>{props.canDispatch ? ". Put it on the rig board when you're ready." : "."}</span>
+            <Link className="btn sm" href={`/ops/jobs/${props.job.id}`}><CalendarPlus size={15} /> Open the job</Link>
+          </div>
+        ) : props.canDispatch ? (
+          <form action={makeJob} className="q-job">
+            <input type="hidden" name="quote" value={q.id} />
+            <span className="small">This quote was signed before jobs existed.</span>
+            <button type="submit" className="btn sm"><CalendarPlus size={15} /> Make the job</button>
+          </form>
+        ) : null
       ) : null}
       {status === "declined" ? <div className="alert warn small"><span>The customer declined this quote{q.decline_reason ? `: "${q.decline_reason}"` : ""}. Make a copy to send a new one.</span></div> : null}
       {needsOk && !signed ? (
@@ -676,6 +701,11 @@ export function QuoteEditor(props: {
                 <Send size={16} /> {link ? "Send again" : "Send to the customer"}
               </button>
             ) : null}
+            {!signed && status !== "declined" && props.can.edit ? (
+              <button type="button" className="btn sm dark" disabled={!priced.some((l) => l.option_id) || (needsOk && !props.can.approve)} onClick={() => setSoldOpen(true)}>
+                <Handshake size={15} /> Customer said yes another way
+              </button>
+            ) : null}
             <a className="btn sm dark" href={`/ops/quotes/${q.id}/pdf`} target="_blank" rel="noopener noreferrer"><FileDown size={15} /> PDF</a>
             {props.can.order ? (
               <Link className="btn sm dark" href={`/ops/materials?quote=${q.id}&option=${signed && q.signed_option_id ? q.signed_option_id : optId}`}>
@@ -769,6 +799,17 @@ export function QuoteEditor(props: {
             <Link href="/takeoff" className="btn sm dark"><Ruler size={15} /> Start a takeoff</Link>
           </div>
         </div>
+      ) : null}
+      {soldOpen ? (
+        <SoldDialog
+          quoteId={q.id}
+          options={options}
+          addons={priced.filter((l) => l.option_id === null)}
+          current={optId}
+          dirty={dirty.current || save.state === "saving"}
+          flush={doSave}
+          onClose={() => setSoldOpen(false)}
+        />
       ) : null}
       {sendOpen ? (
         <SendDialog
@@ -1012,6 +1053,72 @@ function SendDialog({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The customer said yes on paper, in person or by phone: record the option and add-ons they chose. */
+function SoldDialog({
+  quoteId,
+  options,
+  addons,
+  current,
+  dirty,
+  flush,
+  onClose,
+}: {
+  quoteId: string;
+  options: QOption[];
+  addons: QLine[];
+  current: string;
+  dirty: boolean;
+  flush: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [opt, setOpt] = useState(current);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [note, setNote] = useState("Signed the paper proposal");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    setBusy(true);
+    setErr(null);
+    if (dirty) await flush();
+    const r = await markSold({ quote: quoteId, option: opt, addons: picked, note });
+    setBusy(false);
+    if (!r.ok) return setErr(r.error);
+    window.location.href = r.job ? `/ops/jobs/${r.job}?msg=${encodeURIComponent("Sold. The job is ready to schedule.")}` : `/ops/quotes/${quoteId}`;
+  };
+  return (
+    <div className="ops-modal" role="dialog" aria-modal="true" aria-label="Customer said yes" onClick={busy ? undefined : onClose}>
+      <div className="ops-modal-card col" style={{ gap: 12 }} onClick={(e) => e.stopPropagation()}>
+        <div className="row between"><b>The customer said yes</b><button type="button" className="iconbtn" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
+        <span className="small muted">For a signed paper proposal, a yes in person or on the phone. It counts as signed: the lead moves to Won and the job is made, ready to schedule.</span>
+        {options.length > 1 ? (
+          <div className="field">
+            <span className="label">Which option</span>
+            {options.map((o) => (
+              <label key={o.id} className="check"><input type="radio" name="sold-opt" checked={opt === o.id} onChange={() => setOpt(o.id)} /> {o.name}</label>
+            ))}
+          </div>
+        ) : null}
+        {addons.length ? (
+          <div className="field">
+            <span className="label">Add-ons they want</span>
+            {addons.map((a) => (
+              <label key={a.id} className="check"><input type="checkbox" checked={picked.includes(a.id)} onChange={() => setPicked((p) => (p.includes(a.id) ? p.filter((x) => x !== a.id) : [...p, a.id]))} /> {a.name} ({money(a.price)})</label>
+            ))}
+          </div>
+        ) : null}
+        <label className="field">
+          <span className="label">How they said yes</span>
+          <input className="input" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {err ? <div className="alert err small" role="alert"><span>{err}</span></div> : null}
+        <button type="button" className="btn" disabled={busy || note.trim().length < 3} onClick={() => void go()}>
+          <Handshake size={16} /> {busy ? "Saving…" : "Mark it sold"}
+        </button>
       </div>
     </div>
   );

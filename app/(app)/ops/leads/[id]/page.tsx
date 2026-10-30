@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  ArrowRight, Check, CheckCircle2, CircleAlert, CircleCheck, FileSignature, Mail, MapPin, MessageSquare, Phone, PhoneCall, StickyNote, Trash2, Trophy, XCircle,
+  ArrowRight, Check, CheckCircle2, CircleAlert, CircleCheck, FileSignature, Mail, MapPin, MessageSquare, Phone, PhoneCall, StickyNote, Trash2, Trophy, XCircle, CalendarRange, ChevronRight,
 } from "lucide-react";
 import { requireOps, teamOf, locationsOf } from "@/lib/ops/server";
 import { opsCan } from "@/lib/ops/roles";
@@ -23,14 +23,16 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
   const { supabase, profile, ws } = await requireOps(opsCan.crm);
   const { data: lead } = await supabase.from("ops_leads").select("*").eq("id", id).maybeSingle<OpsLead>();
   if (!lead) notFound();
-  const [{ data: cust }, { data: props }, { data: noteRows }, team, locations, { data: quoteRows }] = await Promise.all([
+  const [{ data: cust }, { data: props }, { data: noteRows }, team, locations, { data: quoteRows }, { data: jobRows }] = await Promise.all([
     supabase.from("ops_customers").select("id, name, phone, phone2, email, kind, price_level").eq("id", lead.customer_id).maybeSingle(),
     supabase.from("ops_properties").select("*").eq("customer_id", lead.customer_id).order("created_at"),
     supabase.from("ops_notes").select("*").eq("lead_id", id).order("created_at", { ascending: false }).limit(200),
     teamOf(supabase, ws.company.id),
     locationsOf(supabase, ws.company.id),
     supabase.from("ops_quotes").select("id, number, title, status, totals, signed_total, viewed_at, sent_at, updated_at").eq("lead_id", id).order("created_at", { ascending: false }),
+    opsCan.jobs(ws.role) ? supabase.from("ops_jobs").select("id, number, status, trips:ops_trips(status, start_date)").eq("lead_id", id).order("created_at", { ascending: false }) : Promise.resolve({ data: [] }),
   ]);
+  const jobs = (jobRows ?? []) as { id: string; number: number; status: string; trips: { status: string; start_date: string | null }[] }[];
   const quotes = (quoteRows ?? []) as { id: string; number: number; title: string | null; status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; viewed_at: string | null; sent_at: string | null; updated_at: string }[];
   const quoteTotal = (q: (typeof quotes)[number]) => q.signed_total ?? Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => o.total));
   const c = cust as { id: string; name: string; phone: string | null; phone2: string | null; email: string | null; kind: string; price_level: string } | null;
@@ -130,6 +132,20 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               ) : (
                 <span className="small muted">No quote yet. Measure on site or from plans, then price it.</span>
               )}
+              {jobs.map((j) => {
+                const waiting = j.trips.filter((t) => t.status === "unscheduled").length;
+                const next = j.trips.filter((t) => t.start_date && t.status === "scheduled").map((t) => t.start_date!).sort()[0];
+                return (
+                  <Link key={j.id} href={`/ops/jobs/${j.id}`} className="item">
+                    <span className="ops-q-ic" aria-hidden="true"><CalendarRange size={16} /></span>
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <div className="t ellipsis">Job #{j.number}</div>
+                      <div className="s ellipsis">{j.status === "cancelled" ? "Cancelled" : waiting ? `${waiting} trip${waiting === 1 ? "" : "s"} to schedule` : next ? `Scheduled ${dateShort(next)}` : j.status === "done" ? "Done" : "Open"}</div>
+                    </div>
+                    <ChevronRight size={16} className="chev" />
+                  </Link>
+                );
+              })}
             </section>
           ) : null}
 
