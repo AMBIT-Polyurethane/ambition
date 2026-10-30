@@ -358,6 +358,14 @@ before, spot checks per location).
 - **Invoice prices**: `order_set_numbers(order, po, invoice, prices)` saves the price each for every line with the
   Sales Order # and Invoice # (required for customer-priced lines: spray foam, fiberglass), recomputes
   `est_subtotal`, and stamps `priced_at` / `priced_by_name`. The order page, the PDF and the Sales card use them.
+- **COD Only / No Checks Allowed** (`0035_cod_no_checks.sql`): `orders.pay_cod` / `pay_no_checks`, set by
+  `order_credit_decision(..., p_cod, p_no_checks)` at the release and copied to `companies` so the customer's next
+  release starts the same way. Shown on the order desk card (red pills, a red alert on the Picked up / Delivered
+  step), the Order desk list and the staff PDF. `renderOrderPdf(doc, { audience })`: the customer's copy says
+  "THIS IS NOT AN ORDER OR A QUOTATION" with the fine print (`lib/order-doc/wording.ts`, also on the approval page
+  and customer emails); the staff copy keeps "THIS IS NOT AN INVOICE" and shows the payment rules. Prices are no
+  longer carried over from the customer's last orders, and the invoice file upload was removed from the Sales
+  Order # step (invoices live in QuickBooks).
 - **Deleted orders log** (`0034_order_delete_log.sql`): `order_delete` saves the whole order (`orders` row,
   `order_items`, `inventory_lines` with their lots and sheet rows, `order_variances`, `order_files`, linked
   `order_drafts`) as JSON in `orders_deleted`, then deletes it. Only the people in `order_keepers` (Jeremiah; no

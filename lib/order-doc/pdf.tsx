@@ -1,6 +1,7 @@
 import "server-only";
 import { Document, Font, Image, Link, Page, Path, StyleSheet, Svg, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import QRCode from "qrcode";
+import { NOT_ORDER_FINE, NOT_ORDER_TITLE } from "@/lib/order-doc/wording";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, qtyText } from "@/lib/format";
 import { LOGO_ASPECT, LOGO_PNG } from "@/lib/order-doc/logo";
 import { awaitingCustomer, type OrderDoc } from "@/lib/order-doc/types";
@@ -41,6 +42,13 @@ const s = StyleSheet.create({
   notInvoice: { flexDirection: "row", alignItems: "center", marginTop: 9, borderWidth: 1.2, borderColor: RED, borderRadius: 3, paddingVertical: 5, paddingHorizontal: 9 },
   notInvoiceT: { fontFamily: "Helvetica-Bold", fontSize: 10.5, letterSpacing: 1.1, color: RED },
   notInvoiceS: { flex: 1, marginLeft: 12, fontSize: 7.4, lineHeight: 1.35, color: GRAY },
+  // The customer's copy: the heading, then the fine print under it.
+  notOrder: { marginTop: 9, borderWidth: 1.2, borderColor: RED, borderRadius: 3, paddingVertical: 5, paddingHorizontal: 9 },
+  notOrderS: { marginTop: 2.5, fontSize: 6.8, lineHeight: 1.35, color: GRAY },
+  // The warehouse copy: payment rules accounting set at the release.
+  pay: { flexDirection: "row", alignItems: "center", marginTop: 6, backgroundColor: RED, borderRadius: 3, paddingVertical: 5, paddingHorizontal: 9 },
+  payT: { fontFamily: "Helvetica-Bold", fontSize: 10.5, letterSpacing: 1.1, color: "#FFFFFF" },
+  payS: { flex: 1, marginLeft: 12, fontSize: 7.4, lineHeight: 1.35, color: "#FFFFFF" },
   parties: { flexDirection: "row", marginTop: 11, fontSize: 8.6, lineHeight: 1.35 },
   lbl: { fontFamily: "Helvetica-Bold", fontSize: 6.6, letterSpacing: 1, color: GRAY, paddingBottom: 2.5, marginBottom: 3.5, borderBottomWidth: 0.7, borderBottomColor: RULE },
   name: { fontFamily: "Helvetica-Bold", fontSize: 9.6 },
@@ -267,7 +275,9 @@ function ApprovalBox({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: strin
   );
 }
 
-function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string | null; qr: string | null }) {
+export type PdfAudience = "customer" | "staff";
+
+function OrderPdf({ doc, approveUrl, qr, audience }: { doc: OrderDoc; approveUrl: string | null; qr: string | null; audience: PdfAudience }) {
   const o = doc.order;
   const no = orderNo(o.order_no);
   const pickup = o.delivery_method === "pickup";
@@ -341,12 +351,30 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
           ) : null}
         </View>
 
-        <View style={s.notInvoice}>
-          <Text style={s.notInvoiceT}>THIS IS NOT AN INVOICE</Text>
-          <Text style={s.notInvoiceS}>
-            This is an order form only. AMBIT&apos;s accounting staff will send the invoice after the order is approved.
-          </Text>
-        </View>
+        {audience === "customer" ? (
+          <View style={s.notOrder}>
+            <Text style={s.notInvoiceT}>{NOT_ORDER_TITLE}</Text>
+            <Text style={s.notOrderS}>{NOT_ORDER_FINE}</Text>
+          </View>
+        ) : (
+          <>
+            <View style={s.notInvoice}>
+              <Text style={s.notInvoiceT}>THIS IS NOT AN INVOICE</Text>
+              <Text style={s.notInvoiceS}>
+                This is an order form only. AMBIT&apos;s accounting staff will send the invoice after the order is approved.
+              </Text>
+            </View>
+            {o.pay_cod || o.pay_no_checks ? (
+              <View style={s.pay}>
+                <Text style={s.payT}>{[o.pay_cod ? "COD ONLY" : "", o.pay_no_checks ? "NO CHECKS ALLOWED" : ""].filter(Boolean).join("  ·  ")}</Text>
+                <Text style={s.payS}>
+                  {o.pay_cod ? "Collect payment before the order is released. " : ""}
+                  {o.pay_no_checks ? "Do not accept a check: cash or card only." : ""}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        )}
 
         <View style={s.parties}>
           <View style={{ flex: 1.15, marginRight: 16 }}>
@@ -463,14 +491,18 @@ function OrderPdf({ doc, approveUrl, qr }: { doc: OrderDoc; approveUrl: string |
   );
 }
 
-/** The order as a PDF. Pass the approval link for the copy the customer approves from. */
-export async function renderOrderPdf(doc: OrderDoc, opts: { approveUrl?: string | null } = {}): Promise<Buffer> {
+/**
+ * The order as a PDF. Pass the approval link for the copy the customer approves from. The customer's copy says
+ * it's not an order or a quotation; the staff copy (orders@, the warehouse) says it's not an invoice and shows the
+ * payment rules (COD Only, No Checks Allowed). When unsure it's the customer's copy.
+ */
+export async function renderOrderPdf(doc: OrderDoc, opts: { approveUrl?: string | null; audience?: PdfAudience } = {}): Promise<Buffer> {
   const approveUrl = opts.approveUrl ?? null;
   const qr =
     approveUrl && doc.state === "pending"
       ? await QRCode.toDataURL(approveUrl, { margin: 1, width: 240, errorCorrectionLevel: "M" })
       : null;
-  return renderToBuffer(<OrderPdf doc={doc} approveUrl={approveUrl} qr={qr} />);
+  return renderToBuffer(<OrderPdf doc={doc} approveUrl={approveUrl} qr={qr} audience={opts.audience ?? "customer"} />);
 }
 
 export const pdfFileName = (doc: OrderDoc) => `AMBIT-Order-${orderNo(doc.order.order_no)}.pdf`;

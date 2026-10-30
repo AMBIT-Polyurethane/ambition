@@ -58,11 +58,10 @@ const priceNum = (v: string) => Number(v.replace(/[$,\s]/g, ""));
 /**
  * Order desk: Sales Order # and Invoice # side by side (both required), the price of each line from the invoice
  * (required for spray foam, fiberglass and anything else priced per customer; list prices are filled in for the
- * rest and can be changed to match the invoice), plus the invoice file if it's ready. ISO that goes with more than
+ * rest and can be changed to match the invoice). No invoice file: the invoices live in QuickBooks. ISO that goes with more than
  * one foam set (closed cell and open cell, say) has a price box for each set, since each set has its own price.
  */
 export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: string; po: string | null; invoice: string | null; lines?: PriceLine[] }) {
-  const [files, setFiles] = useState<File[]>([]);
   const [prices, setPrices] = useState<Record<string, string>>(() => Object.fromEntries(lines.map((l) => [l.key, l.price === null ? "" : l.price.toFixed(2)])));
   const { busy, setBusy, error, setError } = useSend();
   const amount = (l: PriceLine) => Math.round(priceNum(prices[l.key]) * l.qty * 100) / 100;
@@ -93,15 +92,6 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
       }
     }
     fd.set("prices", JSON.stringify([...out.values()]));
-    const up = await uploadOrderFiles(orderId, "invoice", files);
-    if (up.error) {
-      setBusy(false);
-      return setError(up.error);
-    }
-    for (const f of up.ok) {
-      fd.append("file_path", f.path);
-      fd.append("file_name", f.name);
-    }
     try {
       await setOrderPo(fd);
     } finally {
@@ -192,7 +182,6 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
           <span className="tiny faint">Spray foam, fiberglass and other customer-priced items need their price. The others start at list price: change any to match the invoice. These prices count toward sales goals.</span>
         </div>
       ) : null}
-      <FilePick label="Upload invoice (optional, PDF or photo)" files={files} setFiles={setFiles} />
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="submit" className="btn sm" disabled={busy} style={{ alignSelf: "flex-start", gap: 8 }}>
         {busy ? <LoaderCircle size={16} className="spin" /> : null}

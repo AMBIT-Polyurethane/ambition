@@ -1,4 +1,5 @@
 import "server-only";
+import { NOT_ORDER_FINE, NOT_ORDER_TITLE } from "@/lib/order-doc/wording";
 import { DELIVERY_LABEL, dateShort, dateTime, escapeHtml as h, firstName, money, orderNo, plural, qtyText } from "@/lib/format";
 import { foamLoads, rowPrice, splitNote } from "@/lib/order-doc/loads";
 import { wrapEmail } from "@/lib/email";
@@ -14,6 +15,11 @@ function whereText(doc: OrderDoc): string {
 }
 
 /** One line describing how the customer approved, for emails and the order page. */
+// The customer's emails say what the order form is (and isn't), with the fine print under it.
+const notOrderHtml = `<div style="margin:16px 0 0;padding:10px 12px;border:1.5px solid #E33527;border-radius:8px;">
+<div style="font-size:13px;font-weight:800;letter-spacing:1px;color:#E33527;">${NOT_ORDER_TITLE}</div>
+<div style="font-size:11px;line-height:1.5;color:#71717a;margin-top:3px;">${NOT_ORDER_FINE}</div></div>`;
+
 export function approvalText(doc: OrderDoc): string | null {
   const o = doc.order;
   if (o.approval_status !== "approved") return null;
@@ -153,7 +159,7 @@ export function buildApprovalRequestEmail(doc: OrderDoc, approveUrl: string) {
 <p style="margin:0 0 22px;">${button(approveUrl, "REVIEW AND APPROVE")}</p>
 ${detailTable(rows)}
 ${itemsTable(doc, false)}
-<p style="font-size:13px;margin:16px 0 0;line-height:1.5;"><b style="color:#E33527;letter-spacing:1px;">THIS IS NOT AN INVOICE.</b> <span style="color:#52525b;">This is an order form only. AMBIT's accounting staff will send the invoice after the order is approved.</span></p>
+${notOrderHtml}
 <p style="font-size:13px;color:#52525b;margin:16px 0 0;line-height:1.5;">Something not right? Open the link and tap <b>Request changes</b>, or contact ${h(rep)}${contact ? ` at ${h(contact)}` : ""}. The link works until ${h(until)}. The order is attached as a PDF if you'd like to print it.</p>`;
 
   const text = [
@@ -169,7 +175,8 @@ ${itemsTable(doc, false)}
     "Items:",
     ...doc.items.map((i) => `- ${i.name}  x ${qtyText(Number(i.qty), i.unit)}${i.line_total !== null ? `  ${money(i.line_total)}` : i.customer_priced ? "  Account pricing" : ""}`),
     "",
-    "THIS IS NOT AN INVOICE. This is an order form only. AMBIT's accounting staff will send the invoice after the order is approved.",
+    `${NOT_ORDER_TITLE}.`,
+    NOT_ORDER_FINE,
     `Something not right? Open the link and tap Request changes, or contact ${rep}${contact ? ` at ${contact}` : ""}. The link works until ${until}.`,
   ].join("\n");
 
@@ -248,7 +255,7 @@ export function buildScheduledEmail(doc: OrderDoc) {
 <p style="font-size:15px;margin:0 0 16px;line-height:1.5;">Your order ${h(no)} for ${h(o.company_name)} is approved and scheduled. Details are below and the order is attached as a PDF.</p>
 ${detailTable(rows)}
 ${itemsTable(doc, false)}
-<p style="font-size:13px;margin:16px 0 0;line-height:1.5;"><b style="color:#E33527;letter-spacing:1px;">THIS IS NOT AN INVOICE.</b> <span style="color:#52525b;">AMBIT's accounting staff will send the invoice.</span></p>
+${notOrderHtml}
 <p style="font-size:13px;color:#52525b;margin:10px 0 0;line-height:1.5;">Questions or a change of plans? Reply to this email${rep ? ` or contact ${h(rep)}` : ""}, or call AMBIT at (817) 677-1200.</p>`;
   const text = [
     `APPROVED AND SCHEDULED: ${headline}`,
@@ -258,7 +265,8 @@ ${itemsTable(doc, false)}
     "",
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
-    "THIS IS NOT AN INVOICE. AMBIT's accounting staff will send the invoice.",
+    `${NOT_ORDER_TITLE}.`,
+    NOT_ORDER_FINE,
   ].join("\n");
   return { subject, html: wrapEmail("Order scheduled", inner), text };
 }

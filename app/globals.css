@@ -2289,3 +2289,9 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .stock-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .stock-log li { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .crew-trip { border-left: 4px solid var(--red); }
+
+/* ---------- COD Only / No Checks Allowed (credit release, warehouse alert) ---------- */
+.pay-boxes { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--s1); }
+.pay-boxes .check { align-items: center; flex-wrap: wrap; column-gap: 8px; }
+.pay-boxes .check .tiny { flex-basis: 100%; padding-left: 30px; margin-top: -2px; }
+.pay-alert b { letter-spacing: 0.06em; }

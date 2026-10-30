@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { canEmailCustomers, sendEmail, type SendResult } from "@/lib/email";
 import { buildApprovalRequestEmail, buildChangeRequestEmail, buildDeskEmail, buildOrderEmail, buildScheduledEmail, type DeskNotice } from "@/lib/order-email";
 import { loadOrderDoc } from "@/lib/order-doc/load";
-import { pdfFileName, renderOrderPdf } from "@/lib/order-doc/pdf";
+import { pdfFileName, renderOrderPdf, type PdfAudience } from "@/lib/order-doc/pdf";
 import type { OrderDoc } from "@/lib/order-doc/types";
 import { ACCOUNTING_EMAIL, ORDERS_EMAIL } from "@/lib/env";
 import { currentOrigin } from "@/lib/origin";
@@ -20,9 +20,9 @@ export function approvalsEnabled(): boolean {
   return canEmailCustomers();
 }
 
-async function pdfAttachment(doc: OrderDoc, approveUrl?: string) {
+async function pdfAttachment(doc: OrderDoc, audience: PdfAudience, approveUrl?: string) {
   try {
-    return [{ filename: pdfFileName(doc), content: await renderOrderPdf(doc, { approveUrl }), contentType: "application/pdf" }];
+    return [{ filename: pdfFileName(doc), content: await renderOrderPdf(doc, { approveUrl, audience }), contentType: "application/pdf" }];
   } catch (e) {
     console.error("[order pdf]", e);
     return []; // the email still goes out without the PDF
@@ -38,7 +38,7 @@ async function sendToOrders(doc: OrderDoc): Promise<SendResult> {
     to: [ORDERS_EMAIL],
     cc: cc.filter(Boolean) as string[],
     replyTo: o.placed_by_email ?? undefined,
-    attachments: await pdfAttachment(doc),
+    attachments: await pdfAttachment(doc, "staff"),
     ...mail,
   });
 }
@@ -80,7 +80,7 @@ export async function sendApprovalRequest(supabase: SupabaseClient, orderId: str
     to: [email],
     cc: doc.order.placed_by_email ? [doc.order.placed_by_email] : [],
     replyTo: doc.order.placed_by_email ?? undefined,
-    attachments: await pdfAttachment(doc, approveUrl),
+    attachments: await pdfAttachment(doc, "customer", approveUrl),
     ...mail,
   });
   await supabase.rpc("mark_approval_email", { p_order: orderId, p_status: result.status, p_error: result.error ?? null });
@@ -132,7 +132,7 @@ export async function sendScheduledNotice(supabase: SupabaseClient, orderId: str
     to: [customer],
     cc: o.placed_by_role !== "customer" && o.placed_by_email ? [o.placed_by_email] : [],
     replyTo: o.placed_by_role !== "customer" ? o.placed_by_email ?? ORDERS_EMAIL : ORDERS_EMAIL,
-    attachments: await pdfAttachment(doc),
+    attachments: await pdfAttachment(doc, "customer"),
     ...buildScheduledEmail(doc),
   });
   await supabase.rpc("order_mark_notified", { p_order: orderId, p_status: result.status, p_error: result.error ?? null });

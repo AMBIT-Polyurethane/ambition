@@ -14,7 +14,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const doc = docFromJson(data);
   if (!doc) return new NextResponse("This link isn't valid.", { status: 404 });
   const approveUrl = new URL(`/approve/${token}`, req.url).toString();
-  const pdf = await renderOrderPdf(doc, { approveUrl });
+  const pdf = await renderOrderPdf(doc, { approveUrl, audience: "customer" });
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",

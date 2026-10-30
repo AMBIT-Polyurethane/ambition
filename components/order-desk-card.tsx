@@ -51,12 +51,15 @@ export function OrderDeskCard({
   variance,
   lines = [],
   lastPrices = null,
+  payDefaults = null,
 }: {
   order: Order;
   /** The order's lines, with spray foam marked (ISO or resin) so ISO can be priced per foam set. */
   lines?: (OrderItem & { foam?: FoamSide; price_parts?: PricePart[] | null })[];
   /** The customer's prices on their orders in the last 30 days (the price step starts from them). */
   lastPrices?: LastPrices | null;
+  /** The customer's COD Only / No Checks Allowed from their last release (the boxes start that way). */
+  payDefaults?: { cod: boolean; noChecks: boolean } | null;
   desk: boolean;
   credit: boolean;
   warehouse: boolean;
@@ -80,6 +83,21 @@ export function OrderDeskCard({
   const log1 = (variance?.log ?? []).filter(early);
   const log2 = (variance?.log ?? []).filter((v) => !early(v));
   const noChanges = <span className="tiny muted">No changes: loading what was picked.</span>;
+  // Payment rules accounting set at the release, for the warehouse at pickup / delivery.
+  const payFlags = [o.pay_cod ? "COD ONLY" : null, o.pay_no_checks ? "NO CHECKS ALLOWED" : null].filter(Boolean) as string[];
+  const payAlert = payFlags.length ? (
+    <div className="alert err pay-alert" role="alert">
+      <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />
+      <span>
+        <b>{payFlags.join(" · ")}</b>
+        <br />
+        {o.pay_cod ? `Collect payment before the order ${pickup ? "leaves the warehouse" : "is unloaded"}.` : ""}
+        {o.pay_cod && o.pay_no_checks ? " " : ""}
+        {o.pay_no_checks ? "Don't accept a check: cash or card only." : ""}
+      </span>
+    </div>
+  ) : null;
+  const payStart = { cod: Boolean(o.pay_cod || payDefaults?.cod), noChecks: Boolean(o.pay_no_checks || payDefaults?.noChecks) };
   // Until email is set up: approve / confirm without it.
   const noEmail = (action: (f: FormData) => Promise<void>) => (
     <form action={action}>
@@ -148,7 +166,10 @@ export function OrderDeskCard({
       current: st === "credit" || st === "hold",
       detail:
         o.credit_status === "approved" ? (
-          `Released by ${o.credit_by_name ?? ""} · ${dateTime(o.credit_at)}${o.credit_note ? ` · ${o.credit_note}` : ""}`
+          <>
+            {`Released by ${o.credit_by_name ?? ""} · ${dateTime(o.credit_at)}${o.credit_note ? ` · ${o.credit_note}` : ""}`}
+            {payFlags.length ? <> · <b className="red">{payFlags.join(" · ")}</b></> : null}
+          </>
         ) : o.credit_status === "hold" ? (
           <span className="red">On hold: {o.credit_note} ({o.credit_by_name}, {dateTime(o.credit_at)})</span>
         ) : st === "credit" ? (
@@ -170,6 +191,19 @@ export function OrderDeskCard({
               ) : (
                 <span className="tiny faint">Check the account for credit holds first.</span>
               )}
+              <div className="pay-boxes">
+                <label className="check small">
+                  <input type="checkbox" name="cod" defaultChecked={payStart.cod} /> <b>COD Only</b>
+                  <span className="tiny faint">Payment collected at pickup or delivery</span>
+                </label>
+                <label className="check small">
+                  <input type="checkbox" name="no_checks" defaultChecked={payStart.noChecks} /> <b>No Checks Allowed</b>
+                  <span className="tiny faint">Cash or card only</span>
+                </label>
+                {payDefaults && (payDefaults.cod || payDefaults.noChecks) && !o.pay_cod && !o.pay_no_checks ? (
+                  <span className="tiny faint">Ticked the way this customer was set last time. Change them if that&apos;s different now.</span>
+                ) : null}
+              </div>
               <Submit className="btn sm block" pendingText="Releasing…">Release order</Submit>
             </form>
             {st !== "hold" ? (
@@ -251,8 +285,21 @@ export function OrderDeskCard({
       title: pickup ? "Picked up" : "Delivered",
       done: st === "completed",
       current: st === "scheduled",
-      detail: st === "completed" ? dateTime(o.completed_at) : st === "scheduled" ? "Attach a photo or scan of the signed BOL, then mark it done." : null,
-      extra: bols.length ? <FileLinks orderId={o.id} files={bols} label="Signed BOL" /> : null,
+      detail: st === "completed" ? (
+        <>
+          {dateTime(o.completed_at)}
+          {payFlags.length ? <> · {payFlags.join(" · ")}</> : null}
+        </>
+      ) : st === "scheduled" ? "Attach a photo or scan of the signed BOL, then mark it done." : null,
+      extra:
+        payAlert && st !== "completed" && o.credit_status === "approved" ? (
+          <div className="col" style={{ gap: 6 }}>
+            {payAlert}
+            {bols.length ? <FileLinks orderId={o.id} files={bols} label="Signed BOL" /> : null}
+          </div>
+        ) : bols.length ? (
+          <FileLinks orderId={o.id} files={bols} label="Signed BOL" />
+        ) : null,
       action: (desk || warehouse) && st === "scheduled" ? <CompleteForm orderId={o.id} pickup={pickup} hasBol={bols.length > 0} /> : null,
     },
   ];
@@ -261,7 +308,11 @@ export function OrderDeskCard({
     <section className="card col" style={{ gap: 4 }}>
       <div className="row between" style={{ marginBottom: 6 }}>
         <div className="eyebrow">Order desk</div>
-        <span className={STAGES[st].pill}>{STAGES[st].short}</span>
+        <span className="row" style={{ gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {o.pay_cod ? <span className="pill red">COD only</span> : null}
+          {o.pay_no_checks ? <span className="pill red">No checks</span> : null}
+          <span className={STAGES[st].pill}>{STAGES[st].short}</span>
+        </span>
       </div>
       <ol className="desk-steps">
         {steps.filter((s) => s.check === undefined || s.open).map((s) => (

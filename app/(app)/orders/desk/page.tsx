@@ -143,7 +143,11 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
                     <div className="grow" style={{ minWidth: 0 }}>
                       <div className="row between" style={{ gap: 8 }}>
                         <span className="t">{orderNo(o.order_no)} · <span style={{ fontWeight: 600 }}>{o.company_name}</span></span>
-                        {o.scheduled_for && (tab.stage === "scheduled" || tab.stage === "completed") ? <span className="pill ok">{dateShort(o.scheduled_for)}</span> : null}
+                        <span className="row" style={{ gap: 6, flex: "none" }}>
+                          {o.pay_cod ? <span className="pill red">COD only</span> : null}
+                          {o.pay_no_checks ? <span className="pill red">No checks</span> : null}
+                          {o.scheduled_for && (tab.stage === "scheduled" || tab.stage === "completed") ? <span className="pill ok">{dateShort(o.scheduled_for)}</span> : null}
+                        </span>
                       </div>
                       <div className="s ellipsis">
                         {[where, o.ambit_po ? `Sales Order # ${o.ambit_po}` : null, o.invoice_no ? `Invoice # ${o.invoice_no}` : null, o.po_number ? `Cust. PO ${o.po_number}` : null].filter(Boolean).join(" · ")}

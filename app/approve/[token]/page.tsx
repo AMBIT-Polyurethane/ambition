@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { NOT_ORDER_FINE, NOT_ORDER_TITLE } from "@/lib/order-doc/wording";
 import { CircleAlert, CircleCheck, Clock, FileDown } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { docFromJson } from "@/lib/order-doc/load";
@@ -112,8 +113,8 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
       </section>
 
       <div className="card small" style={{ borderColor: "var(--red)" }}>
-        <b style={{ color: "var(--red-text)", letterSpacing: "0.08em" }}>THIS IS NOT AN INVOICE</b>
-        <div className="muted" style={{ marginTop: 4 }}>This is an order form only. AMBIT&apos;s accounting staff will send the invoice after the order is approved.</div>
+        <b style={{ color: "var(--red-text)", letterSpacing: "0.08em" }}>{NOT_ORDER_TITLE}</b>
+        <div className="tiny muted" style={{ marginTop: 4 }}>{NOT_ORDER_FINE}</div>
       </div>
 
       <a href={`/approve/${token}/pdf`} target="_blank" rel="noopener" className="btn dark block"><FileDown size={16} /> Download the order (PDF)</a>
