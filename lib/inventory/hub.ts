@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, centralStart } from "@/lib/order-desk";
 import { todayCentral } from "@/lib/sale";
+import { every } from "@/lib/inventory/pages";
 
 // The Inventory Hub's numbers: stock value, reorder, expiring foam lots, movement, aging stock to put
 // on sale, and count accuracy, for one location or all of them. Read with the signed-in person's access.
@@ -141,35 +142,48 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
   if (!ids.length) return empty;
 
   const [invRes, lotRes, levelRes, orderRes, priceRes, inRes, trOutRes, trInRes, trLineRes, countRes, expRes, firstRes] = await Promise.all([
-    db
-      .from("inventory")
-      .select("branch_id, product_id, sku, on_hand, reorder_point, max_qty, product:products(id, sku, name, unit, list_price, category_id, stock_of)")
-      .in("branch_id", ids)
-      .eq("on_sheet", true)
-      .range(0, 9999),
-    db.from("inventory_lots").select("branch_id, product_id, sku, lot_no, mfg, exp, use_by, remaining, label, on_sheet").in("branch_id", ids).eq("on_sheet", true).range(0, 9999),
+    every((a, z) =>
+      db
+        .from("inventory")
+        .select("branch_id, product_id, sku, on_hand, reorder_point, max_qty, product:products(id, sku, name, unit, list_price, category_id, stock_of)")
+        .in("branch_id", ids)
+        .eq("on_sheet", true)
+        .order("branch_id")
+        .order("product_id")
+        .range(a, z),
+    ),
+    every((a, z) => db.from("inventory_lots").select("branch_id, product_id, sku, lot_no, mfg, exp, use_by, remaining, label, on_sheet").in("branch_id", ids).eq("on_sheet", true).order("id").range(a, z)),
     Promise.all(ids.map((b) => db.rpc("stock_for", { p_branch: b }).then((r) => ({ b, rows: (r.data ?? []) as { product_id: string; pending: number | null; net: number | null }[] })))),
-    db
-      .from("order_items")
-      .select("product_id, qty, line_total, ord:orders!inner(branch_id, status, created_at, completed_at)")
-      .in("ord.branch_id", ids)
-      .neq("ord.status", "cancelled")
-      .gte("ord.created_at", since365)
-      .range(0, 49999),
-    db
-      .from("order_items")
-      .select("product_id, qty, unit_price, ord:orders!inner(status, created_at)")
-      .neq("ord.status", "cancelled")
-      .gte("ord.created_at", since180)
-      .gt("unit_price", 0)
-      .range(0, 49999),
-    db
-      .from("inbound_deliveries")
-      .select("id, branch_id, received_at, transfer_id, lines:inbound_lines(product_id, received_qty)")
-      .in("branch_id", ids)
-      .eq("status", "received")
-      .gte("received_at", since180)
-      .range(0, 4999),
+    every((a, z) =>
+      db
+        .from("order_items")
+        .select("product_id, qty, line_total, ord:orders!inner(branch_id, status, created_at, completed_at)")
+        .in("ord.branch_id", ids)
+        .neq("ord.status", "cancelled")
+        .gte("ord.created_at", since365)
+        .order("id")
+        .range(a, z),
+    ),
+    every((a, z) =>
+      db
+        .from("order_items")
+        .select("product_id, qty, unit_price, ord:orders!inner(status, created_at)")
+        .neq("ord.status", "cancelled")
+        .gte("ord.created_at", since180)
+        .gt("unit_price", 0)
+        .order("id")
+        .range(a, z),
+    ),
+    every((a, z) =>
+      db
+        .from("inbound_deliveries")
+        .select("id, branch_id, received_at, transfer_id, lines:inbound_lines(product_id, received_qty)")
+        .in("branch_id", ids)
+        .eq("status", "received")
+        .gte("received_at", since180)
+        .order("id")
+        .range(a, z),
+    ),
     db.from("inventory_transfers").select("id", { count: "exact", head: true }).in("from_branch", ids).eq("status", "in_transit"),
     db.from("inventory_transfers").select("id", { count: "exact", head: true }).in("to_branch", ids).eq("status", "in_transit"),
     db
@@ -201,9 +215,9 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
 
   // ---- prices: what customers paid lately, else list price. ISO brands use ISO A-Side's price.
   type Inv = { branch_id: string; product_id: string; sku: string; on_hand: number | null; reorder_point: number | null; max_qty: number | null; product: Prod | null };
-  const inv = (invRes.data ?? []) as unknown as Inv[];
+  const inv = invRes as unknown as Inv[];
   const paid = new Map<string, { q: number; v: number }>();
-  for (const r of (priceRes.data ?? []) as unknown as { product_id: string | null; qty: number; unit_price: number }[]) {
+  for (const r of priceRes as unknown as { product_id: string | null; qty: number; unit_price: number }[]) {
     if (!r.product_id) continue;
     const cur = paid.get(r.product_id) ?? { q: 0, v: 0 };
     cur.q += n(r.qty);
@@ -225,7 +239,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
 
   // ---- sales (completed orders) by location and item; ISO A-Side counts for every ISO brand
   type OrderLine = { product_id: string | null; qty: number; line_total: number | null; ord: { branch_id: string; status: string; created_at: string; completed_at: string | null } };
-  const lines = (orderRes.data ?? []) as unknown as OrderLine[];
+  const lines = orderRes as unknown as OrderLine[];
   const sold = new Map<string, { s30: number; s90: number; v30: number; v90: number; last: string | null }>(); // branch|parent product
   const weeksStart = weekOf(addDays(today, -7 * 11));
   const weekMap = new Map<string, WeekRow>();
@@ -263,7 +277,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
   const trOut90 = new Map<string, number>();
   let received30 = 0;
   const prodPrice = (id: string) => priceOf(prodById.get(id) ?? null) ?? 0;
-  for (const d of (inRes.data ?? []) as unknown as { branch_id: string; received_at: string; transfer_id: number | null; lines: { product_id: string; received_qty: number | null }[] }[]) {
+  for (const d of inRes as unknown as { branch_id: string; received_at: string; transfer_id: number | null; lines: { product_id: string; received_qty: number | null }[] }[]) {
     const day = dayOf(d.received_at);
     const age = days(day, today);
     for (const l of d.lines ?? []) {
@@ -289,7 +303,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
 
   // ---- lots (spray foam)
   type Lot = { branch_id: string; product_id: string; sku: string; lot_no: string; mfg: string | null; exp: string | null; use_by: string | null; remaining: number; label: string | null };
-  const lotRows = (lotRes.data ?? []) as Lot[];
+  const lotRows = lotRes as Lot[];
   const lotsOf = new Map<string, Lot[]>();
   for (const l of lotRows) {
     const key = `${l.branch_id}|${l.product_id}`;

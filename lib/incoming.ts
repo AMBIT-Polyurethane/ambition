@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StockItem } from "@/components/incoming-forms";
 import type { SendItem } from "@/components/inventory/transfer-form";
 import { branchStock } from "@/lib/inventory/view";
+import { every } from "@/lib/inventory/pages";
 
 /** What a location stocks (its COUNT SHEET items), with the ones tracked by lot marked. */
 export async function stockItems(db: SupabaseClient, branch: string): Promise<StockItem[]> {
@@ -44,12 +45,12 @@ export async function sendableItems(db: SupabaseClient, branch: string): Promise
 
 /** For each location: the items it stocks (on its COUNT SHEET or counted by lot there). */
 export async function stockedAt(db: SupabaseClient, branches: string[]): Promise<Record<string, string[]>> {
-  const [{ data: inv }, { data: lots }] = await Promise.all([
-    db.from("inventory").select("branch_id, product_id").in("branch_id", branches).eq("on_sheet", true).range(0, 9999),
-    db.from("inventory_lots").select("branch_id, product_id").in("branch_id", branches).range(0, 9999),
+  const [inv, lots] = await Promise.all([
+    every<{ branch_id: string; product_id: string }>((x, y) => db.from("inventory").select("branch_id, product_id").in("branch_id", branches).eq("on_sheet", true).order("branch_id").order("product_id").range(x, y)),
+    every<{ branch_id: string; product_id: string }>((x, y) => db.from("inventory_lots").select("branch_id, product_id").in("branch_id", branches).order("id").range(x, y)),
   ]);
   const out: Record<string, Set<string>> = {};
-  for (const r of [...((inv ?? []) as { branch_id: string; product_id: string }[]), ...((lots ?? []) as { branch_id: string; product_id: string }[])]) {
+  for (const r of [...inv, ...lots]) {
     (out[r.branch_id] ??= new Set()).add(r.product_id);
   }
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
