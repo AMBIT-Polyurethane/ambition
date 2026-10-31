@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { can } from "@/lib/access";
+import { can, canReceive } from "@/lib/access";
 import { kickSync } from "@/lib/inventory/sync";
 
 // Spot checks, reconciliations (counts) and expected deliveries. The database checks who may do what.
@@ -14,6 +14,12 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 async function staff() {
   const s = await getSession();
   if (!s?.profile || (s.profile.role !== "admin" && !can(s.profile, "inventory"))) return null;
+  return s;
+}
+
+async function receivers() {
+  const s = await getSession();
+  if (!s?.profile || !canReceive(s.profile)) return null;
   return s;
 }
 
@@ -43,7 +49,7 @@ export async function startReconcile(form: FormData) {
   const branch = String(form.get("branch") ?? "");
   if (!BRANCH.test(branch)) return;
   const { data, error } = await s.supabase.rpc("count_start_reconcile", { p_branch: branch });
-  if (error) done(`/inventory?b=${branch}`, "err", error.message);
+  if (error) done(`/inventory/counts?b=${branch}`, "err", error.message);
   redirect(`/inventory/counts/${data}`);
 }
 
@@ -100,8 +106,8 @@ export type IncomingInput = {
 };
 
 export async function saveIncoming(input: IncomingInput): Promise<{ ok: false; error: string } | never> {
-  const s = await staff();
-  if (!s) return { ok: false, error: "You don't have access to inventory." };
+  const s = await receivers();
+  if (!s) return { ok: false, error: "You don't have access to receiving." };
   if (!BRANCH.test(input.branch)) return { ok: false, error: "Pick the location." };
   if (!DAY.test(input.expected)) return { ok: false, error: "Pick the day it's expected." };
   const { data, error } = await s.supabase.rpc("inbound_save", {
@@ -120,8 +126,8 @@ export async function saveIncoming(input: IncomingInput): Promise<{ ok: false; e
 export type ReceiveLine = { id: number; received_qty: number; lot_no?: string; mfg?: string; exp?: string };
 
 export async function receiveIncoming(id: number, lines: ReceiveLine[]): Promise<{ ok: false; error: string } | never> {
-  const s = await staff();
-  if (!s) return { ok: false, error: "You don't have access to inventory." };
+  const s = await receivers();
+  if (!s) return { ok: false, error: "You don't have access to receiving." };
   const { data: d } = await s.supabase.from("inbound_deliveries").select("branch_id").eq("id", id).maybeSingle<{ branch_id: string }>();
   const { error } = await s.supabase.rpc("inbound_receive", { p_id: id, p_lines: lines });
   if (error) return { ok: false, error: error.message };
@@ -130,7 +136,7 @@ export async function receiveIncoming(id: number, lines: ReceiveLine[]): Promise
 }
 
 export async function cancelIncoming(form: FormData) {
-  const s = await staff();
+  const s = await receivers();
   if (!s) return;
   const id = Number(form.get("id"));
   const { error } = await s.supabase.rpc("inbound_cancel", { p_id: id });

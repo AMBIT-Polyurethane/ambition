@@ -16,6 +16,9 @@ export const PERMS = [
   { key: "credit_check", label: "Credit check", hint: "Release orders or put them on hold" },
   { key: "takeoff", label: "Takeoff", hint: "Measure plans: areas, walls and counts" },
   { key: "item_variance", label: "Item variance", hint: "Load a different lot or product type than the one picked" },
+  { key: "receiving", label: "Receiving", hint: "Receiving Reports: upload a BOL, check it, add it to stock" },
+  { key: "transfers", label: "Transfers", hint: "Send stock to another AMBIT location" },
+  { key: "inv_reports", label: "Inventory dashboard", hint: "Inventory Hub KPIs, charts and reports (stock value, aging, expiring lots)" },
 ] as const;
 
 export type Perm = (typeof PERMS)[number]["key"];
@@ -26,7 +29,7 @@ export const ROLES = [
   { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance") },
   { key: "sales_rep", label: "Sales rep", perms: ["ordering", "price_requests", "time_off", "travel", "takeoff"] as Perm[] },
   { key: "tech", label: "Tech", perms: ["time_off", "travel", "spray_log", "complaints"] as Perm[] },
-  { key: "warehouse", label: "Warehouse manager", perms: ["inventory", "ordering", "time_off", "travel"] as Perm[] },
+  { key: "warehouse", label: "Warehouse manager", perms: ["inventory", "receiving", "transfers", "inv_reports", "ordering", "time_off", "travel"] as Perm[] },
   { key: "accounting", label: "Accounting", perms: ["credit_check", "time_off", "travel"] as Perm[] },
 ] as const;
 
@@ -45,6 +48,12 @@ export function can(p: Who | null | undefined, perm: Perm): boolean {
   if (p.perms == null) return perm !== "prf_approve";
   return p.perms.includes(perm);
 }
+
+/** Anything in the Inventory Hub. */
+export const INV_PERMS: Perm[] = ["inventory", "receiving", "transfers", "inv_reports"];
+export const seesInventory = (p: Who) => INV_PERMS.some((k) => can(p, k));
+/** Receiving Reports and expected deliveries. */
+export const canReceive = (p: Who) => can(p, "receiving") || can(p, "inventory");
 
 /** Staff with anything to do on orders see the Orders list. */
 export const seesOrders = (p: Who) => p.role === "customer" || (["ordering", "order_desk", "credit_check", "inventory"] as Perm[]).some((k) => can(p, k));

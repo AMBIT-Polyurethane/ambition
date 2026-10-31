@@ -1,7 +1,7 @@
 import { TabBar } from "@/components/tabbar";
 import { Sidebar, type SideItem } from "@/components/sidebar";
 import { requireActive, isEmployee } from "@/lib/session";
-import { can, roleLabel } from "@/lib/access";
+import { can, roleLabel, seesInventory } from "@/lib/access";
 import { deskAccess } from "@/lib/order-desk";
 import { assistantAccess } from "@/lib/assistant/settings";
 import { opsCan, opsMember, opsRoleLabel } from "@/lib/ops/roles";
@@ -24,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         // One place for orders: the Order Desk (with "View orders" for the full list).
         !!deskAccess(profile) && { href: "/orders/desk", label: "Order desk", icon: "desk" },
         can(profile, "takeoff") && { href: "/ops", label: "AMBIT-OPS", icon: "ops" },
-        can(profile, "inventory") && { href: "/inventory", label: "Inventory", icon: "inventory" },
+        seesInventory(profile) && { href: "/inventory", label: "Inventory", icon: "inventory" },
         (can(profile, "credit_check") || profile.role === "admin") && { href: "/tax", label: "Tax certificates", icon: "tax" },
         (can(profile, "complaints") || profile.role === "admin") && { href: "/complaints", label: "Complaint reports", icon: "complaints" },
         can(profile, "spray_log") && { href: "/spray-logs", label: "Contractor spray logs", icon: "spraylogs" },

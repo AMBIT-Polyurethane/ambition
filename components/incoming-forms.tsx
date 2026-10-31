@@ -8,7 +8,7 @@ import { receiveIncoming, saveIncoming, type IncomingInput, type ReceiveLine } f
 export type StockItem = { product_id: string; sku: string; name: string; unit: string; lots: boolean };
 
 /** Pick an item: type part of the SKU or name. */
-function ItemPick({ items, value, onPick }: { items: StockItem[]; value: StockItem | null; onPick: (i: StockItem) => void }) {
+export function ItemPick({ items, value, onPick }: { items: StockItem[]; value: StockItem | null; onPick: (i: StockItem) => void }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);

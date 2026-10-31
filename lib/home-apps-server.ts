@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { can, type Perm } from "@/lib/access";
+import { can, type Perm, seesInventory } from "@/lib/access";
 import { deskAccess } from "@/lib/order-desk";
 import { isEmployee } from "@/lib/session";
 import { linkHref } from "@/lib/links";
@@ -40,7 +40,7 @@ export async function homeApps(
         ask,
         can(profile, "ordering") && { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
         !!desk && { key: "desk", label: "Order desk", href: "/orders/desk", icon: "truck", color: APP_COLOR.orange },
-        can(profile, "inventory") && { key: "inventory", label: "Inventory", href: "/inventory", icon: "boxes", color: APP_COLOR.cyan },
+        seesInventory(profile) && { key: "inventory", label: "Inventory", href: "/inventory", icon: "boxes", color: APP_COLOR.cyan },
         can(profile, "takeoff") && { key: "ops", label: "AMBIT-OPS", href: "/ops", icon: "ops", color: APP_COLOR.sky },
         (can(profile, "credit_check") || admin) && { key: "tax", label: "Tax certificates", href: "/tax", icon: "tax", color: APP_COLOR.emerald, folder: taxFront ? undefined : "admin" },
         can(profile, "ordering") && { key: "intake", label: "Paste an order", href: "/order/intake", icon: "intake", color: APP_COLOR.fuchsia, folder: "sales" },

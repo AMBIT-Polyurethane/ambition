@@ -7,6 +7,7 @@ import { dateShort, dateTime } from "@/lib/format";
 import { inventoryBranches } from "@/lib/widgets";
 import { Empty, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
+import { HubNav } from "@/components/inventory/hub-nav";
 import { startReconcile } from "@/app/(app)/inventory/count-actions";
 
 export const metadata = { title: "Inventory counts" };
@@ -42,6 +43,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
   return (
     <main className="shell">
       <TopBar title="Inventory counts" back={`/inventory?b=${branch.id}`} />
+      <HubNav profile={profile} active="counts" branch={branch.id} />
       {branches.length > 1 ? (
         <div className="chips">
           {branches.map((b) => (

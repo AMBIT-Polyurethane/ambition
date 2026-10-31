@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireActive } from "@/lib/session";
-import { can } from "@/lib/access";
+import { canReceive } from "@/lib/access";
 import { inventoryBranches } from "@/lib/widgets";
 import { stockItems, vendorNames } from "@/lib/incoming";
 import { TopBar } from "@/components/ui";
@@ -11,7 +11,7 @@ export const metadata = { title: "Expected delivery" };
 export default async function NewIncomingPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, profile } = await requireActive();
-  if (profile.role !== "admin" && !can(profile, "inventory")) redirect("/");
+  if (!canReceive(profile)) redirect("/");
   const branches = await inventoryBranches(supabase, profile);
   const branch = branches.find((b) => b.id === sp.b) ?? branches[0];
   if (!branch) redirect("/inventory");

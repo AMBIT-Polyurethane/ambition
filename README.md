@@ -373,6 +373,31 @@ before, spot checks per location).
   non-lot items to `on_hand`; foam needs a lot #: an existing lot gets `in_unsynced` (→ Shipped In), a new lot is
   inserted with `add_to_sheet` and the sync inserts its FOAM LOTS row at the end of that SKU's block (`addReceivedLots`).
 
+### Inventory Hub (dashboard, Receiving Reports, transfers, reports)
+
+`/inventory` is the hub (`components/inventory/hub-nav.tsx` tabs: Dashboard, Stock, Receiving, Transfers, Counts,
+Reports; each shown by permission). Three permissions from `0037_inventory_hub.sql` (everyone with `inventory` got
+them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock links redirect to `/inventory/stock`.
+- **Dashboard and reports** (`lib/inventory/hub.ts` → `loadHub(db, branches | "all")`, `lib/inventory/reports.ts`,
+  CSV at `/inventory/reports/export`): stock value at sell price (average order price over 6 months, else list price;
+  ISO brands use ISO A-Side's), reorder (items with a Reorder Point on the sheet; suggested ROP = 21 days of 90-day
+  sales), expiring foam lots (`use_by`), aging (days since the last order line at that location, or since the first
+  order / sheet connection there), movement (completed orders, received lines, transfers), counts (spot checks and
+  reconciliations, 90 days). Charts are plain HTML (`components/inventory/charts.tsx`, colors `--viz-1/--viz-2`
+  validated for colour-blind separation in dark and light) with hover/tap tooltips and a "Show the numbers" table.
+- **Receiving Reports** (`components/inventory/receiving-form.tsx`, `/inventory/incoming/receive` and each expected
+  delivery's page): BOL photos/PDFs go to the private `inventory-files` bucket (`<branch>/bol-…`); `readBolAction` →
+  `lib/inventory/bol.ts` sends them to Claude (PDFs as document blocks) with the location's stock list and gets the
+  shipper, BOL #, PO #, carrier and lines (one per lot). The manager checks it; `inbound_receive_report` saves the
+  header (`bol_no`, `po_no`, `carrier`, `files`, `read_by_ai`), replaces the lines (`qty` = on the BOL / expected,
+  `received_qty` = what came, `note`) and calls `inbound_receive` (now open to `receiving` too).
+- **Transfers** (`inventory_transfers` / `inventory_transfer_lines`, `/inventory/transfers`): `transfer_send` checks
+  availability (lots: remaining − sheet pending − reserved), takes it off the sender (`on_hand`, or the lot's
+  `out_unsynced` → Shipped Out) and creates the receiver's `inbound_deliveries` row (`transfer_id`, lines with the lot,
+  Mfg and Exp). Receiving it marks the transfer received; the lot becomes a new FOAM LOTS row there.
+  `transfer_cancel` (only before it's received) puts it back (`out_unsynced`, or `in_unsynced` if the sheet already
+  shows it as Shipped Out).
+
 ### Sales reps, invoice prices and sales goals
 
 `0028_sales_reps_prices_goals.sql`:

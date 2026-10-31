@@ -1,6 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { StockItem } from "@/components/incoming-forms";
+import type { SendItem } from "@/components/inventory/transfer-form";
+import { branchStock } from "@/lib/inventory/view";
 
 /** What a location stocks (its COUNT SHEET items), with the ones tracked by lot marked. */
 export async function stockItems(db: SupabaseClient, branch: string): Promise<StockItem[]> {
@@ -22,4 +24,33 @@ export async function stockItems(db: SupabaseClient, branch: string): Promise<St
 export async function vendorNames(db: SupabaseClient): Promise<string[]> {
   const { data } = await db.from("inbound_deliveries").select("vendor").order("created_at", { ascending: false }).limit(200);
   return [...new Set(((data ?? []) as { vendor: string }[]).map((d) => d.vendor))].slice(0, 30);
+}
+
+/** What a location can send to another (its stock, less what's held for orders), lots for spray foam. */
+export async function sendableItems(db: SupabaseClient, branch: string): Promise<SendItem[]> {
+  const rows = await branchStock(db, branch);
+  return rows
+    .map((r) => ({
+      product_id: r.product_id,
+      sku: r.sku,
+      name: r.name,
+      unit: r.unit,
+      lots: Boolean(r.lots),
+      available: Math.max(0, r.net ?? r.on_hand ?? 0),
+      lotList: (r.lots ?? []).map((l) => ({ id: l.id, lot_no: l.lot_no, available: Math.max(0, l.available), use_by: l.use_by, expired: l.expired })),
+    }))
+    .filter((i) => (i.lots ? i.lotList.some((l) => l.available > 0) : i.available > 0));
+}
+
+/** For each location: the items it stocks (on its COUNT SHEET or counted by lot there). */
+export async function stockedAt(db: SupabaseClient, branches: string[]): Promise<Record<string, string[]>> {
+  const [{ data: inv }, { data: lots }] = await Promise.all([
+    db.from("inventory").select("branch_id, product_id").in("branch_id", branches).eq("on_sheet", true).range(0, 9999),
+    db.from("inventory_lots").select("branch_id, product_id").in("branch_id", branches).range(0, 9999),
+  ]);
+  const out: Record<string, Set<string>> = {};
+  for (const r of [...((inv ?? []) as { branch_id: string; product_id: string }[]), ...((lots ?? []) as { branch_id: string; product_id: string }[])]) {
+    (out[r.branch_id] ??= new Set()).add(r.product_id);
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
 }

@@ -10,9 +10,9 @@ const BRANCH = /^[a-z]{2,8}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function back(branch: string, kind: "msg" | "err", text: string, anchor = ""): never {
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   revalidatePath("/order");
-  redirect(`/inventory?b=${branch}&${kind}=${encodeURIComponent(text)}${anchor ? `#${anchor}` : ""}`);
+  redirect(`/inventory/stock?b=${branch}&${kind}=${encodeURIComponent(text)}${anchor ? `#${anchor}` : ""}`);
 }
 
 /** Warehouse: a count, a delivery received, or stock taken out. Goes to the spreadsheet right after. */
@@ -60,12 +60,12 @@ export async function syncNow(form: FormData) {
     : r.error
       ? `The sync didn't finish: ${r.error}`
       : `Not synced: ${r.skipped}.`;
-  revalidatePath("/inventory");
+  revalidatePath("/inventory", "layout");
   revalidatePath("/admin/inventory");
   revalidatePath("/order");
   const kind = r.ok ? "msg" : "err";
   if (to === "admin") redirect(`/admin/inventory?${kind}=${encodeURIComponent(text)}`);
-  redirect(`/inventory?b=${branch}&${kind}=${encodeURIComponent(text)}`);
+  redirect(`/inventory/stock?b=${branch}&${kind}=${encodeURIComponent(text)}`);
 }
 
 function summaryText(s: { from_sheet: number; to_sheet: number; new_products: string[]; lines_added: number; sheet_closed: number; conflicts: number } | undefined): string {
