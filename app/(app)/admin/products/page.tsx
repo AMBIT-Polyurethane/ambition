@@ -112,7 +112,7 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
               <summary className="item" style={{ minHeight: 56, opacity: p.active ? 1 : 0.5 }}>
                 {p.image_url ? <img className="thumb sm" src={p.image_url} alt="" loading="lazy" /> : <div className="thumb sm empty" />}
                 <div className="grow">
-                  <div className="t ellipsis">{p.name}{p.active ? "" : " (hidden)"}</div>
+                  <div className="t ellipsis">{p.name}{p.active ? "" : " (hidden)"}{p.admin_only || cat?.admin_only ? " · private label" : ""}</div>
                   <div className="s ellipsis">{p.sku} · {cat?.name ?? "No category"} · {p.unit}</div>
                 </div>
                 <span className="small nowrap">
@@ -130,6 +130,9 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
                 <ProductFields p={p} cats={cats} />
                 <div className="row">
                   <label className="check"><input type="checkbox" name="active" defaultChecked={p.active} /> Show in catalog</label>
+                  <label className="check" title="Only admins ever see a private label product: not staff, not customers.">
+                    <input type="checkbox" name="admin_only" defaultChecked={Boolean(p.admin_only)} /> Private label (admins only){cat?.admin_only ? " · its whole group is private" : ""}
+                  </label>
                   <Submit className="btn sm">Save</Submit>
                 </div>
               </form>

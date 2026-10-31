@@ -2431,3 +2431,13 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .input.warn-in { border-color: var(--warn); }
 @media (min-width: 700px) { .recv-grid.grid4 { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 @media print { .hub-tabs, .topbar .iconbtn { display: none !important; } .recv-report, .card { border: 0 !important; } .tbl th, .tbl td { color: #18181b; } }
+
+/* report table: filter and sort */
+.rt-search { flex: 1 1 220px; min-width: 0; max-width: 360px; }
+.rt-filters { padding: 12px 14px; }
+.rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px 12px; }
+.rt-sort { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; white-space: nowrap; }
+.rt-sort:hover, .rt-sort.on { color: var(--text); }
+.rt-sort .rt-idle { opacity: 0.35; }
+.tbl th.num .rt-sort { justify-content: flex-end; width: 100%; }
+.linklike { background: none; border: 0; padding: 0; color: var(--red-text); font: inherit; text-decoration: underline; cursor: pointer; }

@@ -7,9 +7,10 @@ import { every } from "@/lib/inventory/pages";
 // The Inventory Hub's numbers: stock value, reorder, expiring foam lots, movement, aging stock to put
 // on sale, and count accuracy, for one location or all of them. Read with the signed-in person's access.
 //
-// Dollar values are at sell price: the average price on the last 6 months of orders for that item
-// (what customers actually paid), else its list price. Spray foam has no list price (it's priced per
-// customer), so its value comes from orders. Anything with neither shows as "no price".
+// Dollar values are at sell price: the Sell Price on that location's COUNT SHEET; if it's blank, the
+// average price on the last 6 months of orders (what customers actually paid), else the list price.
+// Spray foam has no sheet or list price (it's priced per customer), so its value comes from orders.
+// Anything with none of these shows as "no price".
 
 export type HubBranch = { id: string; name: string; state: string };
 
@@ -145,7 +146,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
     every((a, z) =>
       db
         .from("inventory")
-        .select("branch_id, product_id, sku, on_hand, reorder_point, max_qty, product:products(id, sku, name, unit, list_price, category_id, stock_of)")
+        .select("branch_id, product_id, sku, on_hand, reorder_point, max_qty, sell_price, product:products(id, sku, name, unit, list_price, category_id, stock_of)")
         .in("branch_id", ids)
         .eq("on_sheet", true)
         .order("branch_id")
@@ -213,8 +214,9 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
     trackingStart[b] = first ?? today;
   }
 
-  // ---- prices: what customers paid lately, else list price. ISO brands use ISO A-Side's price.
-  type Inv = { branch_id: string; product_id: string; sku: string; on_hand: number | null; reorder_point: number | null; max_qty: number | null; product: Prod | null };
+  // ---- prices: the location's COUNT SHEET Sell Price; if it has none, what customers paid lately, else
+  // the list price. ISO brands use ISO A-Side's order price.
+  type Inv = { branch_id: string; product_id: string; sku: string; on_hand: number | null; reorder_point: number | null; max_qty: number | null; sell_price: number | null; product: Prod | null };
   const inv = invRes as unknown as Inv[];
   const paid = new Map<string, { q: number; v: number }>();
   for (const r of priceRes as unknown as { product_id: string | null; qty: number; unit_price: number }[]) {
@@ -236,6 +238,10 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
   };
   const prodById = new Map<string, Prod>();
   for (const r of inv) if (r.product) prodById.set(r.product.id, r.product);
+  const sheetPrice = new Map<string, number>();
+  for (const r of inv) if (r.sell_price !== null && Number(r.sell_price) > 0) sheetPrice.set(`${r.branch_id}|${r.product_id}`, Number(r.sell_price));
+  /** What one of this item is worth at this location. */
+  const priceAt = (branch: string, id: string): number | null => sheetPrice.get(`${branch}|${id}`) ?? priceOf(prodById.get(id) ?? null);
 
   // ---- sales (completed orders) by location and item; ISO A-Side counts for every ISO brand
   type OrderLine = { product_id: string | null; qty: number; line_total: number | null; ord: { branch_id: string; status: string; created_at: string; completed_at: string | null } };
@@ -276,13 +282,13 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
   const trIn90 = new Map<string, number>();
   const trOut90 = new Map<string, number>();
   let received30 = 0;
-  const prodPrice = (id: string) => priceOf(prodById.get(id) ?? null) ?? 0;
+  const prodPrice = (branch: string, id: string) => priceAt(branch, id) ?? 0;
   for (const d of inRes as unknown as { branch_id: string; received_at: string; transfer_id: number | null; lines: { product_id: string; received_qty: number | null }[] }[]) {
     const day = dayOf(d.received_at);
     const age = days(day, today);
     for (const l of d.lines ?? []) {
       const q = n(l.received_qty);
-      const v = q * prodPrice(l.product_id);
+      const v = q * prodPrice(d.branch_id, l.product_id);
       const wk = weekMap.get(weekOf(day));
       if (wk) wk.received += v;
       if (age <= 30) received30 += v;
@@ -314,7 +320,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
     .filter((l) => n(l.remaining) > 0)
     .map((l) => {
       const p = prodById.get(l.product_id) ?? null;
-      const price = priceOf(p) ?? 0;
+      const price = priceAt(l.branch_id, l.product_id) ?? 0;
       return {
         branch: l.branch_id,
         sku: l.sku,
@@ -342,7 +348,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
       const s = sold.get(`${r.branch_id}|${parentOf(p)}`) ?? sold.get(key);
       const lv = level.get(key);
       const onHand = n(r.on_hand);
-      const price = priceOf(p);
+      const price = priceAt(r.branch_id, p.id);
       const myLots = (lotsOf.get(key) ?? []).filter((l) => n(l.remaining) > 0);
       const start = trackingStart[r.branch_id] ?? today;
       const last = s?.last ?? null;
@@ -421,7 +427,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
       else {
         off++;
         vu += d;
-        vv += d * prodPrice(l.product_id);
+        vv += d * prodPrice(c.branch_id, l.product_id);
       }
     }
     return { id: c.id, branch: c.branch_id, kind: c.kind, day: c.day, status: c.status, lines: exact + off, exact, off, varianceUnits: vu, varianceValue: vv };

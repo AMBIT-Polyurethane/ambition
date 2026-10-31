@@ -95,7 +95,7 @@ export function buildReport(hub: Hub, key: ReportKey): Report {
       rows: rows.map((i) => [loc(i.branch), i.category, i.sku, i.name, r2(i.on_hand), i.unit, i.price === null ? "no price" : usd(i.price), usd(i.value)]),
       flag: rows.map((i) => i.price === null),
       total: ["Total", "", "", "", "", "", "", usd(rows.reduce((s, i) => s + i.value, 0))],
-      note: "Sell price = what customers paid on orders in the last 6 months, else the list price. Highlighted items have neither, so they aren't in the total.",
+      note: "Sell price = the Sell Price on the location's COUNT SHEET; if it's blank, what customers paid on orders in the last 6 months, else the list price. Highlighted items have none of these, so they aren't in the total.",
     };
   }
 
@@ -104,9 +104,9 @@ export function buildReport(hub: Hub, key: ReportKey): Report {
   return {
     key: "counts",
     title,
-    head: ["Location", "Day", "Kind", "Status", "Lines counted", "Matched", "Off", "Difference (units)", "Difference ($)", "Accuracy"],
+    head: ["Location", "Day", "Kind", "Status", "Lines counted", "Matched", "Off", "Difference (units)", "Difference ($)", "Accuracy %"],
     num: [false, false, false, false, true, true, true, true, true, true],
-    rows: rows.map((c) => [loc(c.branch), c.day, c.kind === "spot" ? "Spot check" : "Reconciliation", c.status, c.lines, c.exact, c.off, r2(c.varianceUnits), usd(c.varianceValue), c.lines ? `${Math.round((c.exact / c.lines) * 1000) / 10}%` : null]),
+    rows: rows.map((c) => [loc(c.branch), c.day, c.kind === "spot" ? "Spot check" : "Reconciliation", c.status, c.lines, c.exact, c.off, r2(c.varianceUnits), usd(c.varianceValue), c.lines ? Math.round((c.exact / c.lines) * 1000) / 10 : null]),
     flag: rows.map((c) => c.off > 0),
     note: "Difference = counted minus what the app had when it was counted.",
   };

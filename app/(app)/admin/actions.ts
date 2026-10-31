@@ -266,6 +266,7 @@ export async function saveProduct(form: FormData) {
     list_price: num(form.get("list_price")),
     customer_priced: cp === "yes" ? true : cp === "no" ? false : null,
     active: id ? form.get("active") === "on" : true,
+    admin_only: form.get("admin_only") === "on",
     sort: num(form.get("sort")) ?? 0,
     sqft_per_unit: num(form.get("sqft_per_unit")),
     sale_price: num(form.get("sale_price")),

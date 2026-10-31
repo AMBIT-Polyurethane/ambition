@@ -155,6 +155,7 @@ Goals: admins set them in Admin > Sales goals: for each sales rep and warehouse 
 - Transfers: "Send stock" to another AMBIT location: pick the items and, for spray foam, the lot. It comes off the sending location's stock right away (Shipped Out on that lot's FOAM LOTS row) and shows at the other location as an incoming delivery with the same lots; they receive it there when it arrives and their sheet goes up. A transfer can be cancelled until it's received (the stock goes back). The item has to be on the other location's COUNT SHEET first. Each transfer prints as a packing list.
 - Counts: spot checks and the quarterly reconciliation.
 - Reports: Reorder (with a suggested reorder point from what sold), Expiring foam, Aging stock, Movement, Stock value and Counts, for one location or all of them; "CSV" downloads any of them for Excel.
+Private label products (the Alpha chemicals) are only ever shown to admins: staff and customers never see them anywhere in the app (an admin marks a product "Private label (admins only)" in Admin > Products). Stock value uses the Sell Price on each location's COUNT SHEET first.
 Deleting: nothing is ever deleted between the app and the spreadsheets. Hiding a product in Admin > Products only stops it being ordered; taking a row off a COUNT SHEET makes the app stop showing stock for it at that location.`,
   },
   {

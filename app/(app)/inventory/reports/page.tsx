@@ -1,22 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Download } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { can } from "@/lib/access";
 import { inventoryBranches } from "@/lib/widgets";
 import { loadHub } from "@/lib/inventory/hub";
-import { REPORTS, buildReport, type Cell, type ReportKey } from "@/lib/inventory/reports";
+import { REPORTS, buildReport, type ReportKey } from "@/lib/inventory/reports";
 import { Empty, TopBar } from "@/components/ui";
 import { HubNav, hubHome } from "@/components/inventory/hub-nav";
+import { ReportTable } from "@/components/inventory/report-table";
 
 export const metadata = { title: "Inventory reports" };
 export const dynamic = "force-dynamic";
 
-const show = (v: Cell, money: boolean) => {
-  if (v === null || v === undefined || v === "") return "";
-  if (typeof v === "number") return money ? v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }) : v.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  return v.replace(/(\d{4})-(\d{2})-(\d{2})/g, (_, y: string, m: string, d: string) => `${Number(m)}/${Number(d)}/${y.slice(2)}`);
-};
 
 /** One report at a time, for a location or all of them, with a CSV download. */
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -34,15 +29,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
   return (
     <main className="shell wide">
-      <TopBar
-        title="Reports"
-        back={`/inventory?b=${pick}`}
-        right={
-          <a className="btn sm dark" href={`/inventory/reports/export?r=${key}&b=${pick}`} download>
-            <Download size={15} /> CSV
-          </a>
-        }
-      />
+      <TopBar title="Reports" back={`/inventory?b=${pick}`} />
       <HubNav profile={profile} active="reports" branch={pick} />
       <div className="chips" role="tablist" aria-label="Report">
         {REPORTS.map((r) => (
@@ -59,25 +46,16 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       ) : null}
       <p className="small muted" style={{ margin: 0 }}>{meta.hint}</p>
       {rep.rows.length ? (
-        <div className="card tbl-wrap" style={{ padding: 0 }}>
-          <table className="tbl">
-            <thead>
-              <tr>{rep.head.map((h, i) => <th key={i} className={rep.num[i] ? "num" : ""}>{h}</th>)}</tr>
-            </thead>
-            <tbody>
-              {rep.rows.map((row, ri) => (
-                <tr key={ri} className={rep.flag[ri] === "err" ? "err" : rep.flag[ri] ? "hl" : ""}>
-                  {row.map((c, ci) => <td key={ci} className={rep.num[ci] ? "num" : ""}>{show(c, moneyCol[ci])}</td>)}
-                </tr>
-              ))}
-            </tbody>
-            {rep.total ? (
-              <tfoot>
-                <tr>{rep.total.map((c, ci) => <td key={ci} className={rep.num[ci] ? "num" : ""}>{show(c, moneyCol[ci])}</td>)}</tr>
-              </tfoot>
-            ) : null}
-          </table>
-        </div>
+        <ReportTable
+          key={`${key}-${pick}`}
+          head={rep.head}
+          num={rep.num}
+          money={moneyCol}
+          rows={rep.rows}
+          flag={rep.flag}
+          total={rep.total}
+          fileName={`inventory-${key}-${pick === "all" ? "all-locations" : pick}-${hub.today}.csv`}
+        />
       ) : (
         <Empty icon="layers" title="Nothing to show yet">This fills in as orders, deliveries and counts go through the app.</Empty>
       )}

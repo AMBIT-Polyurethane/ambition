@@ -63,7 +63,7 @@ export type Branch = {
   active: boolean;
 };
 
-export type Category = { id: string; name: string; customer_priced: boolean; sort: number; goal_group?: string | null };
+export type Category = { id: string; name: string; customer_priced: boolean; sort: number; goal_group?: string | null; /** Private label group: admins only. */ admin_only?: boolean };
 
 export type Product = {
   id: string;
@@ -80,6 +80,8 @@ export type Product = {
   /** On sale: charged this instead of the list price, through sale_ends (blank = until it's removed). */
   sale_price?: number | null;
   sale_ends?: string | null;
+  /** Private label (Alpha): only admins ever see it. */
+  admin_only?: boolean;
   active: boolean;
   sort: number;
 };

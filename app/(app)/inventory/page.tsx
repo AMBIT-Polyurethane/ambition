@@ -225,7 +225,7 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
       </div>
 
       <p className="tiny faint" style={{ margin: 0 }}>
-        Dollars are at sell price: what customers paid on orders in the last 6 months, else the list price (spray foam has no list price, so it&apos;s valued from orders).
+        Dollars are at sell price: the Sell Price on each location&apos;s COUNT SHEET; if it&apos;s blank, what customers paid on orders in the last 6 months (that&apos;s how spray foam is valued), else the list price.
         Shipped counts completed orders. {starts.length ? `The app has tracked sales here since ${dateShort(starts[0])}, so aging fills in over time.` : ""}
       </p>
     </main>

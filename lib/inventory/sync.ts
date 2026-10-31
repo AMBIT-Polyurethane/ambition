@@ -102,6 +102,7 @@ type Inv = {
   reorder_point: number | null;
   max_qty: number | null;
   unit_weight: number | null;
+  sell_price: number | null;
   last_counted: string | null;
   counted_by: string | null;
   count_dirty: boolean;
@@ -338,6 +339,7 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
         reorder_point: i.rop,
         max_qty: i.max,
         unit_weight: i.weight,
+        sell_price: i.price,
         last_counted: i.counted,
         counted_by: i.countedBy || null,
         sheet_row: i.row,
@@ -455,6 +457,7 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
       if (!same(item.rop, num(row.reorder_point))) patch.reorder_point = item.rop;
       if (!same(item.max, num(row.max_qty))) patch.max_qty = item.max;
       if (!same(item.weight, num(row.unit_weight))) patch.unit_weight = item.weight;
+      if (!same(item.price, num(row.sell_price))) patch.sell_price = item.price;
       if (row.sheet_row !== item.row) patch.sheet_row = item.row;
       if (!row.on_sheet) patch.on_sheet = true;
       if (row.sku !== item.sku) patch.sku = item.sku;
