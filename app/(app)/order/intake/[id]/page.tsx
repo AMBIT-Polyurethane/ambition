@@ -4,6 +4,7 @@ import { DraftReview, type DraftView, type PickProduct } from "@/components/inta
 import { ORDER_CUSTOMER_COLUMNS, type OrderCustomer } from "@/lib/customers";
 import type { CustomerMatch } from "@/lib/intake/read";
 import type { Branch } from "@/lib/types";
+import { carriedByBranch } from "@/lib/inventory/carried";
 
 export const metadata = { title: "Check the order" };
 export const dynamic = "force-dynamic";
@@ -21,6 +22,9 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
     supabase.from("branches").select("*").eq("active", true).order("sort"),
   ]);
   const companies = (comps ?? []) as OrderCustomer[];
+  const branches = (branchRows ?? []) as Branch[];
+  // Each location's item list (its inventory spreadsheet): the product picker only offers those.
+  const carried = await carriedByBranch(supabase, branches.map((b) => b.id));
   const photos = ((d.images ?? []) as string[]).length
     ? ((await supabase.storage.from("photos").createSignedUrls(d.images as string[], 60 * 60)).data ?? []).map((s) => s.signedUrl).filter((u): u is string => !!u)
     : [];
@@ -53,7 +57,8 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
       draft={draft}
       products={(prods ?? []) as PickProduct[]}
       companies={companies}
-      branches={(branchRows ?? []) as Branch[]}
+      branches={branches}
+      carried={carried}
       suggestions={suggestions.slice(0, 4)}
     />
   );

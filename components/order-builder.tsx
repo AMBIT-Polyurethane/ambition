@@ -317,8 +317,27 @@ export function OrderBuilder(props: Props) {
     writeCart(next);
   };
 
+  // Each location offers only what's on its own inventory spreadsheet. A location with no spreadsheet shows
+  // everything. Items already in the cart that the location doesn't carry stay saved (they come back if the
+  // location is switched to one that carries them) but are left off this order.
+  const listHere = branchId ? (props.stock ?? {})[branchId] : undefined;
+  const limited = !!listHere && Object.keys(listHere).length > 0;
+  const carried = (id: string) => !limited || Object.prototype.hasOwnProperty.call(listHere, id);
+  const offList = Object.entries(cart)
+    .filter(([id, n]) => n > 0 && byId.has(id) && !carried(id))
+    .map(([id]) => byId.get(id)!);
+  const offNote = offList.length && branch ? (
+    <div className="alert warn small" role="status">
+      <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
+      <span>
+        {offList.length === 1 ? "This item isn't" : `These ${offList.length} items aren't`} on the {branch.name} list, so {offList.length === 1 ? "it's" : "they're"} left off this order:{" "}
+        <b>{offList.map((p) => p.name).join(" · ")}</b>. To order {offList.length === 1 ? "it" : "them"}, pick a location that carries {offList.length === 1 ? "it" : "them"}.
+      </span>
+    </div>
+  ) : null;
+
   const lines = Object.entries(cart)
-    .filter(([id, n]) => n > 0 && byId.has(id))
+    .filter(([id, n]) => n > 0 && byId.has(id) && carried(id))
     .map(([id, n]) => ({ p: byId.get(id)!, qty: n }));
   const lineCount = lines.length;
   const subtotal = lines.reduce((s, l) => s + (!l.p.cp && l.p.list_price !== null ? l.p.list_price * l.qty : 0), 0);
@@ -329,19 +348,22 @@ export function OrderBuilder(props: Props) {
   const canFilterAvail = isEmployee && !!stockHere && Object.keys(stockHere).length > 0;
   const isAvail = (id: string) => (stockHere?.[id]?.net ?? 0) > 0;
   const availFilter = canFilterAvail && onlyAvail;
-  const shown = products.filter(
+  const here = limited ? products.filter((p) => carried(p.id)) : products;
+  const catsHere = limited ? categories.filter((c) => here.some((p) => p.category_id === c.id)) : categories;
+  const catNow = cat === "all" || catsHere.some((c) => c.id === cat) ? cat : "all";
+  const shown = here.filter(
     (p) =>
-      (cat === "all" || p.category_id === cat) &&
+      (catNow === "all" || p.category_id === catNow) &&
       (!availFilter || isAvail(p.id)) &&
       (!needle || `${p.name} ${p.sku} ${p.description ?? ""}`.toLowerCase().includes(needle)),
   );
-  const availCount = canFilterAvail ? products.filter((p) => isAvail(p.id)).length : 0;
+  const availCount = canFilterAvail ? here.filter((p) => isAvail(p.id)).length : 0;
 
   const submit = () => {
     setError(null);
     startTransition(async () => {
       const res = await placeOrder({
-        items: cart,
+        items: Object.fromEntries(Object.entries(cart).filter(([id]) => carried(id))),
         delivery,
         branchId,
         address,
@@ -506,6 +528,7 @@ export function OrderBuilder(props: Props) {
         )}
 
         {notice ? <div className="alert info small">{notice}</div> : null}
+        {offNote}
 
         <section className="section">
           <div className="row between">
@@ -722,9 +745,9 @@ export function OrderBuilder(props: Props) {
           </button>
         ) : null}
         <div className="chips" role="tablist" aria-label="Categories">
-          <button type="button" role="tab" aria-selected={cat === "all"} className={`chip${cat === "all" ? " on" : ""}`} onClick={() => setCat("all")}>All</button>
-          {categories.map((c) => (
-            <button key={c.id} type="button" role="tab" aria-selected={cat === c.id} className={`chip${cat === c.id ? " on" : ""}`} onClick={() => setCat(c.id)}>
+          <button type="button" role="tab" aria-selected={catNow === "all"} className={`chip${catNow === "all" ? " on" : ""}`} onClick={() => setCat("all")}>All</button>
+          {catsHere.map((c) => (
+            <button key={c.id} type="button" role="tab" aria-selected={catNow === c.id} className={`chip${catNow === c.id ? " on" : ""}`} onClick={() => setCat(c.id)}>
               {c.name}
             </button>
           ))}
@@ -732,6 +755,7 @@ export function OrderBuilder(props: Props) {
       </div>
 
       {notice ? <div className="alert info">{notice}</div> : null}
+      {offNote}
 
       {shown.length === 0 ? (
         <div className="card muted small center">

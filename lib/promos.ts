@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isEmployee } from "@/lib/session";
 import { saleOn, todayCentral } from "@/lib/sale";
+import { carriedAt } from "@/lib/inventory/carried";
 import type { PromoRow, PromoSlide } from "@/lib/promo-themes";
 import type { Profile } from "@/lib/types";
 
@@ -87,7 +88,10 @@ export async function homePromos(supabase: SupabaseClient, profile: Profile): Pr
     );
     if (!rows.length) return [];
     const { slides } = await toSlides(supabase, rows);
-    return slides.filter((s): s is PromoSlide => !!s);
+    // Customers only see featured products their own location carries (its inventory spreadsheet).
+    const mine = audience === "customer" ? profile.company?.default_branch_id ?? profile.branch_id ?? null : null;
+    const here = mine && rows.some((r) => r.kind === "product") ? await carriedAt(supabase, mine) : null;
+    return slides.filter((s, i): s is PromoSlide => !!s && !(here && rows[i].kind === "product" && rows[i].product_id && !here.has(rows[i].product_id)));
   } catch {
     return [];
   }

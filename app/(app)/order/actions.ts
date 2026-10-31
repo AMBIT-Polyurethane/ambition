@@ -9,6 +9,7 @@ import { currentOrigin } from "@/lib/origin";
 import { escapeHtml as h } from "@/lib/format";
 import { ORDER_CUSTOMER_COLUMNS, type OrderCustomer } from "@/lib/customers";
 import { kickSync } from "@/lib/inventory/sync";
+import { carriedAt } from "@/lib/inventory/carried";
 
 export type NewCustomerInput = {
   name: string;
@@ -162,6 +163,19 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   }
   if (emp && input.delivery !== "dropship" && !input.branchId) {
     return { ok: false, error: "Pick the AMBIT location this order is picked up or shipped from." };
+  }
+  // A location only sells what's on its own inventory spreadsheet.
+  if (input.delivery !== "dropship" && input.branchId) {
+    const here = await carriedAt(s.supabase, input.branchId);
+    const off = here ? items.filter((i) => !here.has(i.product_id)).map((i) => i.product_id) : [];
+    if (off.length) {
+      const [{ data: names }, { data: br }] = await Promise.all([
+        s.supabase.from("products").select("name").in("id", off),
+        s.supabase.from("branches").select("name").eq("id", input.branchId).maybeSingle(),
+      ]);
+      const list = ((names ?? []) as { name: string }[]).map((p) => p.name).join(" · ") || `${off.length} item${off.length > 1 ? "s" : ""}`;
+      return { ok: false, error: `Not on the ${(br as { name: string } | null)?.name ?? "location's"} list: ${list}. Take ${off.length > 1 ? "them" : "it"} off the order or pick a location that carries ${off.length > 1 ? "them" : "it"}.` };
+    }
   }
   const neededBy = /^\d{4}-\d{2}-\d{2}$/.test(input.neededBy) ? input.neededBy : null;
   const needsApproval = emp && approvalsEnabled();

@@ -6,6 +6,7 @@ import { approvalsEnabled } from "@/lib/order-send";
 import { saleOn, todayCentral } from "@/lib/sale";
 import { packCustomer } from "@/lib/customers";
 import { smartDraft } from "@/lib/reorder";
+import { stockRows } from "@/lib/inventory/carried";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
 export const metadata = { title: "Order" };
@@ -33,18 +34,16 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       : Promise.resolve({ data: null }),
   ]);
 
-  // Live stock for locations with an inventory spreadsheet (Oklahoma City first). Staff see the numbers;
-  // contractors only In stock / Low stock / Ships from supplier (the database decides what each gets).
-  const stockBranches = emp
-    ? (((await supabase.from("inventory_sheets").select("branch_id").eq("enabled", true)).data ?? []) as { branch_id: string }[]).map((b) => b.branch_id)
-    : [profile.company?.default_branch_id ?? profile.branch_id].filter((b): b is string => Boolean(b));
+  // Live stock for every location with an inventory spreadsheet. Staff see the numbers; contractors only
+  // In stock / Low stock / Ships from supplier (the database decides what each gets). It's also each location's
+  // item list: ordering only offers what's on that location's spreadsheet.
   const stock: StockMap = {};
   await Promise.all(
-    stockBranches.map(async (b) => {
-      const { data, error } = await supabase.rpc("stock_for", { p_branch: b });
-      if (error || !data?.length) return;
+    ((branches ?? []) as Branch[]).map(async ({ id: b }) => {
+      const data = await stockRows(supabase, b);
+      if (!data.length) return;
       stock[b] = Object.fromEntries(
-        (data as { product_id: string; on_hand: number | null; pending: number | null; net: number | null; reorder_point: number | null; label: string | null }[]).map((r) => [
+        data.map((r) => [
           r.product_id,
           {
             on_hand: r.on_hand === null ? null : Number(r.on_hand),

@@ -38,14 +38,15 @@ const CONF: Record<string, { label: string; cls: string }> = {
   low: { label: "Not matched", cls: "pill" },
 };
 
-function ProductPick({ products, value, onChange }: { products: PickProduct[]; value: string | null; onChange: (id: string | null) => void }) {
+function ProductPick({ products, choices, value, onChange }: { products: PickProduct[]; choices: PickProduct[]; value: string | null; onChange: (id: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const cur = products.find((p) => p.id === value) ?? null;
+  // Search only what the chosen location carries.
   const shown = useMemo(() => {
     const w = q.toLowerCase().split(/\s+/).filter(Boolean);
-    return products.filter((p) => w.every((x) => `${p.name} ${p.sku}`.toLowerCase().includes(x))).slice(0, 12);
-  }, [products, q]);
+    return choices.filter((p) => w.every((x) => `${p.name} ${p.sku}`.toLowerCase().includes(x))).slice(0, 12);
+  }, [choices, q]);
   if (!open) {
     return (
       <button type="button" className={`pick-btn${cur ? "" : " empty"}`} onClick={() => setOpen(true)}>
@@ -95,12 +96,15 @@ export function DraftReview({
   products,
   companies,
   branches,
+  carried,
   suggestions,
 }: {
   draft: DraftView;
   products: PickProduct[];
   companies: OrderCustomer[];
   branches: Branch[];
+  /** Each location's item list (its inventory spreadsheet). Locations with no spreadsheet aren't in it. */
+  carried: Record<string, string[]>;
   suggestions: CustomerMatch[];
 }) {
   const router = useRouter();
@@ -130,7 +134,14 @@ export function DraftReview({
     notes: notes || null,
     items,
   });
-  const ready = items.filter((i) => i.product_id && i.qty > 0);
+  // Each location offers only what's on its own inventory spreadsheet.
+  const listId = delivery !== "dropship" ? branchId : "";
+  const listSet = useMemo(() => (listId && carried[listId]?.length ? new Set(carried[listId]) : null), [carried, listId]);
+  const listName = branches.find((b) => b.id === listId)?.name ?? "";
+  const choices = useMemo(() => (listSet ? products.filter((p) => listSet.has(p.id)) : products), [products, listSet]);
+  const isOff = (id: string | null) => !!id && !!listSet && !listSet.has(id);
+  const ready = items.filter((i) => i.product_id && i.qty > 0 && !isOff(i.product_id));
+  const offLines = items.filter((i) => isOff(i.product_id));
   const unmatched = items.filter((i) => !i.product_id && i.raw.trim());
 
   const open = () => {
@@ -257,18 +268,23 @@ export function DraftReview({
 
       <section className="section">
         <div className="row between">
-          <div className="eyebrow">Items ({ready.length} matched{unmatched.length ? `, ${unmatched.length} not matched` : ""})</div>
+          <div className="eyebrow">Items ({ready.length} matched{offLines.length ? `, ${offLines.length} not carried at ${listName}` : ""}{unmatched.length ? `, ${unmatched.length} not matched` : ""})</div>
         </div>
         <div className="intake-lines">
           {items.map((it, i) => (
-            <div key={i} className={`intake-line${it.product_id ? "" : " miss"}`}>
+            <div key={i} className={`intake-line${it.product_id && !isOff(it.product_id) ? "" : " miss"}`}>
               <div className="intake-raw">
                 <span className={(CONF[it.product_id ? it.confidence : "low"] ?? CONF.low).cls}>{(CONF[it.product_id ? it.confidence : "low"] ?? CONF.low).label}</span>
                 <span className="small">{it.raw || <i className="faint">Added by hand</i>}</span>
               </div>
               {it.note ? <div className="tiny" style={{ color: "var(--warn-text)" }}>{it.note}</div> : null}
+              {isOff(it.product_id) ? (
+                <div className="tiny" style={{ color: "var(--warn-text)" }}>
+                  Not on the {listName} list, so it&apos;s left off the order. Pick another product, or a location that carries it.
+                </div>
+              ) : null}
               <div className="intake-pick">
-                <ProductPick products={products} value={it.product_id} onChange={(id) => setItem(i, { product_id: id, confidence: id ? "high" : "low" })} />
+                <ProductPick products={products} choices={choices} value={it.product_id} onChange={(id) => setItem(i, { product_id: id, confidence: id ? "high" : "low" })} />
                 <input
                   className="input sm qty"
                   type="number"
