@@ -27,6 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         can(profile, "inventory") && { href: "/inventory", label: "Inventory", icon: "inventory" },
         (can(profile, "credit_check") || profile.role === "admin") && { href: "/tax", label: "Tax certificates", icon: "tax" },
         (can(profile, "complaints") || profile.role === "admin") && { href: "/complaints", label: "Complaint reports", icon: "complaints" },
+        can(profile, "spray_log") && { href: "/spray-logs", label: "Contractor spray logs", icon: "spraylogs" },
         can(profile, "prf_approve")
           ? { href: "/price-requests/approvals", label: "Price approvals", icon: "prices" }
           : can(profile, "price_requests") && { href: "/price-requests", label: "Price requests", icon: "prices" },
@@ -41,6 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ? opsCan.fieldOnly(profile.ops_role)
         ? [
             { href: "/ops", label: "Home", icon: "home", exact: true },
+            { href: "/ops/field", label: "Work orders", icon: "workorders" },
             ask,
             { href: "/docs", label: "Product docs", icon: "docs" },
             { href: "/academy", label: "Academy", icon: "academy" },
@@ -54,6 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             opsCan.quote(profile.ops_role) && { href: "/ops/quotes", label: "Quotes", icon: "quotes" },
             opsCan.quote(profile.ops_role) && { href: "/takeoff", label: "Takeoffs", icon: "takeoff" },
             opsCan.jobs(profile.ops_role) && { href: "/ops/schedule", label: "Schedule", icon: "schedule" },
+            opsCan.jobs(profile.ops_role) && { href: "/ops/work-orders", label: "Work orders", icon: "workorders" },
             opsCan.dispatch(profile.ops_role) && { href: "/ops/stock", label: "Stock", icon: "stock" },
             opsCan.order(profile.ops_role) && { href: "/order", label: "Order from AMBIT", icon: "cart" },
             opsCan.order(profile.ops_role) && { href: "/orders", label: "My AMBIT orders", icon: "orders" },

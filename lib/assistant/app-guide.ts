@@ -163,7 +163,7 @@ ${TAKEOFF}`,
     who: "customer",
     ops: "crm",
     title: "AMBIT-OPS: leads, customers and settings (contractors)",
-    body: `[AMBIT-OPS](/ops) is the contractor's own business software inside the app: the work in order, left to right: Leads, Customers, Quotes (with Takeoff for measuring plans), Schedule (jobs, the rig board and stock), then Work orders and Invoices (coming Nov 26) and Job costing (Dec 1). Home shows a "Get set up" checklist, your tasks for today and the latest leads.
+    body: `[AMBIT-OPS](/ops) is the contractor's own business software inside the app: the work in order, left to right: Leads, Customers, Quotes (with Takeoff for measuring plans), Schedule (jobs, the rig board and stock), then Work orders (crews fill them in on their phones, even with no signal), Invoices (coming Nov 26) and Job costing (Dec 1). Home shows a "Get set up" checklist, your tasks for today and the latest leads.
 Leads ([Leads](/ops/pipeline)): a board with a column per stage (New lead, Contacted, Appointment set, Quote sent, Follow-up, Won, Lost). Drag a card to another column, or use its "Move to…" menu; on a phone pick the stage at the top and use "Move to…" on the card. Moving a lead to Lost always asks why (Price, Timing, Went with someone else…) so you can see later why jobs were lost. "+ New lead": type a name and phone (or pick an existing customer), the job address, what they need, where the lead came from, a rough value and a follow-up date. If the phone or email already belongs to a customer, it offers to use that customer instead of making a duplicate.
 A lead's page: the stage path across the top (tap a stage to move it), "Next step" button, a box to log a Note, Call, Text or Email to the timeline, Tasks ("Add a task" with a due date and who it's for; tick it when done), the customer's call / text / map buttons, Details (job name, services, rep, source, value, follow-up, job address), "Mark lost" and "Delete this lead".
 Sales reps see only their own leads (the ones assigned to them or that they added). Crews don't see leads, customers or prices.
@@ -204,9 +204,29 @@ ${TAKEOFF}`,
   },
   {
     who: "customer",
+    ops: "crm",
+    title: "AMBIT-OPS: work orders and spray logs (office)",
+    body: `[Work orders](/ops/work-orders) (top menu "Work orders", or the Work orders card on OPS Home): every scheduled trip gets a work order that the crew fills in on their phones, even with no signal (time clock, sets used with A-side and B-side lots, the Spray Job Data Log with readings, areas and board feet, photos, and the customer's signature). Tabs: "To review" (finished by the crew), "In progress", "Not started" (trips that should have started but have no work order) and "Reviewed". Open one to see the hours per person and every punch, the material used with lots (and what came off the rig's or shop's stock), the yield per foam set against the expected yield, each day's spray log with the dew point checks, photos, issues and the signatures. "Spray log PDF" prints it in AMBIT's SDL-01 layout with your logo. "Mark reviewed" (optional note for the crew) or "Reopen for the crew" if something needs fixing; office managers and dispatchers can also fix it themselves in "Field view" ([Field view](/ops/field)). The job page lists each trip's work order. Settings > Work orders ([Work order settings](/ops/settings/work-orders)): "Send finished spray logs to AMBIT tech support" (on by default) sends AMBIT a read-only copy of each finished log (no prices, never the customer's phone or email) so AMBIT can stand behind the foam and compare yields.`,
+  },
+  {
+    who: "staff",
+    perm: "spray_log",
+    title: "Contractor spray logs (AMBIT tech support)",
+    body: `[Contractor spray logs](/spray-logs) (left menu, staff with "Spray job data log"): finished work orders from AMBIT-OPS contractors who send their spray logs to AMBIT. Filters: All, Not opened, Issues, last 90 days or 12 months. Open one for the readings, lots, sets and yield, photos, issues and sign-off (read-only), and "PDF" for the SDL-01 printout. Contractors choose in their Settings > Work orders whether logs come to AMBIT.`,
+  },
+  {
+    who: "customer",
     ops: "field",
     title: "AMBIT-OPS for crews",
-    body: `Crew members, crew leads and subs open to their AMBIT-OPS home. "Your next 7 days" lists every trip they're on: the day(s) and start time, the rig, the customer, the address (tap for the map), the gate code, the work by area (square feet, depth or R-value, sets or bags), who else is on the crew, the office's notes and a button to call the customer. Starting Nov 26 they'll also clock in and out, log the sets sprayed with their lots, and take the job photos there. Crews never see prices, leads or customer lists.`,
+    body: `Crew members, crew leads and subs open to their AMBIT-OPS home. "Your next 7 days" lists every trip they're on: the day(s) and start time, the rig, the customer, the address (tap for the map), the gate code, the work by area, who else is on the crew and the office's notes. Crews never see prices, leads or customer lists.
+
+Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work order filled in on the phone, and it works with NO SIGNAL. Open it once with signal (it downloads your trips and saves itself on the phone); after that it opens and saves with no signal, and the bar at the top says "No signal · 3 changes saved on this phone". Everything is sent by itself when signal comes back (or tap "Send now"); nothing is sent twice. Tap a trip, then:
+- Time: "Clock in" (on site), "Start driving" / "Driving", "Arrived", "Clock out". A crew lead can clock the whole crew ("Whole crew on site", "Clock everyone out"), clock in someone who came along, and fix or delete a punch (change the start and end times).
+- Material: "Add what you used". Foam: pick the set (AMBI-SEAL, AMBI-TITE...), type the pounds read off the A and B drums (the sets work themselves out) or the sets used (2.5 is fine), pick the A-side (ISO) maker and lot and the B-side lot from what's on the rig or in the shop, or type them. Fiberglass: bags and lot. What's used comes off the rig's stock (or the shop's when that lot isn't on the rig).
+- Spray log (AMBIT's Spray Job Data Log, SDL-01, one per day): sky, wind, readings at the start, midday and end (air temp, humidity, substrate temp, wood moisture); the dew point and the margin over it work themselves out (substrate at least 5°F above dew point, wood 19% or less, A/B pressure within 200 psi); equipment and pressures; drum temps; density cup (core density works itself out); safety and re-entry time.
+- Areas: "Use the job's areas", then the square feet, average thickness and passes; board feet and the yield (board feet ÷ sets, and % of the expected yield) show as you go.
+- Photos: before, after and issues ("Take photo"). They're made smaller and upload when there's signal.
+- Finish: a reminder list, issues and notes (did it affect the foam, was AMBIT tech support called), the lead sprayer types their full name, and the customer signs on the phone (or "The customer isn't here to sign" with why). "Finish work order" closes the trip; the office reviews it. After finishing, only time punches can still be sent; the office reopens it for anything else.`,
   },
   {
     who: "admin",

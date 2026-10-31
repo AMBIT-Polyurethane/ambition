@@ -105,9 +105,9 @@ doesn't mistake it for the first box of the page and wipe it out.)
 ### AMBIT-OPS
 
 `/ops`: the contractor's own operations software inside AMBIT Intelligence, built as one straight path: CRM (leads
-and customers), quotes, proposals and e-sign (with Takeoff), jobs, the rig board and stock, then crew work orders
-and invoices (Nov 26) and job costing / yield (Dec 1), for the December 2026 pilot. Database:
-`0031_ops_foundation.sql`, `0032_ops_quotes.sql`, `0033_ops_schedule.sql`. Code: `app/(app)/ops/`, `lib/ops/`, `components/ops/`, the public
+and customers), quotes, proposals and e-sign (with Takeoff), jobs, the rig board and stock, crew work orders (with
+no signal), then invoices (Nov 26) and job costing / yield (Dec 1), for the December 2026 pilot. Database:
+`0031_ops_foundation.sql`, `0032_ops_quotes.sql`, `0033_ops_schedule.sql`, `0036_ops_work_orders.sql`. Code: `app/(app)/ops/`, `lib/ops/`, `components/ops/`, the public
 form in `app/lead/[token]/`, the public proposal in `app/p/[token]/`.
 
 - **Workspaces**: a workspace is a `companies` row with `ops_enabled`. AMBIT turns it on (Admin > AMBIT-OPS
@@ -172,6 +172,32 @@ form in `app/lead/[token]/`, the public proposal in `app/p/[token]/`.
   the lots in `inventory_lines` (ISO-COVESTRO → `ISO` / Covestro), once per order. `/ops/stock`, and the stock check
   `/ops/stock/check?trip=<id>` or `?from=&to=` (`materialNeeds` on the trips' job lines vs rig, shop and open AMBIT
   orders; "Order what's short" fills the cart).
+- **Work orders** (`0036_ops_work_orders.sql`): one `ops_work_orders` row per trip (`open` → `done` when the crew
+  finishes → `reviewed` by the office), with `ops_wo_days` (the Spray Job Data Log, SDL-01, per day: `conditions`,
+  `equipment`, `material`, `quality`, `safety` jsonb, merged key by key), `ops_wo_time` (punches: `drive` / `site`),
+  `ops_wo_materials` (sets or bags, A-side maker + lot, B-side key + lot, the raw lbs / gallons / stroke counter in
+  `measure`, and `taken` = exactly what came off `ops_stock`), `ops_wo_areas` (sq ft × average inches = `bf`,
+  generated) and `ops_wo_photos` (private `ops-photos` bucket, `<workspace>/<trip>/<id>.jpg`). Every change goes
+  through `ops_wo_sync(ops jsonb)`, which applies each change on its own (one bad change never blocks the rest) and
+  is idempotent: the phone makes the ids and sends full rows, so a resend saves once. Material lines take stock off
+  the trip's rig (or the rig's shop when that lot isn't on the rig) and a change or delete puts back exactly
+  `taken`. Crews can only clock themselves (crew leads and the office anyone); after `done` only time punches (and
+  changes made before the finish, by the op's `at`) are accepted; the office reviews (`review`) or reopens
+  (`reopen`). Finishing marks the trip done (and the job when all its trips are). RLS: read for whoever can read the
+  job or is on the trip (`ops_my_trip`), writes only through the function.
+- **Field app with no signal** (`/ops/field`, `components/ops/field/`, `lib/ops/field/`): the page is only a frame;
+  the data is `ops_field_bundle()` (the person's trips for the next 7 days and anything still open, products with
+  yields but no prices, rig and shop lots, the crew list), kept in IndexedDB (`ambit-field-<user>`: `kv` bundle,
+  `outbox` queue, `blobs` photos) by `lib/ops/field/store.ts`. Every tap queues a change and shows it at once
+  (`applyOps`, the same rules as the database); `lib/ops/field/sync.ts` uploads photos, sends the outbox in order in
+  batches, keeps changes that failed for a passing reason, lists the ones the server turned down, then downloads the
+  latest. `public/sw.js` (registered by the field app; excluded from the middleware) keeps `/ops/field` and its
+  `/_next/static` files on the phone: pages come from the network, and with no network any page opens the saved
+  field app; it forgets the saved page on sign-in/out. Office: `/ops/work-orders` (To review, In progress, Not
+  started, Reviewed), `/ops/work-orders/<id>` (`ops_wo_detail()`, `components/ops/work-order-view.tsx`) and its
+  SDL-01 PDF (`lib/ops/work-order-pdf.tsx`); "Field view" lets the office fix one. Settings > Work orders:
+  `share_logs` (default on) sends finished logs to AMBIT. AMBIT staff with `spray_log`: `/spray-logs`
+  (`ops_ambit_spray_logs()`), read-only detail and PDF, no customer phone or email, no prices.
 - **Material order** (`/ops/materials?quote=<id>&option=<id>` or `?takeoff=<id>`, `lib/ops/materials.ts`): foam →
   whole sets of ISO + resin drums from `ambit_skus`, other AMBIT products by SKU, the rest listed as "buy elsewhere";
   the button adds them to the Order cart (merged with anything already there).

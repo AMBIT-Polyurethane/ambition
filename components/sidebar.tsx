@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Blocks,
+  ClipboardCheck,
+  NotebookPen,
   Boxes,
   CalendarRange,
   Package,
@@ -61,6 +63,8 @@ const ICONS = {
   quotes: FileSignature,
   schedule: CalendarRange,
   stock: Package,
+  workorders: ClipboardCheck,
+  spraylogs: NotebookPen,
   settings: Settings,
 } satisfies Record<string, LucideIcon>;
 

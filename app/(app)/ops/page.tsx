@@ -56,11 +56,15 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
       <main className="shell wide">
         {alerts}
         {head}
+        <Link href="/ops/field" className="card ops-field-cta">
+          <ClipboardCheck size={22} />
+          <span className="col tight grow">
+            <b>Work orders</b>
+            <span className="small muted">Clock in, log sets and lots, the spray log, photos and the customer&apos;s signature. Works with no signal.</span>
+          </span>
+          <ChevronRight size={18} className="faint" />
+        </Link>
         <CrewWeek trips={(mine ?? []) as CrewTrip[]} />
-        <div className="card col" style={{ gap: 8 }}>
-          <b><ClipboardCheck size={18} style={{ verticalAlign: -3, marginRight: 6 }} />Work orders are coming</b>
-          <span className="small muted">Starting Nov 26 you&apos;ll also clock in and out, log the sets you spray with their lots, and take the job photos right here.</span>
-        </div>
         <div className="list">
           <Link href="/docs" className="item"><div className="grow"><div className="t">Product docs</div><div className="s">TDS, SDS and install guides</div></div><ChevronRight size={18} className="chev" /></Link>
           <Link href="/academy" className="item"><div className="grow"><div className="t">AMBIT Academy</div><div className="s">Training and certifications</div></div><ChevronRight size={18} className="chev" /></Link>
@@ -89,12 +93,14 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
     supabase.from("ops_quotes").select("status, totals, signed_total, signed_at").eq("company_id", co).in("status", ["draft", "sent", "viewed", "signed"]).order("updated_at", { ascending: false }).limit(500),
   ]);
   const weekEnd = addDays(today, 6);
-  const [{ count: toSchedule }, { count: thisWeek }] = opsCan.jobs(role)
+  const [{ count: toSchedule }, { count: thisWeek }, { count: woReview }, { count: woOpen }] = opsCan.jobs(role)
     ? await Promise.all([
         supabase.from("ops_trips").select("id, job:ops_jobs!inner(status)", { count: "exact", head: true }).eq("company_id", co).eq("status", "unscheduled").eq("job.status", "open"),
         supabase.from("ops_trips").select("id", { count: "exact", head: true }).eq("company_id", co).in("status", ["scheduled", "in_progress"]).lte("start_date", weekEnd).gte("end_date", today),
+        supabase.from("ops_work_orders").select("id", { count: "exact", head: true }).eq("company_id", co).eq("status", "done"),
+        supabase.from("ops_work_orders").select("id", { count: "exact", head: true }).eq("company_id", co).eq("status", "open"),
       ])
-    : [{ count: 0 }, { count: 0 }];
+    : [{ count: 0 }, { count: 0 }, { count: 0 }, { count: 0 }];
   type Qr = { status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; signed_at: string | null };
   const qs = (quoteRows ?? []) as Qr[];
   const qTop = (q: Qr) => Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => Number(o.total) || 0));
@@ -150,7 +156,14 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
       href: "/ops/schedule",
       live: opsCan.jobs(role),
     },
-    { icon: ClipboardCheck, title: "Work orders", value: "Nov 26", sub: "Time, sets and lots from the field", live: false },
+    {
+      icon: ClipboardCheck,
+      title: "Work orders",
+      value: `${woReview ?? 0}`,
+      sub: woReview ? `finished, to review${woOpen ? ` · ${woOpen} in progress` : ""}` : woOpen ? `${woOpen} in progress` : "Time, sets and lots from the field",
+      href: "/ops/work-orders",
+      live: opsCan.jobs(role),
+    },
     { icon: Receipt, title: "Invoices", value: "Nov 26", sub: "Deposit to final", live: false },
     { icon: Gauge, title: "Job costing", value: "Dec 1", sub: "Yield and margin on every job", live: false },
   ];
@@ -281,7 +294,7 @@ async function StaffHome({ supabase, profile, alerts }: { supabase: SupabaseClie
       <section className="ops-hero">
         <span className="eyebrow">Contractor operations software</span>
         <h2>Everything a spray foam and insulation contractor runs on, inside AMBIT Intelligence.</h2>
-        <p>Takeoff is live for AMBIT. Contractors get their own workspace: leads and customers now, quotes, scheduling, work orders, invoices and job costing by Dec 1.</p>
+        <p>Takeoff is live for AMBIT. Contractors get their own workspace: leads, customers, quotes, scheduling and crew work orders now; invoices and job costing by Dec 1.</p>
       </section>
 
       {admin ? (

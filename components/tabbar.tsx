@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { FileSignature, FileText, GraduationCap, House, ShoppingCart, SquareKanban, User } from "lucide-react";
+import { ClipboardCheck, FileSignature, FileText, GraduationCap, House, ShoppingCart, SquareKanban, User } from "lucide-react";
 import { cartCount, onCartChange, readCart } from "@/lib/cart";
 
 const TABS = [
@@ -25,6 +25,7 @@ const OPS_TABS = [
 // Crews: their work, then learning.
 const CREW_TABS = [
   { href: "/ops", label: "Home", icon: House, match: (p: string) => p === "/ops" || p === "/" },
+  { href: "/ops/field", label: "Work", icon: ClipboardCheck, match: (p: string) => p.startsWith("/ops/field") },
   { href: "/academy", label: "Academy", icon: GraduationCap, match: (p: string) => p.startsWith("/academy") },
   { href: "/docs", label: "Docs", icon: FileText, match: (p: string) => p.startsWith("/docs") },
   { href: "/profile", label: "Profile", icon: User, match: (p: string) => p.startsWith("/profile") },

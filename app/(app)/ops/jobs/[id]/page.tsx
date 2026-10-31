@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarRange, CircleAlert, CircleCheck, FileSignature, MapPin, Phone, SquareKanban } from "lucide-react";
+import { CalendarRange, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, FileSignature, MapPin, Phone, SquareKanban } from "lucide-react";
 import { requireOps } from "@/lib/ops/server";
 import { opsCan } from "@/lib/ops/roles";
 import { addressOf, loadCrew, loadJob, loadRigs } from "@/lib/ops/jobs-server";
@@ -22,7 +22,12 @@ export default async function JobPage({ params, searchParams }: { params: Promis
   const loaded = await loadJob(supabase, id);
   if (!loaded) notFound();
   const { job, trips, lines, tripCrew } = loaded;
-  const [rigs, crew] = await Promise.all([loadRigs(supabase, ws.company.id, true), loadCrew(supabase, ws.company.id, true)]);
+  const [rigs, crew, { data: woRows }] = await Promise.all([
+    loadRigs(supabase, ws.company.id, true),
+    loadCrew(supabase, ws.company.id, true),
+    supabase.from("ops_work_orders").select("id, trip_id, status, started_at, finished_at, issue").eq("job_id", id),
+  ]);
+  const wos = (woRows ?? []) as { id: string; trip_id: string; status: string; started_at: string | null; finished_at: string | null; issue: string | null }[];
   const dispatch = opsCan.dispatch(ws.role);
   const addr = addressOf(job.property);
   const cancelled = job.status === "cancelled";
@@ -68,6 +73,29 @@ export default async function JobPage({ params, searchParams }: { params: Promis
         </div>
 
         <aside className="col" style={{ gap: 14, minWidth: 0 }}>
+          {trips.some((t) => t.status !== "unscheduled" && t.status !== "cancelled") ? (
+            <section className="card col" style={{ gap: 8 }}>
+              <b><ClipboardCheck size={17} style={{ verticalAlign: -3, marginRight: 6 }} />Work orders</b>
+              {trips.filter((t) => t.status !== "unscheduled" && t.status !== "cancelled").map((t) => {
+                const w = wos.find((x) => x.trip_id === t.id);
+                return w ? (
+                  <Link key={t.id} href={`/ops/work-orders/${w.id}`} className="row between small" style={{ gap: 8, color: "inherit" }}>
+                    <span className="ellipsis">{t.name}{w.issue ? " · issue" : ""}</span>
+                    <span className="row" style={{ gap: 6 }}>
+                      <span className={`pill ${w.status === "open" ? "warn" : "ok"}`}>{w.status === "open" ? "In progress" : w.status === "done" ? "To review" : "Reviewed"}</span>
+                      <ChevronRight size={15} className="faint" />
+                    </span>
+                  </Link>
+                ) : (
+                  <div key={t.id} className="row between small" style={{ gap: 8 }}>
+                    <span className="ellipsis">{t.name}</span>
+                    <span className="pill grey">Not started</span>
+                  </div>
+                );
+              })}
+              <span className="tiny faint">The crew fills these in on their phones (Work orders), even with no signal.</span>
+            </section>
+          ) : null}
           <form action={saveJobNotes} className="card col" style={{ gap: 8 }}>
             <input type="hidden" name="id" value={job.id} />
             <b>Notes for the crew</b>

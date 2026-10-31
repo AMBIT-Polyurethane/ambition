@@ -13,7 +13,7 @@ const STEPS = [
   { href: "/ops/customers", label: "Customers", icon: Contact },
   { href: "/ops/quotes", label: "Quotes", icon: FileSignature, also: ["/takeoff"] },
   { href: "/ops/schedule", label: "Schedule", icon: CalendarRange, also: ["/ops/jobs", "/ops/stock"] },
-  { href: "/ops/work-orders", label: "Work orders", icon: ClipboardCheck, soon: "Nov 26" },
+  { href: "/ops/work-orders", label: "Work orders", icon: ClipboardCheck, also: ["/ops/field"] },
   { href: "/ops/invoices", label: "Invoices", icon: Receipt, soon: "Nov 26" },
   { href: "/ops/costing", label: "Job costing", icon: Gauge, soon: "Dec 1" },
 ] as const;
