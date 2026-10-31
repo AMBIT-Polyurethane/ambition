@@ -25,7 +25,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const hub = await loadHub(supabase, pick === "all" ? "all" : [pick]);
   const rep = buildReport(hub, key);
   const meta = REPORTS.find((r) => r.key === key)!;
-  const moneyCol = rep.head.map((h) => /value|\$|sell price/i.test(h));
+  const moneyCol = rep.head.map((h, c) => rep.num[c] && /value|\$|sell price/i.test(h));
 
   return (
     <main className="shell wide">

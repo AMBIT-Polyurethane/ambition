@@ -13,7 +13,12 @@ type Rule = { text?: string; pick?: string; min?: string; max?: string };
 const isoDay = /(\d{4})-(\d{2})-(\d{2})/g;
 const show = (v: Cell, money: boolean) => {
   if (v === null || v === undefined || v === "") return "";
-  if (typeof v === "number") return money ? v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }) : v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  // Money: whole dollars for big amounts, cents for prices under $1,000.
+  if (typeof v === "number") {
+    if (!money) return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    const d = Math.abs(v) < 1000 && !Number.isInteger(v) ? 2 : 0;
+    return v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: d, maximumFractionDigits: d });
+  }
   return v.replace(isoDay, (_, y: string, m: string, d: string) => `${Number(m)}/${Number(d)}/${y.slice(2)}`);
 };
 const plain = (v: Cell) => (v === null || v === undefined ? "" : String(v));

@@ -106,3 +106,34 @@ export async function cancelTransfer(form: FormData) {
   revalidatePath("/inventory", "layout");
   redirect(`/inventory/transfers/${id}?msg=${encodeURIComponent("Cancelled. The stock is back at this location.")}`);
 }
+
+/** Admins: each item's List value (what it's worth on the Inventory Hub dashboards only). Blank or 0 = none. */
+export async function saveListValues(changes: { id: string; value: string }[]): Promise<{ ok: true; saved: number } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s?.profile || s.profile.role !== "admin" || s.profile.status !== "active") return { ok: false, error: "Only admins can change List values." };
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const set: { product_id: string; list_value: number; updated_at: string; updated_by_name: string | null }[] = [];
+  const clear: string[] = [];
+  const now = new Date().toISOString();
+  for (const c of (changes ?? []).slice(0, 2000)) {
+    if (!UUID.test(String(c?.id ?? ""))) continue;
+    const raw = String(c.value ?? "").replace(/[$,\s]/g, "");
+    if (raw === "" || Number(raw) === 0) {
+      clear.push(c.id);
+      continue;
+    }
+    const v = Number(raw);
+    if (!Number.isFinite(v) || v < 0 || v > 10_000_000) return { ok: false, error: `"${c.value}" isn't a dollar amount.` };
+    set.push({ product_id: c.id, list_value: Math.round(v * 100) / 100, updated_at: now, updated_by_name: s.profile.full_name ?? s.profile.email });
+  }
+  if (set.length) {
+    const { error } = await s.supabase.from("product_values").upsert(set, { onConflict: "product_id" });
+    if (error) return { ok: false, error: /product_values/.test(error.message) ? "The database update for List values (0039) hasn't been run yet." : error.message };
+  }
+  if (clear.length) {
+    const { error } = await s.supabase.from("product_values").delete().in("product_id", clear);
+    if (error) return { ok: false, error: error.message };
+  }
+  revalidatePath("/inventory", "layout");
+  return { ok: true, saved: set.length + clear.length };
+}

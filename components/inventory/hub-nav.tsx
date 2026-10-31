@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { ArrowLeftRight, BarChart3, Boxes, ClipboardList, LayoutDashboard, Truck } from "lucide-react";
+import { ArrowLeftRight, BarChart3, Boxes, ClipboardList, LayoutDashboard, Tags, Truck } from "lucide-react";
 import { can, type Perm } from "@/lib/access";
 import type { Profile } from "@/lib/types";
 
 // The Inventory Hub's sections. Each person sees the ones they have access to (Admin > Users).
 
-export type HubTab = "dashboard" | "stock" | "receiving" | "transfers" | "counts" | "reports";
+export type HubTab = "dashboard" | "stock" | "receiving" | "transfers" | "counts" | "reports" | "values";
 
+// perms: [] = admins only.
 const TABS: { key: HubTab; label: string; href: string; perms: Perm[]; icon: typeof Boxes }[] = [
   { key: "dashboard", label: "Dashboard", href: "/inventory", perms: ["inv_reports"], icon: LayoutDashboard },
   { key: "stock", label: "Stock", href: "/inventory/stock", perms: ["inventory"], icon: Boxes },
@@ -14,9 +15,11 @@ const TABS: { key: HubTab; label: string; href: string; perms: Perm[]; icon: typ
   { key: "transfers", label: "Transfers", href: "/inventory/transfers", perms: ["transfers"], icon: ArrowLeftRight },
   { key: "counts", label: "Counts", href: "/inventory/counts", perms: ["inventory"], icon: ClipboardList },
   { key: "reports", label: "Reports", href: "/inventory/reports", perms: ["inv_reports"], icon: BarChart3 },
+  { key: "values", label: "List values", href: "/inventory/values", perms: [], icon: Tags },
 ];
 
-export const hubTabs = (p: Pick<Profile, "role" | "status"> & { perms?: string[] | null }) => TABS.filter((t) => t.perms.some((k) => can(p, k)));
+export const hubTabs = (p: Pick<Profile, "role" | "status"> & { perms?: string[] | null }) =>
+  TABS.filter((t) => (t.perms.length ? t.perms.some((k) => can(p, k)) : p.role === "admin" && p.status === "active"));
 
 /** Where someone lands in the hub: the dashboard if they have it, else the first section they can use. */
 export function hubHome(p: Pick<Profile, "role" | "status"> & { perms?: string[] | null }, branch?: string | null): string | null {

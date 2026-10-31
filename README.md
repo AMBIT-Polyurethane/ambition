@@ -376,11 +376,13 @@ before, spot checks per location).
 ### Inventory Hub (dashboard, Receiving Reports, transfers, reports)
 
 `/inventory` is the hub (`components/inventory/hub-nav.tsx` tabs: Dashboard, Stock, Receiving, Transfers, Counts,
-Reports; each shown by permission). Three permissions from `0037_inventory_hub.sql` (everyone with `inventory` got
+Reports, and List values for admins; each shown by permission). Three permissions from `0037_inventory_hub.sql` (everyone with `inventory` got
 them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock links redirect to `/inventory/stock`.
 - **Dashboard and reports** (`lib/inventory/hub.ts` → `loadHub(db, branches | "all")`, `lib/inventory/reports.ts`,
-  CSV at `/inventory/reports/export`): stock value at sell price (average order price over 6 months, else list price;
-  ISO brands use ISO A-Side's), reorder (items with a Reorder Point on the sheet; suggested ROP = 21 days of 90-day
+  CSV at `/inventory/reports/export`): stock value is an estimated sell value: the item's List value
+  (`product_values`, `0039_inventory_list_values.sql`, set by admins at `/inventory/values`; readable only by staff with
+  inventory access, so never on order screens or to customers), else the location's COUNT SHEET Sell Price
+  (`inventory.sell_price`), else the catalog `list_price`. Order prices are never used to value stock. Reorder (items with a Reorder Point on the sheet; suggested ROP = 21 days of 90-day
   sales), expiring foam lots (`use_by`), aging (days since the last order line at that location, or since the first
   order / sheet connection there), movement (completed orders, received lines, transfers), counts (spot checks and
   reconciliations, 90 days). Charts are plain HTML (`components/inventory/charts.tsx`, colors `--viz-1/--viz-2`

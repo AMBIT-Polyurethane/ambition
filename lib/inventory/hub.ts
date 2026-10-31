@@ -7,12 +7,15 @@ import { every } from "@/lib/inventory/pages";
 // The Inventory Hub's numbers: stock value, reorder, expiring foam lots, movement, aging stock to put
 // on sale, and count accuracy, for one location or all of them. Read with the signed-in person's access.
 //
-// Dollar values are at sell price: the Sell Price on that location's COUNT SHEET; if it's blank, the
-// average price on the last 6 months of orders (what customers actually paid), else the list price.
-// Spray foam has no sheet or list price (it's priced per customer), so its value comes from orders.
-// Anything with none of these shows as "no price".
+// Stock is valued at an estimated sell value: the item's List value (set by admins in Inventory Hub >
+// List values, used only here, never on order screens); if it has none, the Sell Price on that location's
+// COUNT SHEET; else the catalog price. Order prices are never used to value stock. Anything with none of
+// these shows as "no value". Sales dollars (shipped, top sellers) are what the orders actually sold for.
 
 export type HubBranch = { id: string; name: string; state: string };
+
+export type PriceFrom = "list" | "sheet" | "catalog";
+export const PRICE_FROM: Record<PriceFrom, string> = { list: "List value", sheet: "Sheet Sell Price", catalog: "Catalog price" };
 
 export type HubItem = {
   branch: string;
@@ -29,6 +32,8 @@ export type HubItem = {
   rop: number | null;
   max: number | null;
   price: number | null;
+  /** Where the value each came from. */
+  priceFrom: PriceFrom | null;
   value: number;
   /** Units shipped (completed orders) in the last 30 / 90 days. */
   sold30: number;
@@ -72,6 +77,8 @@ export type Hub = {
   moves: MoveRow[];
   counts: CountRow[];
   categories: { name: string; value: number; items: number }[];
+  /** Estimated stock value at each location in scope. */
+  byBranch: { branch: string; value: number; items: number; noPrice: number }[];
   kpi: {
     value: number;
     pricedItems: number;
@@ -137,12 +144,13 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
     moves: [],
     counts: [],
     categories: [],
+    byBranch: [],
     kpi: { value: 0, pricedItems: 0, noPrice: 0, reorder: 0, withRop: 0, stocked: 0, expiringLots: 0, expiringDrums: 0, expiringValue: 0, expiredLots: 0, expiredDrums: 0, agingValue: 0, agingItems: 0, shipped30: 0, received30: 0, inTransitOut: 0, inTransitIn: 0, expected: 0, accuracy: null, countLines: 0 },
     trackingStart: {},
   };
   if (!ids.length) return empty;
 
-  const [invRes, lotRes, levelRes, orderRes, priceRes, inRes, trOutRes, trInRes, trLineRes, countRes, expRes, firstRes] = await Promise.all([
+  const [invRes, lotRes, levelRes, orderRes, valueRes, inRes, trOutRes, trInRes, trLineRes, countRes, expRes, firstRes] = await Promise.all([
     every((a, z) =>
       db
         .from("inventory")
@@ -165,16 +173,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
         .order("id")
         .range(a, z),
     ),
-    every((a, z) =>
-      db
-        .from("order_items")
-        .select("product_id, qty, unit_price, ord:orders!inner(status, created_at)")
-        .neq("ord.status", "cancelled")
-        .gte("ord.created_at", since180)
-        .gt("unit_price", 0)
-        .order("id")
-        .range(a, z),
-    ),
+    every((a, z) => db.from("product_values").select("product_id, list_value").order("product_id").range(a, z)),
     every((a, z) =>
       db
         .from("inbound_deliveries")
@@ -214,34 +213,28 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
     trackingStart[b] = first ?? today;
   }
 
-  // ---- prices: the location's COUNT SHEET Sell Price; if it has none, what customers paid lately, else
-  // the list price. ISO brands use ISO A-Side's order price.
+  // ---- value each: the item's List value (dashboards only); else the location's COUNT SHEET Sell Price;
+  // else the catalog price. Never what orders were priced at.
   type Inv = { branch_id: string; product_id: string; sku: string; on_hand: number | null; reorder_point: number | null; max_qty: number | null; sell_price: number | null; product: Prod | null };
   const inv = invRes as unknown as Inv[];
-  const paid = new Map<string, { q: number; v: number }>();
-  for (const r of priceRes as unknown as { product_id: string | null; qty: number; unit_price: number }[]) {
-    if (!r.product_id) continue;
-    const cur = paid.get(r.product_id) ?? { q: 0, v: 0 };
-    cur.q += n(r.qty);
-    cur.v += n(r.qty) * n(r.unit_price);
-    paid.set(r.product_id, cur);
-  }
+  const listValue = new Map<string, number>();
+  for (const r of valueRes as unknown as { product_id: string; list_value: number | null }[]) if (r.list_value !== null && Number(r.list_value) > 0) listValue.set(r.product_id, Number(r.list_value));
   const parentOf = (p: Prod | null) => p?.stock_of ?? p?.id ?? "";
-  const priceOf = (p: Prod | null): number | null => {
-    if (!p) return null;
-    for (const id of [p.id, p.stock_of]) {
-      if (!id) continue;
-      const x = paid.get(id);
-      if (x && x.q > 0) return Math.round((x.v / x.q) * 100) / 100;
-    }
-    return p.list_price !== null && p.list_price !== undefined && Number(p.list_price) > 0 ? Number(p.list_price) : null;
-  };
   const prodById = new Map<string, Prod>();
   for (const r of inv) if (r.product) prodById.set(r.product.id, r.product);
   const sheetPrice = new Map<string, number>();
   for (const r of inv) if (r.sell_price !== null && Number(r.sell_price) > 0) sheetPrice.set(`${r.branch_id}|${r.product_id}`, Number(r.sell_price));
+  const valueAt = (branch: string, id: string): { price: number; from: PriceFrom } | null => {
+    const lv = listValue.get(id);
+    if (lv) return { price: lv, from: "list" };
+    const sp = sheetPrice.get(`${branch}|${id}`);
+    if (sp) return { price: sp, from: "sheet" };
+    const lp = prodById.get(id)?.list_price;
+    if (lp !== null && lp !== undefined && Number(lp) > 0) return { price: Number(lp), from: "catalog" };
+    return null;
+  };
   /** What one of this item is worth at this location. */
-  const priceAt = (branch: string, id: string): number | null => sheetPrice.get(`${branch}|${id}`) ?? priceOf(prodById.get(id) ?? null);
+  const priceAt = (branch: string, id: string): number | null => valueAt(branch, id)?.price ?? null;
 
   // ---- sales (completed orders) by location and item; ISO A-Side counts for every ISO brand
   type OrderLine = { product_id: string | null; qty: number; line_total: number | null; ord: { branch_id: string; status: string; created_at: string; completed_at: string | null } };
@@ -348,7 +341,8 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
       const s = sold.get(`${r.branch_id}|${parentOf(p)}`) ?? sold.get(key);
       const lv = level.get(key);
       const onHand = n(r.on_hand);
-      const price = priceAt(r.branch_id, p.id);
+      const val = valueAt(r.branch_id, p.id);
+      const price = val?.price ?? null;
       const myLots = (lotsOf.get(key) ?? []).filter((l) => n(l.remaining) > 0);
       const start = trackingStart[r.branch_id] ?? today;
       const last = s?.last ?? null;
@@ -366,6 +360,7 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
         rop: r.reorder_point === null ? null : n(r.reorder_point),
         max: r.max_qty === null ? null : n(r.max_qty),
         price,
+        priceFrom: val?.from ?? null,
         value: price ? Math.max(0, onHand) * price : 0,
         sold30: s?.s30 ?? 0,
         sold90: s?.s90 ?? 0,
@@ -460,6 +455,10 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
     moves,
     counts,
     categories: [...catMap.values()].sort((a, z) => z.value - a.value),
+    byBranch: ids.map((b) => {
+      const here = stocked.filter((i) => i.branch === b);
+      return { branch: b, value: here.reduce((s, i) => s + i.value, 0), items: here.length, noPrice: here.filter((i) => !i.price).length };
+    }),
     trackingStart,
     kpi: {
       value: stocked.reduce((s, i) => s + i.value, 0),

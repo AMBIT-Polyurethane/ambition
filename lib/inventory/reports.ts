@@ -1,5 +1,5 @@
 import "server-only";
-import { AGING_DAYS, EXPIRING_DAYS, suggestedRop, type Hub } from "@/lib/inventory/hub";
+import { AGING_DAYS, EXPIRING_DAYS, PRICE_FROM, suggestedRop, type Hub } from "@/lib/inventory/hub";
 
 // The Inventory Hub reports: one table each, shown on screen and downloaded as CSV.
 
@@ -8,7 +8,7 @@ export const REPORTS = [
   { key: "expiring", label: "Expiring foam", hint: `Every foam lot in stock, the soonest to expire first (${EXPIRING_DAYS} days or less highlighted).` },
   { key: "aging", label: "Aging stock", hint: `Stock that hasn't sold lately: put the ${AGING_DAYS}+ day items on sale before they sit on the books.` },
   { key: "movement", label: "Movement", hint: "What sold, came in and moved between locations in the last 90 days." },
-  { key: "value", label: "Stock value", hint: "What's on hand, at sell price, by item and group." },
+  { key: "value", label: "Stock value", hint: "What's on hand and what it would sell for (estimate), by item and group." },
   { key: "counts", label: "Counts", hint: "Spot checks and reconciliations in the last 90 days: how many lines matched and the difference." },
 ] as const;
 export type ReportKey = (typeof REPORTS)[number]["key"];
@@ -90,12 +90,12 @@ export function buildReport(hub: Hub, key: ReportKey): Report {
     return {
       key,
       title,
-      head: ["Location", "Group", "SKU", "Item", "On hand", "Unit", "Sell price", "Value"],
-      num: [false, false, false, false, true, false, true, true],
-      rows: rows.map((i) => [loc(i.branch), i.category, i.sku, i.name, r2(i.on_hand), i.unit, i.price === null ? "no price" : usd(i.price), usd(i.value)]),
+      head: ["Location", "Group", "SKU", "Item", "On hand", "Unit", "Value each", "Value from", "Value"],
+      num: [false, false, false, false, true, false, true, false, true],
+      rows: rows.map((i) => [loc(i.branch), i.category, i.sku, i.name, r2(i.on_hand), i.unit, i.price === null ? "no value" : usd(i.price), i.priceFrom ? PRICE_FROM[i.priceFrom] : "", usd(i.value)]),
       flag: rows.map((i) => i.price === null),
-      total: ["Total", "", "", "", "", "", "", usd(rows.reduce((s, i) => s + i.value, 0))],
-      note: "Sell price = the Sell Price on the location's COUNT SHEET; if it's blank, what customers paid on orders in the last 6 months, else the list price. Highlighted items have none of these, so they aren't in the total.",
+      total: ["Total", "", "", "", "", "", "", "", usd(rows.reduce((s, i) => s + i.value, 0))],
+      note: "An estimate of what the stock would sell for. Value each = the item's List value (Inventory Hub > List values); if it has none, the Sell Price on the location's COUNT SHEET; else the catalog price. Highlighted items have none of these, so they aren't in the total.",
     };
   }
 

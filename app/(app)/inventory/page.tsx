@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ArrowLeftRight, ChevronRight, ClipboardCheck, FileDown, Hourglass, ScanLine, Truck } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, ChevronRight, ClipboardCheck, FileDown, Hourglass, ScanLine, Tags, Truck } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { can, seesInventory } from "@/lib/access";
 import { dateShort, plural } from "@/lib/format";
@@ -96,7 +96,7 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
       ) : null}
 
       <section className="hub-kpis" aria-label="Key numbers">
-        {tile(`/inventory/reports?r=value&${q}`, "Stock value", usd(k.value), k.noPrice ? `${k.noPrice} ${k.noPrice === 1 ? "item has" : "items have"} no price yet` : `${k.pricedItems} items in stock`)}
+        {tile(`/inventory/reports?r=value&${q}`, "Stock value (estimate)", usd(k.value), k.noPrice ? `${k.noPrice} ${k.noPrice === 1 ? "item has" : "items have"} no value yet` : `${k.pricedItems} items in stock`, k.noPrice ? "warn" : undefined)}
         {tile(
           `/inventory/reports?r=reorder&${q}`,
           "At reorder point",
@@ -125,8 +125,22 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
       </section>
 
       <div className="hub-grid">
+        {many ? (
+          <section className="card col hub-card wide">
+            <div className="row between"><b>Estimated stock value by location</b><Link className="tiny" href={`/inventory/reports?r=value&${q}`}>Report</Link></div>
+            <BarList
+              rows={hub.byBranch.map((x) => ({
+                label: name(x.branch),
+                value: Math.round(x.value),
+                note: `${whole(x.items)} ${x.items === 1 ? "item" : "items"} in stock${x.noPrice ? ` · ${x.noPrice} with no value yet` : ""}`,
+              }))}
+              caption="Estimated sell value of the stock at each location"
+            />
+          </section>
+        ) : null}
+
         <section className="card col hub-card wide">
-          <div className="row between"><b>Shipped vs. received</b><span className="tiny faint">Weekly, last 12 weeks, at sell price</span></div>
+          <div className="row between"><b>Shipped vs. received</b><span className="tiny faint">Weekly, last 12 weeks</span></div>
           <ColumnChart
             rows={weeks}
             series={[{ key: "shipped", label: "Shipped (orders)" }, { key: "received", label: "Received (trucks and transfers)" }]}
@@ -177,7 +191,7 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
               {toSell.map((i, x) => (
                 <div key={x} className="hub-row">
                   <span className="grow ellipsis"><b>{i.sku}</b> {i.name}{many ? ` · ${name(i.branch)}` : ""}</span>
-                  <span className="v">{whole(i.on_hand)} · {i.value ? usd(i.value) : "no price"} · {i.idle}d</span>
+                  <span className="v">{whole(i.on_hand)} · {i.value ? usd(i.value) : "no value"} · {i.idle}d</span>
                 </div>
               ))}
             </div>
@@ -210,6 +224,13 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
             <ChevronRight size={16} />
           </Link>
         ) : null}
+        {profile.role === "admin" ? (
+          <Link href="/inventory/values" className="inv-tool">
+            <Tags size={20} />
+            <span className="grow"><b>List values</b><span className="tiny faint">What each item is worth on these dashboards{k.noPrice ? ` · ${k.noPrice} missing` : ""}</span></span>
+            <ChevronRight size={16} />
+          </Link>
+        ) : null}
         <Link href={`/inventory/reports?${q}`} className="inv-tool">
           <FileDown size={20} />
           <span className="grow"><b>Reports</b><span className="tiny faint">Reorder, expiring, aging, movement, value, counts</span></span>
@@ -225,8 +246,9 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
       </div>
 
       <p className="tiny faint" style={{ margin: 0 }}>
-        Dollars are at sell price: the Sell Price on each location&apos;s COUNT SHEET; if it&apos;s blank, what customers paid on orders in the last 6 months (that&apos;s how spray foam is valued), else the list price.
-        Shipped counts completed orders. {starts.length ? `The app has tracked sales here since ${dateShort(starts[0])}, so aging fills in over time.` : ""}
+        Stock value is an estimate of what the stock would sell for: each item&apos;s List value
+        {profile.role === "admin" ? <> (<Link href="/inventory/values">set them in List values</Link>)</> : null}; if it has none, the Sell Price on the
+        location&apos;s COUNT SHEET; else the catalog price. Shipped is what completed orders sold for. Received is valued the same way as stock. {starts.length ? `The app has tracked sales here since ${dateShort(starts[0])}, so aging fills in over time.` : ""}
       </p>
     </main>
   );
