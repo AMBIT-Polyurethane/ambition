@@ -7,7 +7,7 @@ import { saveUser } from "@/app/(app)/admin/actions";
 import { AccessPicker } from "@/components/access-picker";
 import { ResendInvite } from "@/components/invite-form";
 import { cancelInvite } from "./invite-actions";
-import { UserPlus } from "lucide-react";
+import { Pencil, UserPlus } from "lucide-react";
 import { needsRole, roleLabel } from "@/lib/access";
 import type { Branch, Company, Profile } from "@/lib/types";
 
@@ -100,6 +100,21 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     ) : null}
                   </div>
                   <span className="tiny faint">Joined {dateShort(u.created_at)}</span>
+                </div>
+                <div className="grid3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                  <label className="field">
+                    <span className="label">Name</span>
+                    <input className="input sm" name="full_name" defaultValue={u.full_name ?? ""} placeholder="First and last name" />
+                  </label>
+                  <label className="field">
+                    <span className="label">Cell phone</span>
+                    <input className="input sm" name="phone" type="tel" defaultValue={u.phone ?? ""} placeholder="Optional" />
+                  </label>
+                  <label className="field">
+                    <span className="label">Login email</span>
+                    <input className="input sm" name="email" type="email" defaultValue={u.email} disabled={isMe} title={isMe ? "Another admin has to change your own login email" : "Changes the email they sign in with"} />
+                    {isMe ? <input type="hidden" name="email" value={u.email} /> : null}
+                  </label>
                 </div>
                 {u.role !== "customer" && u.status === "active" ? (
                   <div className="small">
@@ -206,6 +221,7 @@ async function InvitedList({ supabase }: { supabase: Awaited<ReturnType<typeof r
                   {!expired ? ` · Link works until ${dateShort(r.expires_at)}` : ""}
                 </div>
                 <ResendInvite id={r.id}>
+                  <Link href={`/admin/users/invites/${r.id}`} className="btn sm ghost"><Pencil size={14} /> Edit</Link>
                   <form action={cancelInvite}>
                     <input type="hidden" name="id" value={r.id} />
                     <button type="submit" className="linkbtn small">Cancel invite</button>
@@ -221,13 +237,14 @@ async function InvitedList({ supabase }: { supabase: Awaited<ReturnType<typeof r
           <div className="eyebrow">Recently set up</div>
           <div className="list">
             {joined.map((r) => (
-              <div key={r.id} className="item" style={{ minHeight: 56 }}>
+              <Link key={r.id} href={`/admin/users?tab=${r.role === "customer" ? "customer" : "employee"}&q=${encodeURIComponent(r.email)}`} className="item" style={{ minHeight: 56 }}>
                 <div className="grow">
                   <div className="t">{r.full_name ?? r.email}</div>
                   <div className="s">{what(r)} · joined {dateShort(r.accepted_at)}</div>
                 </div>
                 <span className="pill ok">Active</span>
-              </div>
+                <span className="linkbtn small">Edit account</span>
+              </Link>
             ))}
           </div>
         </section>

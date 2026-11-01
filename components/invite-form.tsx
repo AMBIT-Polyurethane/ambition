@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { Check, CircleAlert, CircleCheck, Copy, Mail, MessageSquare, RefreshCw, UserPlus } from "lucide-react";
-import { createAccount, resendInvite } from "@/app/(app)/admin/users/invite-actions";
+import { createAccount, resendInvite, updateInvite } from "@/app/(app)/admin/users/invite-actions";
 import { CustomerPicker } from "@/components/customer-picker";
 import { Submit } from "@/components/forms";
 import { PERMS, ROLES, type Perm } from "@/lib/access";
@@ -11,18 +11,35 @@ import type { InviteResult } from "@/lib/invites";
 import type { OrderCustomer } from "@/lib/customers";
 import type { Branch } from "@/lib/types";
 
-// Admin → Accounts → Create an account.
+// Admin → Accounts → Create an account, and Edit invite (the same form, filled in, for an invite
+// that hasn't been used yet).
 
-export function InviteForm({ customers, branches }: { customers: OrderCustomer[]; branches: Branch[] }) {
-  const [state, action] = useActionState<InviteResult, FormData>(createAccount, null);
-  const [email, setEmail] = useState("");
-  const [kind, setKind] = useState<"contractor" | "employee">("contractor");
-  const [picked, setPicked] = useState(false); // the admin chose the type themselves
-  const [companyId, setCompanyId] = useState("");
+/** An invite being edited. */
+export type EditInvite = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  phone: string | null;
+  role: "customer" | "employee" | "admin";
+  company_id: string | null;
+  branch_id: string | null;
+  job_role: string | null;
+  perms: string[];
+  note: string | null;
+};
+
+export function InviteForm({ customers, branches, invite }: { customers: OrderCustomer[]; branches: Branch[]; invite?: EditInvite }) {
+  const [state, action] = useActionState<InviteResult, FormData>(invite ? updateInvite : createAccount, null);
+  const [email, setEmail] = useState(invite?.email ?? "");
+  const [kind, setKind] = useState<"contractor" | "employee">(invite ? (invite.role === "customer" ? "contractor" : "employee") : "contractor");
+  const [picked, setPicked] = useState(Boolean(invite)); // the admin chose the type themselves
+  const [companyId, setCompanyId] = useState(invite?.company_id ?? "");
   const [list, setList] = useState(customers);
-  const [branchId, setBranchId] = useState("");
-  const [job, setJob] = useState("");
-  const [perms, setPerms] = useState<Set<string>>(new Set());
+  const [branchId, setBranchId] = useState(invite?.branch_id ?? "");
+  const [job, setJob] = useState(invite ? (invite.role === "admin" ? "admin" : invite.job_role ?? "") : "");
+  const [perms, setPerms] = useState<Set<string>>(new Set(invite?.perms ?? []));
+  const emailChanged = Boolean(invite) && email.trim().toLowerCase() !== (invite?.email ?? "").toLowerCase();
+  const [resend, setResend] = useState(false);
 
   const ambit = email.trim().toLowerCase().endsWith("@ambitpu.com");
   const admin = job === "admin";
@@ -48,6 +65,7 @@ export function InviteForm({ customers, branches }: { customers: OrderCustomer[]
 
   return (
     <form action={action} className="col" style={{ gap: 18 }}>
+      {invite ? <input type="hidden" name="id" value={invite.id} /> : null}
       <section className="card col" style={{ gap: 14 }}>
         <div className="eyebrow">1 · Who is it?</div>
         <label className="field">
@@ -67,15 +85,18 @@ export function InviteForm({ customers, branches }: { customers: OrderCustomer[]
             placeholder="name@company.com"
             required
           />
+          {emailChanged ? (
+            <span className="tiny warn-text">New address: a fresh invite link goes to it when you save, and the old link stops working.</span>
+          ) : null}
         </label>
         <div className="grid2">
           <label className="field">
             <span className="label">Name</span>
-            <input className="input" name="full_name" autoComplete="off" placeholder="First and last name" />
+            <input className="input" name="full_name" autoComplete="off" placeholder="First and last name" defaultValue={invite?.full_name ?? ""} />
           </label>
           <label className="field">
             <span className="label">Cell phone (optional)</span>
-            <input className="input" name="phone" type="tel" inputMode="tel" autoComplete="off" placeholder="To text them the link" />
+            <input className="input" name="phone" type="tel" inputMode="tel" autoComplete="off" placeholder="To text them the link" defaultValue={invite?.phone ?? ""} />
           </label>
         </div>
       </section>
@@ -158,22 +179,40 @@ export function InviteForm({ customers, branches }: { customers: OrderCustomer[]
       </section>
 
       <section className="card col" style={{ gap: 14 }}>
-        <div className="eyebrow">3 · Send the invite</div>
+        <div className="eyebrow">{invite ? "3 · Save" : "3 · Send the invite"}</div>
         <label className="field">
           <span className="label">Add a note to the email (optional)</span>
-          <textarea className="textarea" name="note" rows={2} maxLength={600} placeholder="Welcome aboard! Call me if you have any questions." />
+          <textarea className="textarea" name="note" rows={2} maxLength={600} placeholder="Welcome aboard! Call me if you have any questions." defaultValue={invite?.note ?? ""} />
         </label>
-        <p className="tiny faint" style={{ margin: 0 }}>
-          They get an email with a button to create their password. Their account is ready as soon as they do. No approval step.
-        </p>
+        {invite ? (
+          <>
+            <label className="check small">
+              <input type="checkbox" name="resend" checked={emailChanged || resend} disabled={emailChanged} onChange={(e) => setResend(e.target.checked)} />
+              <span>Email them a fresh invite link now (the old link stops working)</span>
+            </label>
+            <p className="tiny faint" style={{ margin: 0 }}>
+              They haven&apos;t set up their login yet. Whatever you save here is what they get when they do.
+            </p>
+          </>
+        ) : (
+          <p className="tiny faint" style={{ margin: 0 }}>
+            They get an email with a button to create their password. Their account is ready as soon as they do. No approval step.
+          </p>
+        )}
       </section>
 
       {state && !state.ok ? (
         <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{state.error}</span></div>
       ) : null}
-      <Submit className="btn block" pendingText="Creating…">
-        <UserPlus size={18} /> Create account &amp; send invite
-      </Submit>
+      {invite ? (
+        <Submit className="btn block" pendingText="Saving…">
+          <Check size={18} /> {emailChanged ? "Save & send the new invite" : "Save changes"}
+        </Submit>
+      ) : (
+        <Submit className="btn block" pendingText="Creating…">
+          <UserPlus size={18} /> Create account &amp; send invite
+        </Submit>
+      )}
     </form>
   );
 }
@@ -208,7 +247,11 @@ export function InviteShare({ r, compact }: { r: Extract<InviteResult, { ok: tru
         <div className="alert ok" role="status">
           <CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} />
           <span>
-            {r.existing ? (
+            {r.updated ? (
+              <>
+                Invite for <b>{who}</b> updated. They get these settings when they set up their login.
+              </>
+            ) : r.existing ? (
               <>
                 <b>{who}</b> already had a login, so it&apos;s been updated with these settings. They can sign in right now.
               </>

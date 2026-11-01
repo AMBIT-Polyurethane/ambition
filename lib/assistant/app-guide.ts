@@ -276,7 +276,7 @@ Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work o
     who: "admin",
     title: "Admin (admins only)",
     body: `[Admin](/admin) has:
-- Accounts: create an account (contractor with company, or AMBIT employee with job role and boxes for what they can use); the person gets a private invite link. "Needs a role" tab for staff without a job role. Turn anyone off instantly.
+- Accounts: create an account (contractor with company, or AMBIT employee with job role and boxes for what they can use); the person gets a private invite link. Invited tab: Edit changes anything on an invite before it's used (name, email, phone, account type, job role, boxes, location, company, note; a new email gets a fresh link and the old one stops working; or tick "Email them a fresh invite link now"), Send again, Cancel invite. After someone has joined, edit their account card in the AMBIT staff or Contractors tab (Recently set up links straight to it): name, cell phone, login email (they sign in with the new email and their same password, and get an email saying so; you can't change your own), account type, job role, boxes, location, access. "Needs a role" tab for staff without a job role. Turn anyone off instantly.
 - Customers (companies), Products (CSV import, sale prices with an end date, square feet per bag for batts), Docs & bulletins, Links (Home-screen form tiles), Home banner (promo slides), Branches, Academy.
 - Forms hub: every Jotform form; credit applications and account setup forms wait for approval with credit limit, terms and a note; any submission prints as a PDF.
 - Expense reports: every employee's month. Inventory: the Microsoft connection and each location's spreadsheet.

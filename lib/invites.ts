@@ -16,6 +16,8 @@ export type InviteResult =
       phone: string | null;
       /** They already had a login, so it was updated instead of invited. */
       existing: boolean;
+      /** An existing invite was edited (and a fresh link sent). */
+      updated?: boolean;
       link: string;
       emailStatus: SendResult["status"];
       emailError?: string;

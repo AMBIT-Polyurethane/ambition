@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { currentOrigin } from "@/lib/origin";
 import { PERM_KEYS, ROLES } from "@/lib/access";
@@ -113,6 +114,92 @@ export async function createAccount(_prev: InviteResult, form: FormData): Promis
   await supabase.from("invites").update({ sent_at: new Date().toISOString(), email_status: res.status }).eq("id", inv.id);
   revalidatePath("/admin/users");
   return { ok: true, email, name, phone, existing: false, link, emailStatus: res.status, emailError: res.error, subject: res.subject, text: res.text };
+}
+
+/**
+ * Edit an invite that hasn't been used yet: name, email, phone, account type, job role, what they see,
+ * location, company and the note. The changes are what they get when they set up their login.
+ * A new email address always gets a fresh link (the old one stops working); otherwise the admin can tick
+ * "Email them a fresh link".
+ */
+export async function updateInvite(_prev: InviteResult, form: FormData): Promise<InviteResult> {
+  const { supabase, profile: me } = await requireAdmin();
+  const id = s(form, "id");
+  const { data: inv } = await supabase
+    .from("invites")
+    .select("id, email, accepted_at, cancelled_at")
+    .eq("id", id)
+    .maybeSingle<{ id: string; email: string; accepted_at: string | null; cancelled_at: string | null }>();
+  if (!inv) return fail("That invite is gone. Create the account again.");
+  if (inv.accepted_at) return fail("They already set up their login. Change their account in the AMBIT staff or Contractors tab instead.");
+  if (inv.cancelled_at) return fail("That invite was cancelled. Create the account again.");
+
+  const email = s(form, "email").toLowerCase();
+  const name = n(form, "full_name");
+  const phone = n(form, "phone");
+  const kind = s(form, "kind") === "employee" ? "employee" : "contractor";
+  const jobRole = n(form, "job_role");
+  const branchId = n(form, "branch_id");
+  const note = n(form, "note")?.slice(0, 600) ?? null;
+  let companyId = kind === "contractor" ? n(form, "company_id") : null;
+
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail("Type the person's email address.");
+  if (email === me.email.toLowerCase()) return fail("That's your own account.");
+  if (kind === "employee") {
+    if (!email.endsWith("@ambitpu.com")) return fail("AMBIT employee accounts need an @ambitpu.com email. For anyone else, pick Contractor.");
+    if (!jobRole || !ROLES.some((r) => r.key === jobRole)) return fail("Pick their job role.");
+  } else if (!companyId) {
+    return fail("Pick the contractor's company (or add it as a new customer).");
+  }
+  const role: Profile["role"] = kind === "contractor" ? "customer" : jobRole === "admin" ? "admin" : "employee";
+  const perms = role === "admin" ? PERM_KEYS : role === "employee" ? form.getAll("perms").map(String).filter((k) => (PERM_KEYS as string[]).includes(k)) : [];
+
+  let companyName: string | null = null;
+  if (companyId) {
+    const { data: co } = await supabase.from("companies").select("id, name").eq("id", companyId).maybeSingle();
+    if (!co) return fail("That company isn't in the customer list anymore. Pick it again.");
+    companyName = co.name as string;
+    companyId = co.id as string;
+  }
+
+  const emailChanged = email !== inv.email.toLowerCase();
+  if (emailChanged) {
+    const { data: taken } = await supabase.from("profiles").select("id").ilike("email", email).maybeSingle();
+    if (taken) return fail(`${email} already has a login. Cancel this invite and use Create an account for that address instead.`);
+  }
+  const fresh = emailChanged || form.get("resend") === "on";
+
+  const patch: Record<string, unknown> = {
+    email,
+    full_name: name,
+    phone,
+    role,
+    company_id: role === "customer" ? companyId : null,
+    branch_id: branchId,
+    job_role: role === "admin" ? "admin" : role === "employee" ? jobRole : null,
+    perms,
+    note,
+  };
+  let token = "";
+  if (fresh) {
+    const t = newToken();
+    token = t.token;
+    patch.token_hash = t.hash;
+    patch.expires_at = new Date(Date.now() + 30 * 86400000).toISOString();
+  }
+  const { error } = await supabase.from("invites").update(patch).eq("id", inv.id).is("accepted_at", null);
+  if (error) return fail(error.message);
+  if (emailChanged) {
+    // Only one open invite per address.
+    await supabase.from("invites").update({ cancelled_at: new Date().toISOString() }).eq("email", email).neq("id", inv.id).is("accepted_at", null).is("cancelled_at", null);
+  }
+  revalidatePath("/admin/users");
+  if (!fresh) redirect(`/admin/users?tab=invited&saved=${encodeURIComponent(`the invite for ${name ?? email}`)}`);
+
+  const link = `${await currentOrigin()}/join/${token}`;
+  const res = await sendInvite({ email, name, kind, company: companyName, by: me.full_name || me.email, note, link });
+  await supabase.from("invites").update({ sent_at: new Date().toISOString(), email_status: res.status }).eq("id", inv.id);
+  return { ok: true, updated: true, email, name, phone, existing: false, link, emailStatus: res.status, emailError: res.error, subject: res.subject, text: res.text };
 }
 
 /** Send again: makes a new link (the old one stops working) and another 30 days. */

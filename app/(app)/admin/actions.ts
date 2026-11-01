@@ -10,6 +10,7 @@ import type { DocumentRow, Profile } from "@/lib/types";
 import { DOC_TYPES, fileKind, parseProducts, storageKeyFor } from "@/lib/docs";
 import { CUSTOMER_PRICED_CATEGORIES, normalizeProductRows } from "@/lib/product-import";
 import { PERM_KEYS } from "@/lib/access";
+import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { sqftFromName } from "@/lib/sqft";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -26,7 +27,7 @@ export type ImportResult = { ok: boolean; message: string };
 
 // ------------------------------------------------------------------ accounts
 export async function saveUser(form: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, profile: me } = await requireAdmin();
   const userId = s(form, "user_id");
   const role = s(form, "role") as Profile["role"];
   const status = s(form, "status") as Profile["status"];
@@ -38,9 +39,55 @@ export async function saveUser(form: FormData) {
   const { data: before } = await supabase.from("profiles").select("*").eq("id", userId).single<Profile>();
   if (!before) redirect(back("error=" + encodeURIComponent("That account no longer exists.")));
 
+  // Name, cell phone and login email (the account cards have these boxes).
+  const editsProfile = form.has("full_name");
+  const wantEmail = editsProfile ? s(form, "email").toLowerCase() : before.email.toLowerCase();
+  const emailChanged = editsProfile && wantEmail !== "" && wantEmail !== before.email.toLowerCase();
+  if (emailChanged) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(wantEmail)) redirect(back("error=" + encodeURIComponent(`"${wantEmail}" isn't an email address.`)));
+    if (userId === me.id) redirect(back("error=" + encodeURIComponent("Another admin has to change your own login email.")));
+  }
+  const loginEmail = emailChanged ? wantEmail : before.email;
+
   const staff = role === "employee" || role === "admin";
-  if (staff && !before.email.toLowerCase().endsWith("@ambitpu.com")) {
-    redirect(back("error=" + encodeURIComponent(`${before.email} isn't an @ambitpu.com address, so it can only be a contractor account.`)));
+  if (staff && !loginEmail.toLowerCase().endsWith("@ambitpu.com")) {
+    redirect(back("error=" + encodeURIComponent(`${loginEmail} isn't an @ambitpu.com address, so it can only be a contractor account.`)));
+  }
+
+  if (emailChanged) {
+    const { data: taken } = await supabase.from("profiles").select("id").ilike("email", wantEmail).neq("id", userId).maybeSingle();
+    if (taken) redirect(back("error=" + encodeURIComponent(`Another account already uses ${wantEmail}.`)));
+    if (!serviceReady()) redirect(back("error=" + encodeURIComponent("Changing someone's login email needs the server key (SUPABASE_SECRET_KEY) in Vercel.")));
+    const { error: authError } = await serviceClient().auth.admin.updateUserById(userId, { email: wantEmail, email_confirm: true });
+    if (authError) redirect(back("error=" + encodeURIComponent(`The login email wasn't changed: ${authError.message}`)));
+  }
+  if (editsProfile) {
+    const { error: profileError } = await supabase.rpc("admin_update_profile", {
+      p_user: userId,
+      p_full_name: s(form, "full_name"),
+      p_phone: s(form, "phone"),
+      p_email: emailChanged ? wantEmail : null,
+    });
+    if (profileError) {
+      const msg = /admin_update_profile|could not find the function|schema cache/i.test(profileError.message)
+        ? "Editing names and emails needs database update 0040 (Supabase > SQL Editor)."
+        : profileError.message;
+      redirect(back("error=" + encodeURIComponent(msg)));
+    }
+  }
+  if (emailChanged && before.status === "active") {
+    const origin = await currentOrigin();
+    await sendEmail({
+      to: [wantEmail],
+      subject: "Your AMBIT Intelligence login email changed",
+      html: wrapEmail(
+        "Login email changed",
+        `<div style="font-size:18px;font-weight:700;margin-bottom:10px;">Hi ${h(firstName(s(form, "full_name") || before.full_name, wantEmail))},</div>
+         <p>An AMBIT admin changed the email you sign in to AMBIT Intelligence with. From now on, sign in with <b>${h(wantEmail)}</b> and your same password.</p>
+         <p><a href="${origin}/signin">Sign in</a></p>`,
+      ),
+      text: `An AMBIT admin changed the email you sign in to AMBIT Intelligence with. From now on, sign in with ${wantEmail} and your same password. ${origin}/signin`,
+    });
   }
 
   if (!staff && companyId === "__new") {
