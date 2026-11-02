@@ -116,9 +116,9 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
         )}
         {tile(
           `/inventory/reports?r=expiring&${q}`,
-          `Foam expiring in ${EXPIRING_DAYS} days`,
-          `${whole(k.expiringDrums)} ${k.expiringDrums === 1 ? "drum" : "drums"}`,
-          k.expiredLots ? <span className="err-t"><AlertTriangle size={12} /> {whole(k.expiredDrums)} drums already expired</span> : `${k.expiringLots} ${k.expiringLots === 1 ? "lot" : "lots"} · ${usd(k.expiringValue)}`,
+          `Expiring in ${EXPIRING_DAYS} days`,
+          `${k.expiringLots} ${k.expiringLots === 1 ? "lot" : "lots"}`,
+          k.expiredLots ? <span className="err-t"><AlertTriangle size={12} /> {k.expiredLots} {k.expiredLots === 1 ? "lot" : "lots"} already expired</span> : usd(k.expiringValue),
           k.expiredLots ? "err" : k.expiringLots ? "warn" : undefined,
         )}
         {tile(`/inventory/reports?r=aging&${q}`, `No sale in ${AGING_DAYS}+ days`, usd(k.agingValue), `${k.agingItems} ${k.agingItems === 1 ? "item" : "items"} to put on sale`, k.agingItems ? "warn" : undefined)}
@@ -178,19 +178,19 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
         </section>
 
         <section className="card col hub-card">
-          <div className="row between"><b>Foam lots to use first</b><Link className="tiny" href={`/inventory/reports?r=expiring&${q}`}>All lots</Link></div>
+          <div className="row between"><b>Lots to use first</b><Link className="tiny" href={`/inventory/reports?r=expiring&${q}`}>All lots</Link></div>
           {expiring.length ? (
             <div className="hub-rows">
               {expiring.map((l, i) => (
                 <div key={i} className={`hub-row${l.days !== null && l.days < 0 ? " err" : ""}`}>
                   <Hourglass size={15} aria-hidden />
                   <span className="grow ellipsis"><b>{l.sku}</b> lot {l.lot_no}{many ? ` · ${name(l.branch)}` : ""}</span>
-                  <span className="v">{whole(l.remaining)} · {l.days !== null && l.days < 0 ? `expired ${dateShort(l.use_by)}` : `use by ${dateShort(l.use_by)}`}</span>
+                  <span className="v">{l.estimated ? "~" : ""}{whole(l.remaining)} · {l.days !== null && l.days < 0 ? `expired ${dateShort(l.use_by)}` : `use by ${dateShort(l.use_by)}`}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="small muted" style={{ margin: 0 }}>No foam lots expire in the next {EXPIRING_DAYS} days.</p>
+            <p className="small muted" style={{ margin: 0 }}>No lots expire in the next {EXPIRING_DAYS} days.</p>
           )}
         </section>
 

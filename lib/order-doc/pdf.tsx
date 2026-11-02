@@ -332,7 +332,7 @@ function OrderPdf({ doc, approveUrl, qr, audience }: { doc: OrderDoc; approveUrl
         <View style={s.head}>
           <Image src={LOGO_PNG} style={s.logo} />
           <View style={s.ident}>
-            <Text style={s.kicker}>AMBIT ORDER</Text>
+            <Text style={s.kicker}>{((o as { revision?: number }).revision ?? 1) > 1 ? `AMBIT ORDER  ·  REVISION ${(o as { revision?: number }).revision}` : "AMBIT ORDER"}</Text>
             <Text style={s.h1}>{no}</Text>
             <Text style={[s.stamp, { color: stamp.color, borderColor: stamp.color }]}>{stamp.text}</Text>
             {warehouse ? <Text style={s.copyTag}>WAREHOUSE COPY  ·  BRANDS AND LOTS  ·  NOT FOR THE CUSTOMER</Text> : null}

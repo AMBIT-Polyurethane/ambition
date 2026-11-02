@@ -5,7 +5,8 @@ import { LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import { plural, qtyText } from "@/lib/format";
 import { receiveIncoming, saveIncoming, type IncomingInput, type ReceiveLine } from "@/app/(app)/inventory/count-actions";
 
-export type StockItem = { product_id: string; sku: string; name: string; unit: string; lots: boolean };
+/** lots: spray foam counted by lot on FOAM LOTS. track: Lot / Batch # and expiration asked for (Admin > Products). */
+export type StockItem = { product_id: string; sku: string; name: string; unit: string; lots: boolean; track?: boolean; shelfLife?: number | null };
 
 /** Pick an item: type part of the SKU or name. */
 export function ItemPick({ items, value, onPick }: { items: StockItem[]; value: StockItem | null; onPick: (i: StockItem) => void }) {

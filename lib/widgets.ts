@@ -250,14 +250,15 @@ const count = (q: PromiseLike<{ count: number | null; error: unknown }>) => Prom
 export async function deskQueue(db: Db) {
   const today = todayCentral();
   const head = { count: "exact" as const, head: true };
-  const [needsPo, toSchedule, customer, today_, late] = await Promise.all([
+  const [needsPo, invoiceUpdate, toSchedule, customer, today_, late] = await Promise.all([
     count(db.from("orders").select("id", head).eq("stage", "needs_po")),
+    count(db.from("orders").select("id", head).eq("stage", "invoice_update")),
     count(db.from("orders").select("id", head).eq("stage", "schedule")),
     count(db.from("orders").select("id", head).eq("stage", "customer")),
     count(db.from("orders").select("id", head).eq("stage", "scheduled").eq("scheduled_for", today)),
     count(db.from("orders").select("id", head).eq("stage", "scheduled").lt("scheduled_for", today)),
   ]);
-  return { needsPo, toSchedule, customer, today: today_, late };
+  return { needsPo, invoiceUpdate, toSchedule, customer, today: today_, late };
 }
 
 /** Accounting: credit checks waiting and on hold. */
@@ -274,6 +275,12 @@ export async function creditQueue(db: Db) {
 export async function countsWaiting(db: Db) {
   const { data } = await db.from("inventory_counts").select("id, kind, branch_id, day, submitted_at").eq("status", "submitted").order("submitted_at");
   return (data ?? []) as { id: number; kind: "spot" | "reconcile"; branch_id: string; day: string | null; submitted_at: string }[];
+}
+
+/** Admin: Receiving Reports waiting for approval at every location. */
+export async function receivingWaiting(db: Db) {
+  const { data } = await db.from("inbound_deliveries").select("id, branch_id").eq("status", "submitted").order("submitted_at");
+  return (data ?? []) as { id: number; branch_id: string }[];
 }
 
 /** Admin: how each location's spot checks stand today. */

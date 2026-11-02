@@ -8,6 +8,7 @@ import { STAGES, stageOf } from "@/lib/order-desk";
 import type { Order, OrderItem } from "@/lib/types";
 import { priceLines, type FoamSide, type LastPrices, type PricePart } from "@/lib/order-doc/loads";
 import { TAX_STATE, taxLine, type TaxInfo } from "@/lib/tax";
+import { changesText, type OrderEdit } from "@/lib/order-edit";
 
 type Step = {
   key: string;
@@ -52,6 +53,7 @@ export function OrderDeskCard({
   lines = [],
   lastPrices = null,
   payDefaults = null,
+  edits = [],
 }: {
   order: Order;
   /** The order's lines, with spray foam marked (ISO or resin) so ISO can be priced per foam set. */
@@ -66,6 +68,8 @@ export function OrderDeskCard({
   tax?: TaxInfo | null;
   files?: OrderFile[];
   variance?: VarianceData | null;
+  /** The order's edits (0041), oldest first. */
+  edits?: OrderEdit[];
 }) {
   const st = stageOf(order);
   if (!st || st === "cancelled") return null;
@@ -98,14 +102,22 @@ export function OrderDeskCard({
     </div>
   ) : null;
   const payStart = { cod: Boolean(o.pay_cod || payDefaults?.cod), noChecks: Boolean(o.pay_no_checks || payDefaults?.noChecks) };
-  // Until email is set up: approve / confirm without it.
-  const noEmail = (action: (f: FormData) => Promise<void>) => (
+  // Approve / confirm without the customer's email.
+  const noEmail = (action: (f: FormData) => Promise<void>, label = "Customer Approved without Email") => (
     <form action={action}>
       <input type="hidden" name="id" value={o.id} />
       <Submit className="btn sm amber" pendingText="Saving…">
-        <MailX size={15} /> Customer Approved without Email
+        <MailX size={15} /> {label}
       </Submit>
     </form>
+  );
+  // Edits waiting for the CRM's invoice update, and the last one that got it.
+  const pendingEdits = edits.filter((e) => !e.invoice_updated_at && e.stage_before && !["customer", "needs_po"].includes(e.stage_before));
+  const lastUpdated = [...edits].reverse().find((e) => e.invoice_updated_at);
+  const editList = (list: OrderEdit[]) => (
+    <ul className="edit-changes">
+      {list.flatMap((e) => changesText(e.changes).map((t, i) => <li key={`${e.id}-${i}`}>{t}</li>))}
+    </ul>
   );
 
   const steps: Step[] = [
@@ -124,7 +136,7 @@ export function OrderDeskCard({
             : o.approval_status === "not_required"
               ? "Not needed for this order"
               : null,
-      action: st === "customer" && o.approval_email_status !== "sent" ? noEmail(approveWithoutEmail) : null,
+      action: st === "customer" ? noEmail(approveWithoutEmail, "Approve without customer email approval") : null,
     },
     {
       key: "vary1",
@@ -152,13 +164,40 @@ export function OrderDeskCard({
       ) : null,
       extra: invoices.length ? <FileLinks orderId={o.id} files={invoices} label={invoices.length > 1 ? "Invoice files" : "Invoice"} /> : null,
       action:
-        desk && st !== "customer" && st !== "completed" ? <NumbersForm
+        desk && st !== "customer" && st !== "completed" && st !== "invoice_update" ? <NumbersForm
             orderId={o.id}
             po={o.ambit_po ?? null}
             invoice={o.invoice_no ?? null}
             lines={priceLines(lines, { last: lastPrices, prefill: !o.priced_at })}
           /> : null,
     },
+    ...(o.invoice_update_at || lastUpdated
+      ? [
+          {
+            key: "invoice_update",
+            title: "Invoice update (order edited)",
+            done: !o.invoice_update_at,
+            current: st === "invoice_update",
+            detail: o.invoice_update_at ? (
+              <>
+                Edited by <b>{o.invoice_update_by_name ?? "AMBIT staff"}</b> · {dateTime(o.invoice_update_at)} (now revision {o.revision ?? 2}). Update the invoice in QuickBooks, then enter the new Invoice # and the prices below.
+                {pendingEdits.length ? editList(pendingEdits) : null}
+                {o.credit_status === "approved" ? <span>If the total goes up, accounting checks credit again; otherwise it goes straight back to {o.scheduled_for ? "its date" : "scheduling"}.</span> : null}
+              </>
+            ) : lastUpdated ? (
+              <>
+                Invoice updated by {lastUpdated.invoice_updated_by_name ?? ""} · {dateTime(lastUpdated.invoice_updated_at)}
+                {lastUpdated.total_before !== null && lastUpdated.total_after !== null ? ` · ${money(lastUpdated.total_before)} → ${money(lastUpdated.total_after)}` : ""}
+                {lastUpdated.credit_reopened ? " · credit checked again" : ""}
+              </>
+            ) : null,
+            action:
+              desk && st === "invoice_update" ? (
+                <NumbersForm orderId={o.id} po={o.ambit_po ?? null} invoice={o.invoice_no ?? null} lines={priceLines(lines, { last: lastPrices, prefill: false })} />
+              ) : null,
+          } satisfies Step,
+        ]
+      : []),
     {
       key: "credit",
       title: "Credit check",
@@ -173,7 +212,7 @@ export function OrderDeskCard({
         ) : o.credit_status === "hold" ? (
           <span className="red">On hold: {o.credit_note} ({o.credit_by_name}, {dateTime(o.credit_at)})</span>
         ) : st === "credit" ? (
-          "Waiting on accounting."
+          /^Check again/.test(o.credit_note ?? "") ? <b>{o.credit_note}</b> : "Waiting on accounting."
         ) : null,
       action:
         credit && (st === "credit" || st === "hold") ? (

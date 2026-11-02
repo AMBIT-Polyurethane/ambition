@@ -5,7 +5,7 @@ import { AGING_DAYS, EXPIRING_DAYS, PRICE_FROM, suggestedRop, type Hub } from "@
 
 export const REPORTS = [
   { key: "reorder", label: "Reorder", hint: "Items at or under their reorder point, what to order, and suggested reorder points from what's selling." },
-  { key: "expiring", label: "Expiring foam", hint: `Every foam lot in stock, the soonest to expire first (${EXPIRING_DAYS} days or less highlighted).` },
+  { key: "expiring", label: "Expiring lots", hint: `Every lot in stock, foam and everything tracked by lot, the soonest to expire first (${EXPIRING_DAYS} days or less highlighted).` },
   { key: "aging", label: "Aging stock", hint: `Stock that hasn't sold lately: put the ${AGING_DAYS}+ day items on sale before they sit on the books.` },
   { key: "movement", label: "Movement", hint: "What sold, came in and moved between locations in the last 90 days." },
   { key: "value", label: "Stock value", hint: "What's on hand and what it would sell for (estimate), by item and group." },
@@ -48,12 +48,12 @@ export function buildReport(hub: Hub, key: ReportKey): Report {
     return {
       key,
       title,
-      head: ["Location", "SKU", "Product", "Lot #", "Mfg", "Exp", "Use by", "Days left", "Drums", "Value"],
+      head: ["Location", "SKU", "Product", "Lot / Batch #", "Mfg", "Exp", "Use by", "Days left", "In stock", "Value"],
       num: [false, false, false, false, false, false, false, true, true, true],
-      rows: rows.map((l) => [loc(l.branch), l.sku, l.name, l.lot_no, l.mfg, l.exp, l.use_by, l.days, r2(l.remaining), usd(l.value)]),
+      rows: rows.map((l) => [loc(l.branch), l.sku, l.name, l.lot_no, l.mfg, l.exp, l.use_by, l.days, l.estimated ? `~${r2(l.remaining)}` : r2(l.remaining), usd(l.value)]),
       flag: rows.map((l) => (l.days !== null && l.days < 0 ? "err" : l.days !== null && l.days <= EXPIRING_DAYS)),
       total: ["Total", "", "", "", "", "", "", "", r2(rows.reduce((s, l) => s + l.remaining, 0)), usd(rows.reduce((s, l) => s + l.value, 0))],
-      note: "Use by = the Exp date, or 12 months after the Mfg date. Expired lots are never picked for orders automatically.",
+      note: "Spray foam: use by = the Exp date, or 12 months after the Mfg date; expired foam lots are never picked for orders automatically. Other items (~): lots logged at receiving; what's left of each is estimated by assuming the oldest went out first.",
     };
   }
 

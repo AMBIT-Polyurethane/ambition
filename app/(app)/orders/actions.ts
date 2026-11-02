@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession, isEmployee } from "@/lib/session";
-import { sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendScheduledNotice } from "@/lib/order-send";
+import { sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendOrderUpdatedNotice, sendScheduledNotice } from "@/lib/order-send";
 import { loadOrderDoc } from "@/lib/order-doc/load";
 import type { Order } from "@/lib/types";
 import { kickForOrder } from "@/lib/inventory/sync";
+import { can } from "@/lib/access";
+import { money } from "@/lib/format";
+import { changesText, type OrderChange } from "@/lib/order-edit";
 
 const STATUSES = ["new", "processing", "completed", "cancelled"];
 
@@ -67,15 +70,63 @@ export async function recordApproval(form: FormData) {
   back(id, "msg", sent.status === "sent" ? "Approval recorded. The order went to orders@ambitpu.com." : "Approval recorded.");
 }
 
-/** Staff, until email is set up: the customer approved, and wasn't (or couldn't be) emailed. */
+/** Staff: move the order past the customer step without the customer's email approval. */
 export async function approveWithoutEmail(form: FormData) {
   const s = await getSession();
   if (!s?.profile || !isEmployee(s.profile)) return;
   const id = String(form.get("id") ?? "");
-  const { error } = await s.supabase.rpc("record_order_approval", { p_order: id, p_note: "Customer approved without email" });
+  const note = String(form.get("note") ?? "").trim();
+  const { error } = await s.supabase.rpc("order_approve_without_customer", { p_order: id, p_note: note || null });
   if (error) back(id, "err", error.message);
-  await sendOrderEmail(s.supabase, id);
-  back(id, "msg", "Marked as approved by the customer (without email). The order is ready for its Sales Order # and Invoice #.");
+  const sent = await sendOrderEmail(s.supabase, id);
+  back(
+    id,
+    "msg",
+    `Approved without customer email approval.${sent.status === "sent" ? " The order went to orders@ambitpu.com." : ""} It's ready for its Sales Order # and Invoice #.`,
+  );
+}
+
+// ------------------------------------------------------------------ editing an order (0041)
+export type EditLine = { id?: number | null; product_id?: string | null; qty: number };
+
+/**
+ * AMBIT staff: add items or change / remove quantities on an open order. Then whoever's next hears about it:
+ * the customer gets a fresh approval email (still waiting on them), the CRM gets "invoice update needed"
+ * (the Invoice # was already in), or orders@ gets the updated order.
+ */
+export async function editOrder(input: { id: string; lines: EditLine[]; note: string }): Promise<{ ok: false; error: string } | never> {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile) || !(s.profile.role === "admin" || can(s.profile, "ordering") || can(s.profile, "order_desk"))) {
+    return { ok: false, error: "You don't have access to edit orders." };
+  }
+  const id = String(input.id ?? "");
+  const lines = (input.lines ?? [])
+    .map((l) => ({ id: l.id ?? null, product_id: l.product_id ?? null, qty: Math.round(Number(l.qty) * 100) / 100 }))
+    .filter((l) => Number.isFinite(l.qty) && l.qty >= 0 && (l.id || l.product_id));
+  const { data, error } = await s.supabase.rpc("order_edit", { p_order: id, p_lines: lines, p_note: String(input.note ?? "").slice(0, 500) || null });
+  if (error) return { ok: false, error: error.message };
+  const r = (data ?? {}) as { revision?: number; invoice_update?: boolean; customer?: boolean; changes?: OrderChange[] };
+  const changes = changesText(r.changes);
+  await kickForOrder(s.supabase, id, "order edited");
+  const rev = `Saved as revision ${r.revision ?? 2}.`;
+  if (r.customer) {
+    const { data: o } = await s.supabase.from("orders").select("approval_email").eq("id", id).maybeSingle<{ approval_email: string | null }>();
+    if (o?.approval_email) {
+      const sent = await sendApprovalRequest(s.supabase, id, o.approval_email);
+      back(id, sent.status === "sent" ? "msg" : "err", `${rev} ${sent.status === "sent" ? `A fresh approval email went to ${o.approval_email} (the old link no longer works).` : `The new approval email didn't go out (${sent.error ?? sent.status}). Use Resend below.`}`);
+    }
+    back(id, "msg", `${rev} The customer still needs to approve it.`);
+  }
+  if (r.invoice_update) {
+    const sent = await sendDeskNotice(s.supabase, id, "invoice_update", changes);
+    back(
+      id,
+      "msg",
+      `${rev} It went back to the order desk for an invoice update${sent.status === "sent" ? " (they were emailed)" : ""}. If the total goes up, accounting checks credit again.`,
+    );
+  }
+  const sent = await sendOrderEmail(s.supabase, id, { changes });
+  back(id, "msg", `${rev}${sent.status === "sent" ? " The updated order went to orders@ambitpu.com." : ""}`);
 }
 
 /** A signed-in contractor approves, or asks to change, an order AMBIT placed for their company. */
@@ -121,7 +172,11 @@ export async function setOrderPo(form: FormData) {
   const id = String(form.get("id") ?? "");
   const po = String(form.get("po") ?? "").trim();
   const invoice = String(form.get("invoice") ?? "").trim();
-  const { data: before } = await s.supabase.from("orders").select("credit_status").eq("id", id).maybeSingle<{ credit_status: string | null }>();
+  const { data: before } = await s.supabase
+    .from("orders")
+    .select("credit_status, invoice_update_at")
+    .eq("id", id)
+    .maybeSingle<{ credit_status: string | null; invoice_update_at: string | null }>();
   // Prices from the invoice: [{ id, price }] for every line (spray foam and fiberglass have none until now). ISO that
   // goes with more than one foam set has a price per set instead: { id, parts: [{ with, qty, price }] }.
   type Part = { with: number | null; qty: number; price: number };
@@ -150,6 +205,27 @@ export async function setOrderPo(form: FormData) {
   const files = filesFrom(form);
   const fileErr = await addFiles(s, id, "invoice", files);
   await kickForOrder(s.supabase, id, "PO entered");
+  // After an edit: the invoice now matches. Credit again only if the total went up; the customer gets the updated order.
+  if (before?.invoice_update_at) {
+    const { data: done, error: doneErr } = await s.supabase.rpc("order_invoice_update_done", { p_order: id });
+    if (doneErr) back(id, "err", doneErr.message);
+    const r = (done ?? {}) as { was?: boolean; reopened?: boolean; before?: number; after?: number; changes?: OrderChange[] };
+    if (r.was) {
+      const changes = changesText(r.changes);
+      if (r.reopened) await sendDeskNotice(s.supabase, id, "credit_needed");
+      const mailed = await sendOrderUpdatedNotice(s.supabase, id, changes);
+      const total = r.before !== undefined && r.after !== undefined ? ` Total ${money(r.before)} → ${money(r.after)}.` : "";
+      back(
+        id,
+        fileErr ? "err" : "msg",
+        `Invoice # ${invoice} and prices saved.${total} ${
+          r.reopened ? "The total went up, so accounting was asked to check credit again." : "Credit stays approved."
+        } ${mailed.status === "sent" ? "The customer was emailed the updated order." : `The customer wasn't emailed (${mailed.error ?? mailed.status}).`}${
+          fileErr ? ` The invoice file wasn't added: ${fileErr}` : ""
+        }`,
+      );
+    }
+  }
   if (!before?.credit_status) await sendDeskNotice(s.supabase, id, "credit_needed");
   if (fileErr) back(id, "err", `Sales Order # and Invoice # saved, but the invoice file wasn't added: ${fileErr}`);
   const added = files.length ? ` ${files.length === 1 ? "Invoice file" : `${files.length} invoice files`} added.` : "";

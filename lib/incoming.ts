@@ -5,19 +5,22 @@ import type { SendItem } from "@/components/inventory/transfer-form";
 import { branchStock } from "@/lib/inventory/view";
 import { every } from "@/lib/inventory/pages";
 
-/** What a location stocks (its COUNT SHEET items), with the ones tracked by lot marked. */
+/** What a location stocks (its COUNT SHEET items): spray foam counted by lot, and items that need a lot / batch # and expiration. */
 export async function stockItems(db: SupabaseClient, branch: string): Promise<StockItem[]> {
   const [{ data: inv }, { data: lots }] = await Promise.all([
-    db.from("inventory").select("product_id, sku, sheet_row, product:products(name, unit)").eq("branch_id", branch).eq("on_sheet", true).order("sheet_row"),
+    db.from("inventory").select("product_id, sku, sheet_row, product:products(name, unit, track_lots, shelf_life_months)").eq("branch_id", branch).eq("on_sheet", true).order("sheet_row"),
     db.from("inventory_lots").select("product_id").eq("branch_id", branch),
   ]);
   const lotted = new Set(((lots ?? []) as { product_id: string }[]).map((l) => l.product_id));
-  return ((inv ?? []) as unknown as { product_id: string; sku: string; product: { name: string; unit: string } | null }[]).map((r) => ({
+  type Row = { product_id: string; sku: string; product: { name: string; unit: string; track_lots?: boolean | null; shelf_life_months?: number | null } | null };
+  return ((inv ?? []) as unknown as Row[]).map((r) => ({
     product_id: r.product_id,
     sku: r.sku,
     name: r.product?.name ?? r.sku,
     unit: r.product?.unit ?? "each",
     lots: lotted.has(r.product_id),
+    track: !lotted.has(r.product_id) && Boolean(r.product?.track_lots),
+    shelfLife: r.product?.shelf_life_months ?? null,
   }));
 }
 

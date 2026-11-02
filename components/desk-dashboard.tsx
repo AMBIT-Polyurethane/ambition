@@ -12,8 +12,8 @@ import { RANGES, duration, type DeskStats, type RangeKey, type StepKey } from "@
 // Charts are plain HTML/SVG. Every mark has a hover/focus tooltip, and every chart has its numbers in a table.
 
 /** Open statuses in pipeline order; each keeps its color wherever it appears. */
-export const OPEN_STAGES: OrderStage[] = ["customer", "needs_po", "credit", "hold", "schedule", "scheduled"];
-const SLOT: Record<string, number> = { customer: 1, needs_po: 2, credit: 3, hold: 4, schedule: 5, scheduled: 6 };
+export const OPEN_STAGES: OrderStage[] = ["customer", "needs_po", "invoice_update", "credit", "hold", "schedule", "scheduled"];
+const SLOT: Record<string, number> = { customer: 1, needs_po: 2, invoice_update: 7, credit: 3, hold: 4, schedule: 5, scheduled: 6 };
 const color = (s: OrderStage) => `var(--dc${SLOT[s] ?? 1})`;
 
 const STEPS: { key: StepKey; label: string; who: string }[] = [

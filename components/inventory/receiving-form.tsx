@@ -9,8 +9,10 @@ import { ItemPick, type StockItem } from "@/components/incoming-forms";
 import { readBolAction, receiveReport, type ReportLine } from "@/app/(app)/inventory/hub-actions";
 import type { BolRead } from "@/lib/inventory/bol";
 
-// The Receiving Report: snap or upload the BOL, the app fills in the lines, the warehouse manager checks
-// each one (what the BOL says, what actually came, lot numbers for spray foam) and taps Receive.
+// The Receiving Report: snap or upload the BOL, the app fills in the lines, whoever unloads checks each one
+// (what the BOL says, what came, how many arrived damaged, lot / batch # and expiration) and sends it to an
+// admin for approval. Stock and the spreadsheet change when an admin approves it (an admin's own report
+// goes straight in).
 
 type Line = {
   key: number;
@@ -18,9 +20,11 @@ type Line = {
   item: StockItem | null;
   qty: string; // on the BOL / expected
   recv: string; // what came
+  damaged: string; // arrived damaged: not put in stock
   lot: string;
   mfg: string;
   exp: string;
+  autoExp?: boolean; // filled in from the Mfg date and shelf life
   note: string;
   raw?: string | null;
   conf?: "high" | "medium" | "low" | null;
@@ -36,11 +40,32 @@ export type ReportDelivery = {
   po_no: string | null;
   carrier: string | null;
   note: string | null;
-  lines: { id: number; product_id: string; sku: string; name: string | null; unit: string | null; qty: number; lot_no: string | null; mfg: string | null; exp: string | null }[];
+  lines: {
+    id: number;
+    product_id: string;
+    sku: string;
+    name: string | null;
+    unit: string | null;
+    qty: number;
+    received_qty?: number | null;
+    damaged_qty?: number | null;
+    lot_no: string | null;
+    mfg: string | null;
+    exp: string | null;
+    note?: string | null;
+  }[];
 };
 
 let seq = 1;
 const num = (s: string) => (/^\d+(\.\d{1,2})?$/.test(s.trim()) ? Number(s) : null);
+const blank = (): Line => ({ key: seq++, id: null, item: null, qty: "", recv: "", damaged: "", lot: "", mfg: "", exp: "", note: "" });
+/** Mfg date + shelf life in months, as YYYY-MM-DD. */
+export function expFrom(mfg: string, months: number | null | undefined): string {
+  if (!months || !/^\d{4}-\d{2}-\d{2}$/.test(mfg)) return "";
+  const d = new Date(`${mfg}T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
 
 export function ReceivingForm({
   branch,
@@ -50,6 +75,7 @@ export function ReceivingForm({
   today,
   aiReady,
   vendors,
+  admin,
 }: {
   branch: string;
   branchName: string;
@@ -58,6 +84,8 @@ export function ReceivingForm({
   today: string;
   aiReady: boolean;
   vendors: string[];
+  /** Admins receive straight into stock; everyone else sends the report to an admin for approval. */
+  admin: boolean;
 }) {
   const byId = useMemo(() => new Map(items.map((i) => [i.product_id, i])), [items]);
   const transfer = Boolean(delivery?.transfer);
@@ -76,14 +104,15 @@ export function ReceivingForm({
           id: l.id,
           item: byId.get(l.product_id) ?? { product_id: l.product_id, sku: l.sku, name: l.name ?? l.sku, unit: l.unit ?? "each", lots: Boolean(l.lot_no) },
           qty: String(Number(l.qty)),
-          recv: String(Number(l.qty)),
+          recv: String(Number(l.received_qty ?? l.qty)),
+          damaged: l.damaged_qty ? String(Number(l.damaged_qty)) : "",
           lot: l.lot_no ?? "",
           mfg: l.mfg ?? "",
           exp: l.exp ?? "",
-          note: "",
+          note: l.note ?? "",
           fixed: transfer,
         }))
-      : [{ key: seq++, id: null, item: null, qty: "", recv: "", lot: "", mfg: "", exp: "", note: "" }],
+      : [blank()],
   );
   const [busy, setBusy] = useState<null | "upload" | "read" | "save">(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +120,11 @@ export function ReceivingForm({
   const pickRef = useRef<HTMLInputElement>(null);
 
   const set = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  /** Mfg date typed: the expiration follows it (unless someone typed their own). */
+  const setMfg = (l: Line, mfg: string) => {
+    const auto = expFrom(mfg, l.item?.shelfLife);
+    set(l.key, auto && (!l.exp || l.autoExp) ? { mfg, exp: auto, autoExp: true } : { mfg });
+  };
 
   /** Put what the AI read onto the report (matching lines already there when it's an expected delivery). */
   const apply = (r: BolRead) => {
@@ -111,7 +145,7 @@ export function ReceivingForm({
           if (!hit.fixed) {
             hit.lot = x.lot_no ?? hit.lot;
             hit.mfg = x.mfg ?? hit.mfg;
-            hit.exp = x.exp ?? hit.exp;
+            hit.exp = x.exp ?? (expFrom(hit.mfg, hit.item?.shelfLife) || hit.exp);
           }
           hit.raw = x.raw;
           hit.conf = x.confidence;
@@ -119,11 +153,13 @@ export function ReceivingForm({
           continue;
         }
         if (transfer) continue; // a transfer only receives what was sent
-        const l: Line = { key: seq++, id: null, item, qty: String(x.qty), recv: String(x.qty), lot: x.lot_no ?? "", mfg: x.mfg ?? "", exp: x.exp ?? "", note: "", raw: x.raw, conf: x.confidence, hint: x.note };
+        const mfg = x.mfg ?? "";
+        const exp = x.exp ?? expFrom(mfg, item?.shelfLife);
+        const l: Line = { key: seq++, id: null, item, qty: String(x.qty), recv: String(x.qty), damaged: "", lot: x.lot_no ?? "", mfg, exp, autoExp: !x.exp && Boolean(exp), note: "", raw: x.raw, conf: x.confidence, hint: x.note };
         used.add(l.key);
         out.push(l);
       }
-      return out.length ? out : [{ key: seq++, id: null, item: null, qty: "", recv: "", lot: "", mfg: "", exp: "", note: "" }];
+      return out.length ? out : [blank()];
     });
   };
 
@@ -180,8 +216,14 @@ export function ReceivingForm({
       if (r === null) return setError(`How many ${l.item.sku} came? (0 if none)`);
       const q = l.qty.trim() ? num(l.qty) : r;
       if (q === null) return setError(`Check the BOL quantity for ${l.item.sku}.`);
-      if (l.item.lots && r > 0 && !l.lot.trim()) return setError(`Enter the lot # for ${l.item.sku} (spray foam is tracked by lot).`);
-      out.push({ id: l.id, product_id: l.item.product_id, qty: q, received_qty: r, lot_no: l.lot.trim().toUpperCase(), mfg: l.mfg, exp: l.exp, note: l.note.trim() });
+      const d = l.damaged.trim() ? num(l.damaged) : 0;
+      if (d === null) return setError(`Check how many ${l.item.sku} arrived damaged.`);
+      if (d > r) return setError(`More ${l.item.sku} arrived damaged than came in.`);
+      const good = r - d;
+      if ((l.item.lots || l.item.track) && good > 0 && !l.lot.trim()) return setError(`Enter the lot / batch # for ${l.item.sku}.`);
+      const exp = l.exp || expFrom(l.mfg, l.item.shelfLife);
+      if (l.item.track && good > 0 && !exp) return setError(`Enter the expiration date for ${l.item.sku}${l.item.shelfLife ? " (or its Mfg date)" : ""}.`);
+      out.push({ id: l.id, product_id: l.item.product_id, qty: q, received_qty: r, damaged_qty: d, lot_no: l.lot.trim().toUpperCase(), mfg: l.mfg, exp, note: l.note.trim() });
     }
     if (!out.length) return setError("Add at least one item.");
     setBusy("save");
@@ -196,6 +238,7 @@ export function ReceivingForm({
   };
 
   const short = lines.filter((l) => l.item && num(l.recv) !== null && num(l.qty) !== null && num(l.recv)! < num(l.qty)!).length;
+  const damaged = lines.filter((l) => l.item && (num(l.damaged) ?? 0) > 0).length;
 
   return (
     <div className="col" style={{ gap: 12 }}>
@@ -286,12 +329,12 @@ export function ReceivingForm({
                   {l.conf && l.conf !== "high" ? <div className="tiny warn-t" style={{ marginTop: 2 }}>Check: {l.hint || (l.item ? "make sure this is the right item" : "pick the item this line is")}</div> : null}
                 </div>
                 {!l.fixed ? (
-                  <button type="button" className="iconbtn" aria-label="Remove this line" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [{ key: seq++, id: null, item: null, qty: "", recv: "", lot: "", mfg: "", exp: "", note: "" }]))}>
+                  <button type="button" className="iconbtn" aria-label="Remove this line" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [blank()]))}>
                     <Trash2 size={16} />
                   </button>
                 ) : null}
               </div>
-              <div className={l.item?.lots ? "grid4 recv-grid" : "grid2"}>
+              <div className={l.item?.lots || l.item?.track ? "grid4 recv-grid recv-lots" : "grid3"}>
                 <label className="field">
                   <span className="label">{transfer ? "Sent" : delivery && l.id ? "Expected / on BOL" : "On the BOL"}</span>
                   <input className="input sm" inputMode="decimal" value={l.qty} onChange={(e) => set(l.key, { qty: e.target.value })} disabled={l.fixed} placeholder={l.item ? plural(l.item.unit, 2) : ""} />
@@ -300,45 +343,50 @@ export function ReceivingForm({
                   <span className="label">Came in</span>
                   <input className={`input sm${off ? " warn-in" : ""}`} inputMode="decimal" value={l.recv} onChange={(e) => set(l.key, { recv: e.target.value })} placeholder="0 if none" />
                 </label>
-                {l.item?.lots ? (
+                <label className="field">
+                  <span className="label">Damaged</span>
+                  <input className={`input sm${(num(l.damaged) ?? 0) > 0 ? " warn-in" : ""}`} inputMode="decimal" value={l.damaged} onChange={(e) => set(l.key, { damaged: e.target.value })} placeholder="0" aria-label={`How many ${l.item?.sku ?? ""} arrived damaged`} />
+                </label>
+                {l.item?.lots || l.item?.track ? (
                   <>
                     <label className="field">
-                      <span className="label">Lot #</span>
+                      <span className="label">Lot / Batch #</span>
                       <input className="input sm" value={l.lot} onChange={(e) => set(l.key, { lot: e.target.value.toUpperCase() })} autoCapitalize="characters" disabled={l.fixed && Boolean(l.lot)} />
                     </label>
                     <label className="field">
                       <span className="label">Mfg date</span>
-                      <input className="input sm" type="date" value={l.mfg} onChange={(e) => set(l.key, { mfg: e.target.value })} disabled={l.fixed} />
+                      <input className="input sm" type="date" value={l.mfg} onChange={(e) => setMfg(l, e.target.value)} disabled={l.fixed} />
                     </label>
                     <label className="field">
-                      <span className="label">Exp date</span>
-                      <input className="input sm" type="date" value={l.exp} onChange={(e) => set(l.key, { exp: e.target.value })} disabled={l.fixed} />
+                      <span className="label">Exp date{l.item?.track ? " *" : ""}</span>
+                      <input className="input sm" type="date" value={l.exp} onChange={(e) => set(l.key, { exp: e.target.value, autoExp: false })} disabled={l.fixed} />
+                      {l.autoExp && l.exp ? <span className="tiny faint">Mfg + {l.item?.shelfLife} months</span> : null}
                     </label>
                   </>
                 ) : null}
               </div>
-              {off || l.note ? (
-                <input className="input sm" value={l.note} onChange={(e) => set(l.key, { note: e.target.value })} placeholder={off ? "Why is it different? (short, damaged, refused…)" : "Note"} />
+              {off || l.note || (num(l.damaged) ?? 0) > 0 ? (
+                <input className="input sm" value={l.note} onChange={(e) => set(l.key, { note: e.target.value })} placeholder={(num(l.damaged) ?? 0) > 0 ? "What's damaged? (add a photo with the BOL)" : off ? "Why is it different? (short, refused…)" : "Note"} />
               ) : null}
-              {l.item?.lots && !l.fixed ? (
+              {(l.item?.lots || l.item?.track) && !l.fixed ? (
                 <button
                   type="button"
                   className="btn sm ghost"
                   style={{ alignSelf: "flex-start", gap: 6 }}
                   onClick={() => setLines((ls) => {
                     const i = ls.findIndex((x) => x.key === l.key);
-                    const copy: Line = { key: seq++, id: null, item: l.item, qty: "", recv: "", lot: "", mfg: l.mfg, exp: l.exp, note: "" };
+                    const copy: Line = { key: seq++, id: null, item: l.item, qty: "", recv: "", damaged: "", lot: "", mfg: l.mfg, exp: l.exp, autoExp: l.autoExp, note: "" };
                     return [...ls.slice(0, i + 1), copy, ...ls.slice(i + 1)];
                   })}
                 >
-                  <SplitSquareVertical size={15} /> Another lot of this
+                  <SplitSquareVertical size={15} /> Another lot / batch of this
                 </button>
               ) : null}
             </div>
           );
         })}
         {!transfer ? (
-          <button type="button" className="btn sm dark" style={{ alignSelf: "flex-start", gap: 6 }} onClick={() => setLines((ls) => [...ls, { key: seq++, id: null, item: null, qty: "", recv: "", lot: "", mfg: "", exp: "", note: "" }])}>
+          <button type="button" className="btn sm dark" style={{ alignSelf: "flex-start", gap: 6 }} onClick={() => setLines((ls) => [...ls, blank()])}>
             <Plus size={16} /> Add a line
           </button>
         ) : null}
@@ -349,12 +397,15 @@ export function ReceivingForm({
         <input className="input sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Seal #, damage, who unloaded…" />
       </label>
       {short ? <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>{short} {short === 1 ? "line came in short" : "lines came in short"} of the BOL. Only what came in goes into stock.</span></div> : null}
+      {damaged ? <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>{damaged} {damaged === 1 ? "line has" : "lines have"} damaged items. Damaged items don&apos;t go into stock. Snap a photo of the damage with the BOL.</span></div> : null}
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="button" className="btn" onClick={receive} disabled={busy !== null} style={{ gap: 8 }}>
-        {busy === "save" ? <LoaderCircle size={16} className="spin" /> : null} Receive: add to stock
+        {busy === "save" ? <LoaderCircle size={16} className="spin" /> : null} {admin ? "Receive: add to stock" : "Send for admin approval"}
       </button>
       <p className="tiny faint center" style={{ margin: 0 }}>
-        Everything goes onto TOTAL IN STOCK at {branchName}. Spray foam goes onto FOAM LOTS: a new lot gets its own row, a lot that&apos;s already there gets Shipped In. The BOL stays with the report.
+        {admin
+          ? <>Everything that came in good goes onto TOTAL IN STOCK at {branchName}. Spray foam goes onto FOAM LOTS; other lots / batches go onto RECEIVED LOTS. The BOL stays with the report.</>
+          : <>An admin checks the report, then the stock and {branchName}&apos;s spreadsheet update. Until then these items can&apos;t be ordered from here.</>}
       </p>
     </div>
   );

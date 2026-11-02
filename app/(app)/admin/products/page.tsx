@@ -41,6 +41,13 @@ function ProductFields({ p, cats }: { p?: Product; cats: Category[] }) {
         <input className="input sm" name="sqft_per_unit" inputMode="decimal" defaultValue={p?.sqft_per_unit ?? ""} placeholder="Batts only" />
       </label>
       <label className="field"><span className="label">Sort</span><input className="input sm" name="sort" type="number" defaultValue={p?.sort ?? 0} /></label>
+      <label className="field">
+        <span className="label">Shelf life (months)</span>
+        <input className="input sm" name="shelf_life_months" type="number" min={1} max={120} defaultValue={p?.shelf_life_months ?? ""} placeholder="Fills in Exp from Mfg" />
+      </label>
+      <label className="check" style={{ alignSelf: "end", paddingBottom: 8 }} title="Receiving asks for the Lot / Batch # and expiration date, and they go onto the spreadsheet.">
+        <input type="checkbox" name="track_lots" defaultChecked={p ? Boolean(p.track_lots) : false} /> Track lot &amp; expiration
+      </label>
     </div>
   );
 }
@@ -113,7 +120,7 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
                 {p.image_url ? <img className="thumb sm" src={p.image_url} alt="" loading="lazy" /> : <div className="thumb sm empty" />}
                 <div className="grow">
                   <div className="t ellipsis">{p.name}{p.active ? "" : " (hidden)"}{p.admin_only || cat?.admin_only ? " · private label" : ""}</div>
-                  <div className="s ellipsis">{p.sku} · {cat?.name ?? "No category"} · {p.unit}</div>
+                  <div className="s ellipsis">{p.sku} · {cat?.name ?? "No category"} · {p.unit}{p.track_lots ? ` · lot & exp${p.shelf_life_months ? ` (${p.shelf_life_months} mo)` : ""}` : ""}</div>
                 </div>
                 <span className="small nowrap">
                   {saleOn(p.sale_price, p.sale_ends, today) ? (

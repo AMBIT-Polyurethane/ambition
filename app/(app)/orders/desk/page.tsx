@@ -19,6 +19,7 @@ type Tab = { stage: OrderStage; who: "desk" | "credit" | "both" };
 // Each queue, and who works it. CRM = order desk box, Accounting = credit check box.
 const TABS: Tab[] = [
   { stage: "needs_po", who: "desk" },
+  { stage: "invoice_update", who: "desk" },
   { stage: "credit", who: "credit" },
   { stage: "schedule", who: "desk" },
   { stage: "hold", who: "both" },

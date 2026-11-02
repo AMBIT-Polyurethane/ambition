@@ -34,7 +34,7 @@ export default async function NewReceivingPage({ searchParams }: { searchParams:
           ))}
         </div>
       ) : null}
-      <ReceivingForm key={branch.id} branch={branch.id} branchName={b ? `${b.name}, ${b.state}` : branch.name} items={items} today={todayCentral()} aiReady={claudeReady()} vendors={vendors} />
+      <ReceivingForm key={branch.id} admin={profile.role === "admin"} branch={branch.id} branchName={b ? `${b.name}, ${b.state}` : branch.name} items={items} today={todayCentral()} aiReady={claudeReady()} vendors={vendors} />
     </main>
   );
 }

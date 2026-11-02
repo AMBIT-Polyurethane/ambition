@@ -591,6 +591,28 @@ category, unit and foam side; keeps `ordered_sku/ordered_name/ordered_product_id
 set Cancelled there with `done_by = 'swap'` and the new type is picked again by lot). "Change lot" →
 `order_variance_lot`, which wraps `inventory_repick` (now also limited to `item_variance`). Every change is a row in
 `order_variances` (who, when, why, stage), shown on the order desk card before the Sales Order # and before Delivered.
+### Receiving approval and lots (0041)
+
+Receiving Reports wait for an admin: `inbound_receive` saves what came (received, damaged, lot / batch, dates) for
+anyone, but only an admin's call moves stock (`status` expected → submitted → received). Admins approve
+(`inbound_approve`), change and receive, or send back (`inbound_send_back`, the report opens again with its numbers).
+Admins are emailed (`lib/receiving-notify.ts`) and see it on Home ("Waiting on you") and at the top of Receiving.
+Damaged never goes into stock. Products with `track_lots` (Admin > Products, plus `shelf_life_months` to fill in the
+Exp date) need a lot / batch # and Exp; spray foam on FOAM LOTS works as before, everything else is logged in
+`inventory_batches` and appended to the location's RECEIVED LOTS tab by the sync (`lib/inventory/received-lots.ts`).
+The hub's expiring numbers include those batches, with what's left estimated oldest-out-first.
+
+### Editing orders (0041)
+
+`/orders/[id]/edit` (staff with ordering / order desk): `order_edit(p_order, p_lines)` takes the whole order after the
+edit. Changed or removed lines cancel their stock lines (`done_by = 'edit'`, shown Cancelled on PENDING ORDERS; a removed
+item's stock line keeps living with `order_item_id` null) and `inventory_pick` holds the new amount. Every save is a
+revision in `order_edits`. After the Sales Order # the order gets `invoice_update_at` → stage `invoice_update`; the
+CRM's Sales Order # / Invoice # form (`setOrderPo` → `order_set_numbers` → `order_invoice_update_done`) clears it, re-opens
+credit only when the total beat `invoiced_total`, and emails the customer the updated order. `order_complete` refuses
+an order waiting for an invoice update or credit. `order_approve_without_customer` skips the customer's email
+approval (desk card button, and a box on the order form).
+
 ### Price request approvals
 
 Admins: Home → Price approvals. Waiting requests first; each opens as a clean form with requested vs approved

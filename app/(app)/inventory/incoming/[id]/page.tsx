@@ -14,11 +14,12 @@ import { PrintButton } from "@/components/print-button";
 import { IncomingForm } from "@/components/incoming-forms";
 import { ReceivingForm } from "@/components/inventory/receiving-form";
 import { cancelIncoming } from "@/app/(app)/inventory/count-actions";
+import { approveReceiving, sendBackReceiving } from "@/app/(app)/inventory/hub-actions";
 
 export const metadata = { title: "Receiving Report" };
 export const dynamic = "force-dynamic";
 
-type Line = { id: number; product_id: string; sku: string; name: string | null; unit: string | null; qty: number; received_qty: number | null; lot_no: string | null; mfg: string | null; exp: string | null; note: string | null };
+type Line = { id: number; product_id: string; sku: string; name: string | null; unit: string | null; qty: number; received_qty: number | null; damaged_qty: number | null; lot_no: string | null; mfg: string | null; exp: string | null; note: string | null };
 
 /** One delivery: receive it (Receiving Report), or read the report once it's received. */
 export default async function IncomingDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
@@ -36,12 +37,20 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
   const lines = (lineRows ?? []) as Line[];
   const branchName = b ? `${b.name}, ${b.state}` : d.branch_id;
   const expected = d.status === "expected";
+  const waiting = d.status === "submitted";
+  const admin = profile.role === "admin";
   const late = expected && d.expected_on < todayCentral();
   const files = (Array.isArray(d.files) ? d.files : []) as { path: string; name: string }[];
   const links = await Promise.all(
     files.map(async (f) => ({ ...f, url: (await supabase.storage.from("inventory-files").createSignedUrl(f.path, 3600)).data?.signedUrl ?? null })),
   );
-  const [items, vendors] = expected ? await Promise.all([stockItems(supabase, d.branch_id), vendorNames(supabase)]) : [[], []];
+  const [items, vendors] = expected || (waiting && admin) ? await Promise.all([stockItems(supabase, d.branch_id), vendorNames(supabase)]) : [[], []];
+  const formLines = lines.map((l) => ({
+    id: l.id, product_id: l.product_id, sku: l.sku, name: l.name, unit: l.unit, qty: Number(l.qty),
+    received_qty: l.received_qty === null ? null : Number(l.received_qty), damaged_qty: Number(l.damaged_qty ?? 0),
+    lot_no: l.lot_no, mfg: l.mfg, exp: l.exp, note: l.note,
+  }));
+  const anyDamaged = lines.some((l) => Number(l.damaged_qty ?? 0) > 0);
   const transfer = d.transfer_id as number | null;
 
   return (
@@ -49,7 +58,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
       <TopBar
         title={expected ? d.vendor : "Receiving Report"}
         back={`/inventory/incoming?b=${d.branch_id}`}
-        right={<span className={d.status === "received" ? "pill ok" : d.status === "cancelled" ? "pill grey" : late ? "pill warn" : "pill"}>{d.status === "received" ? "Received" : d.status === "cancelled" ? "Cancelled" : late ? "Late" : "On the way"}</span>}
+        right={<span className={d.status === "received" ? "pill ok" : d.status === "cancelled" ? "pill grey" : waiting || late ? "pill warn" : "pill"}>{d.status === "received" ? "Received" : d.status === "cancelled" ? "Cancelled" : waiting ? "Waiting for approval" : late ? "Late" : "On the way"}</span>}
       />
       {sp.msg ? <div className="alert ok small" role="status"><CircleCheck size={18} style={{ flex: "none" }} /><span>{sp.msg}</span></div> : null}
       {sp.err ? <div className="alert err small" role="alert"><CircleAlert size={18} style={{ flex: "none" }} /><span>{sp.err}</span></div> : null}
@@ -59,6 +68,23 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
           <ArrowLeftRight size={16} style={{ flex: "none", marginTop: 2 }} />
           <span>Transfer T-{transfer} from another AMBIT location. The lots come with the drums. Open the transfer</span>
         </Link>
+      ) : null}
+
+      {expected && d.sent_back_note ? (
+        <div className="alert warn" role="alert">
+          <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />
+          <span><b>Sent back by {d.sent_back_by_name ?? "an admin"}:</b> {d.sent_back_note} Fix the report below and send it again. Nothing went into stock.</span>
+        </div>
+      ) : null}
+      {waiting ? (
+        <div className={`alert ${admin ? "warn" : "info"}`} role="status">
+          <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />
+          <span>
+            {admin
+              ? <>Sent by <b>{d.submitted_by_name ?? "the warehouse"}</b> · {dateTime(d.submitted_at)}. Check it against the BOL, then approve it: stock and {branchName}&apos;s spreadsheet update right away.</>
+              : <>Waiting for an admin to approve it (sent by {d.submitted_by_name ?? "you"} · {dateTime(d.submitted_at)}). Nothing has gone into stock yet.</>}
+          </span>
+        </div>
       ) : null}
 
       {expected ? (
@@ -74,6 +100,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
           </section>
           <div className="eyebrow">Receiving Report</div>
           <ReceivingForm
+            admin={admin}
             branch={d.branch_id}
             branchName={branchName}
             items={items}
@@ -88,7 +115,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
               po_no: d.po_no,
               carrier: d.carrier,
               note: d.note,
-              lines: lines.map((l) => ({ id: l.id, product_id: l.product_id, sku: l.sku, name: l.name, unit: l.unit, qty: Number(l.qty), lot_no: l.lot_no, mfg: l.mfg, exp: l.exp })),
+              lines: d.sent_back_note ? formLines : formLines.map((l) => ({ ...l, received_qty: null, damaged_qty: 0 })),
             }}
           />
           {!transfer ? (
@@ -129,15 +156,22 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
             {d.po_no ? (<><dt>PO #</dt><dd>{d.po_no}</dd></>) : null}
             {d.carrier ? (<><dt>Carrier</dt><dd>{d.carrier}</dd></>) : null}
             {d.ref ? (<><dt>Reference</dt><dd>{d.ref}</dd></>) : null}
-            <dt>{d.status === "received" ? "Received" : "Status"}</dt>
-            <dd>{d.status === "received" ? `${d.received_by_name ?? ""} · ${dateTime(d.received_at)}` : "Cancelled"}</dd>
+            <dt>{d.status === "received" ? "Received" : waiting ? "Sent by" : "Status"}</dt>
+            <dd>
+              {d.status === "received"
+                ? `${d.received_by_name ?? ""} · ${dateTime(d.submitted_at ?? d.received_at)}`
+                : waiting
+                  ? `${d.submitted_by_name ?? ""} · ${dateTime(d.submitted_at)}`
+                  : "Cancelled"}
+            </dd>
+            {d.status === "received" && d.approved_by_name ? (<><dt>Approved</dt><dd>{d.approved_by_name} · {dateTime(d.approved_at)}</dd></>) : null}
             {d.note ? (<><dt>Note</dt><dd>{d.note}</dd></>) : null}
             {d.read_by_ai ? (<><dt>BOL</dt><dd className="row" style={{ gap: 4 }}><Sparkles size={13} /> Read by the app, checked by {d.received_by_name ?? "the receiver"}</dd></>) : null}
           </dl>
           <div className="tbl-wrap">
             <table className="tbl">
               <thead>
-                <tr><th>SKU</th><th>Item</th><th>Lot #</th><th className="num">{transfer ? "Sent" : "On BOL"}</th><th className="num">Received</th></tr>
+                <tr><th>SKU</th><th>Item</th><th>Lot / Batch #</th><th className="num">{transfer ? "Sent" : "On BOL"}</th><th className="num">Received</th>{anyDamaged ? <th className="num">Damaged</th> : null}</tr>
               </thead>
               <tbody>
                 {lines.map((l) => {
@@ -154,6 +188,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
                       <td>{l.lot_no ?? ""}</td>
                       <td className="num">{Number(l.qty)}</td>
                       <td className="num"><b>{got === null ? "" : got}</b> {l.unit ? <span className="tiny faint">{plural(l.unit, got ?? 0)}</span> : null}</td>
+                      {anyDamaged ? <td className="num">{Number(l.damaged_qty ?? 0) > 0 ? <b className="red">{Number(l.damaged_qty)}</b> : ""}</td> : null}
                     </tr>
                   );
                 })}
@@ -174,8 +209,51 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
               </div>
             </div>
           ) : null}
+          {anyDamaged ? <p className="tiny faint" style={{ margin: 0 }}>Damaged items didn&apos;t go into stock.</p> : null}
         </article>
       )}
+
+      {waiting && admin ? (
+        <section className="col no-print" style={{ gap: 10 }}>
+          <form action={approveReceiving}>
+            <input type="hidden" name="id" value={d.id} />
+            <Submit className="btn block" pendingText="Approving…">Approve: add to stock</Submit>
+          </form>
+          <details className="card">
+            <summary><b>Change something first</b> <span className="muted small">· fix a quantity, lot or date, then receive it</span></summary>
+            <div style={{ marginTop: 12 }}>
+              <ReceivingForm
+                admin
+                branch={d.branch_id}
+                branchName={branchName}
+                items={items}
+                today={todayCentral()}
+                aiReady={false}
+                vendors={vendors}
+                delivery={{ id: d.id, vendor: d.vendor, transfer: Boolean(transfer), bol_no: d.bol_no, po_no: d.po_no, carrier: d.carrier, note: d.note, lines: formLines }}
+              />
+            </div>
+          </details>
+          <details className="card">
+            <summary><b>Send it back</b> <span className="muted small">· to {d.submitted_by_name ?? "the receiver"}, with what to fix</span></summary>
+            <form action={sendBackReceiving} className="col" style={{ gap: 8, marginTop: 10 }}>
+              <input type="hidden" name="id" value={d.id} />
+              <input className="input sm" name="note" required minLength={3} placeholder="For example: lot # on line 2 doesn't match the drum label" />
+              <Submit className="btn dark sm" pendingText="Sending…">Send back</Submit>
+            </form>
+          </details>
+          {!transfer ? (
+            <details className="danger-zone">
+              <summary>Cancel this report</summary>
+              <form action={cancelIncoming} className="col" style={{ gap: 10, marginTop: 10 }}>
+                <input type="hidden" name="id" value={d.id} />
+                <p className="tiny faint" style={{ margin: 0 }}>Nothing changes in stock.</p>
+                <Submit className="btn sm danger" pendingText="Cancelling…">Cancel report</Submit>
+              </form>
+            </details>
+          ) : null}
+        </section>
+      ) : null}
     </main>
   );
 }

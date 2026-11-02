@@ -7,6 +7,7 @@ import { todayCentral } from "@/lib/sale";
 import { resolveFile, Workbook } from "@/lib/inventory/workbook";
 import { LOTS_TAB, countSheetTotal, lotFormulas, lotRange, newLotsTab, parseLotsSheet, type DbLot, type LotCol, type LotsSheet, type PendingRef } from "@/lib/inventory/lots";
 import { at as at_ } from "@/lib/inventory/sheet";
+import { RECEIVED_TAB, syncReceivedLots } from "@/lib/inventory/received-lots";
 import {
   STATUS,
   STOCK_MARK,
@@ -498,6 +499,17 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
     for (const r of gone) {
       await db.from("inventory").update({ on_sheet: false, updated_at: new Date().toISOString() }).eq("branch_id", branch).eq("product_id", r.product_id);
       log("sheet", `${r.sku} is no longer on the COUNT SHEET, so it no longer shows stock here.`, r.sku);
+    }
+
+    // -------------------------------------------------------------- RECEIVED LOTS (lots / batches of everything else)
+    try {
+      const added = await syncReceivedLots(db, wb, names, branch);
+      if (added) {
+        sum.to_sheet += added;
+        log("sheet", `${added} received ${added === 1 ? "lot" : "lots"} added to the ${RECEIVED_TAB} tab.`, null, null, null, "AMBIT A.I.");
+      }
+    } catch (e) {
+      log("error", `${RECEIVED_TAB}: ${e instanceof Error ? e.message : String(e)}`, null, null, null, "AMBIT A.I.");
     }
 
     if (logs.length) await db.from("inventory_log").insert(logs);
@@ -1284,7 +1296,7 @@ async function reconcilePending(
     ]);
     // Every item has its stock lines (one per lot), and all of them are picked up. Lines let go when a
     // different type was loaded instead (item variance) don't count.
-    const ps = ((picks ?? []) as { order_item_id: number; state: string; done_by: string | null }[]).filter((p) => p.done_by !== "swap");
+    const ps = ((picks ?? []) as { order_item_id: number; state: string; done_by: string | null }[]).filter((p) => p.done_by !== "swap" && p.done_by !== "edit" && p.order_item_id !== null);
     const allDone = ps.length > 0 && ps.every((p) => p.state === "done") && new Set(ps.map((p) => p.order_item_id)).size === items;
     if (!o || o.status === "completed" || o.status === "cancelled" || !items || !allDone) continue;
     if (o.stage === "scheduled" && !bols) {

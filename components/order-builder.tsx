@@ -192,6 +192,8 @@ export function OrderBuilder(props: Props) {
   const [customerList, setCustomerList] = useState<OrderCustomer[]>(() => (companies ?? []).map(unpackCustomer));
   const [autoAddress, setAutoAddress] = useState("");
   const [approvalEmail, setApprovalEmail] = useState("");
+  // Staff: the customer already OK'd it (by phone, in person): skip the approval email.
+  const [skipApproval, setSkipApproval] = useState(false);
   const [autoEmail, setAutoEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -372,7 +374,8 @@ export function OrderBuilder(props: Props) {
         notes,
         companyId: isEmployee ? companyId : "",
         customerName: "",
-        approvalEmail: isEmployee && approvals ? approvalEmail : "",
+        approvalEmail: isEmployee && approvals && !skipApproval ? approvalEmail : "",
+        skipApproval: isEmployee && approvals && skipApproval,
         draftId: draftId ?? undefined,
       });
       if (res.ok) {
@@ -666,6 +669,11 @@ export function OrderBuilder(props: Props) {
         {isEmployee && approvals ? (
           <section className="section">
             <div className="eyebrow">Customer approval</div>
+            <label className="check" style={{ marginBottom: 6 }}>
+              <input type="checkbox" checked={skipApproval} onChange={(e) => setSkipApproval(e.target.checked)} />
+              <span><b>Approve without customer email approval</b> <span className="tiny faint">· they already OK&apos;d it; it goes straight to orders@ambitpu.com with your name on it</span></span>
+            </label>
+            {!skipApproval ? (
             <label className="field">
               <span className="label">Send the approval email to</span>
               <input
@@ -678,10 +686,13 @@ export function OrderBuilder(props: Props) {
                 placeholder="customer@company.com"
               />
             </label>
+            ) : null}
+            {!skipApproval ? (
             <p className="tiny faint" style={{ margin: 0 }}>
               {customer && !fileEmail ? "No email on file for this customer. Type the person who should approve it. " : ""}
               They get the order with an Approve button. It goes to orders@ambitpu.com once they approve.
             </p>
+            ) : null}
           </section>
         ) : null}
 
@@ -691,12 +702,12 @@ export function OrderBuilder(props: Props) {
 
         <div className="col" style={{ gap: 8 }}>
           <button type="button" className="btn block" disabled={pending || lineCount === 0} onClick={submit}>
-            {pending ? "Sending…" : !isEmployee ? "Approve order" : approvals ? "Send to customer for approval" : "Send order to AMBIT"}
+            {pending ? "Sending…" : !isEmployee ? "Approve order" : approvals && !skipApproval ? "Send to customer for approval" : "Send order to AMBIT"}
           </button>
           <p className="tiny faint center" style={{ margin: 0 }}>
             {!isEmployee
               ? `Approving confirms the items, quantities and delivery details. It goes to orders@ambitpu.com and a copy goes to ${me.email}.`
-              : approvals
+              : approvals && !skipApproval
                 ? `${forName ? `${forName} gets` : "The customer gets"} an email to approve. You get a copy at ${me.email}.`
                 : `Goes to orders@ambitpu.com${forName ? ` for ${forName}` : ""}. A copy goes to ${me.email}.`}
           </p>

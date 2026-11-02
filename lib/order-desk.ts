@@ -3,10 +3,12 @@ import { can } from "@/lib/access";
 
 // The order desk: where each order sits after it's placed, and who moves it on.
 //   customer approval -> Sales Order # (CRM) -> credit check (Accounting) -> scheduled (CRM) -> completed
+// Edited after the Invoice # was in: back to the CRM for an invoice update, then (if the total went up) credit again.
 
 export const STAGES: Record<OrderStage, { label: string; short: string; pill: string }> = {
   customer: { label: "Waiting on the customer", short: "With customer", pill: "pill warn" },
   needs_po: { label: "Needs Sales Order #", short: "Needs Sales Order #", pill: "pill" },
+  invoice_update: { label: "Edited: needs an invoice update", short: "Invoice update", pill: "pill warn" },
   credit: { label: "Waiting on credit check", short: "Credit check", pill: "pill warn" },
   hold: { label: "On credit hold", short: "On hold", pill: "pill" },
   schedule: { label: "Released, needs a date", short: "To schedule", pill: "pill warn" },
@@ -16,13 +18,14 @@ export const STAGES: Record<OrderStage, { label: string; short: string; pill: st
 };
 
 /** The database works the stage out; this is the same rule for older rows and previews. */
-export function stageOf(o: Pick<Order, "status" | "approval_status" | "ambit_po" | "credit_status" | "scheduled_for" | "stage">): OrderStage | null {
+export function stageOf(o: Pick<Order, "status" | "approval_status" | "ambit_po" | "credit_status" | "scheduled_for" | "stage"> & { invoice_update_at?: string | null }): OrderStage | null {
   if (o.stage) return o.stage;
   if (o.ambit_po === undefined) return null; // the order desk update (0011) hasn't been run
   if (o.status === "cancelled") return "cancelled";
   if (o.status === "completed") return "completed";
   if (o.approval_status === "pending" || o.approval_status === "changes_requested") return "customer";
   if (!o.ambit_po) return "needs_po";
+  if (o.invoice_update_at) return "invoice_update";
   if (o.credit_status === "hold") return "hold";
   if (o.credit_status !== "approved") return "credit";
   if (!o.scheduled_for) return "schedule";
@@ -72,7 +75,7 @@ export function centralStart(day: string): string {
 
 /** Since when an open order has been waiting on its current step (same rule as the dashboard). */
 export function waitingSince(
-  o: Pick<Order, "approval_sent_at" | "approved_at" | "po_at" | "credit_at" | "created_at" | "scheduled_for"> & { stage?: OrderStage | null },
+  o: Pick<Order, "approval_sent_at" | "approved_at" | "po_at" | "credit_at" | "created_at" | "scheduled_for"> & { stage?: OrderStage | null; invoice_update_at?: string | null },
   today: string,
 ): string | null {
   switch (o.stage) {
@@ -80,6 +83,8 @@ export function waitingSince(
       return o.approval_sent_at ?? o.created_at;
     case "needs_po":
       return o.approved_at ?? o.created_at;
+    case "invoice_update":
+      return o.invoice_update_at ?? o.created_at;
     case "credit":
       return o.po_at ?? o.created_at;
     case "hold":

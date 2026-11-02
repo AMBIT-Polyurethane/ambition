@@ -80,12 +80,23 @@ const button = (href: string, label: string) =>
   `<a href="${h(href)}" style="display:inline-block;background:#E33527;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:13px 20px;border-radius:8px;">${h(label)}</a>`;
 
 /** The order for orders@ambitpu.com (sent once it's approved, or right away when approval isn't needed). */
-export function buildOrderEmail(doc: OrderDoc, link: string) {
+/** A list of what changed, as an HTML box (edits to an order). */
+function changesBox(changes: string[], title = "What changed"): string {
+  if (!changes.length) return "";
+  return `<div style="margin:16px 0 0;padding:12px 14px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;">
+<div style="font-size:12px;font-weight:800;letter-spacing:1px;color:#9a3412;">${h(title.toUpperCase())}</div>
+<ul style="margin:6px 0 0;padding-left:18px;font-size:14px;line-height:1.6;">${changes.map((c) => `<li>${h(c)}</li>`).join("")}</ul></div>`;
+}
+
+export function buildOrderEmail(doc: OrderDoc, link: string, updated?: { changes: string[] }) {
   const o = doc.order;
   const no = orderNo(o.order_no);
   const who = o.account_no ? `${o.company_name} (${o.account_no})` : o.company_name;
   const approved = approvalText(doc);
-  const subject = `New order ${no} · ${who}${o.po_number ? ` · PO ${o.po_number}` : ""}${approved ? " · approved" : ""}`;
+  const rev = (o as { revision?: number }).revision ?? 1;
+  const subject = updated
+    ? `Updated order ${no} (revision ${rev}) · ${who}${o.po_number ? ` · PO ${o.po_number}` : ""}`
+    : `New order ${no} · ${who}${o.po_number ? ` · PO ${o.po_number}` : ""}${approved ? " · approved" : ""}`;
 
   const rows: [string, string][] = [
     ["Order", no],
@@ -103,8 +114,9 @@ export function buildOrderEmail(doc: OrderDoc, link: string) {
   if (o.notes) rows.push(["Notes", o.notes]);
 
   const inner = `
-<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">${approved ? "APPROVED ORDER" : "ORDER REQUEST"}</div>
+<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">${updated ? `UPDATED ORDER · REVISION ${rev}` : approved ? "APPROVED ORDER" : "ORDER REQUEST"}</div>
 <div style="font-size:26px;font-weight:800;margin:4px 0 16px;">${h(no)} · ${h(o.company_name)}</div>
+${updated ? changesBox(updated.changes) : ""}
 ${detailTable(rows)}
 ${itemsTable(doc)}
 ${o.has_customer_pricing ? `<p style="font-size:13px;color:#b42318;margin:8px 0 0;">Includes items at account pricing. Apply the account's pricing on the invoice.</p>` : ""}
@@ -112,7 +124,8 @@ ${o.has_customer_pricing ? `<p style="font-size:13px;color:#b42318;margin:8px 0 
 <p style="margin:20px 0 0;">${button(link, "OPEN IN AMBIT A.I.")}</p>`;
 
   const text = [
-    `${approved ? "APPROVED ORDER" : "ORDER REQUEST"} ${no}`,
+    `${updated ? `UPDATED ORDER (revision ${rev})` : approved ? "APPROVED ORDER" : "ORDER REQUEST"} ${no}`,
+    ...(updated ? ["What changed:", ...updated.changes.map((c) => `- ${c}`), ""] : []),
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
     "Items:",
@@ -129,7 +142,49 @@ ${o.has_customer_pricing ? `<p style="font-size:13px;color:#b42318;margin:8px 0 
     link,
   ].join("\n");
 
-  return { subject, html: wrapEmail(approved ? "Approved order" : "Order request", inner), text };
+  return { subject, html: wrapEmail(updated ? "Updated order" : approved ? "Approved order" : "Order request", inner), text };
+}
+
+/** To the customer: the order was changed and AMBIT's invoice is updated. */
+export function buildOrderUpdatedEmail(doc: OrderDoc, changes: string[]) {
+  const o = doc.order;
+  const no = orderNo(o.order_no);
+  const rev = (o as { revision?: number }).revision ?? 1;
+  const hello = doc.company?.contact_name ? `Hi ${firstName(doc.company.contact_name)},` : "Hello,";
+  const rep = o.placed_by_role !== "customer" ? o.placed_by_name : null;
+  const subject = `Your AMBIT order ${no} was updated`;
+  const rows: [string, string][] = [
+    ["Order", `${no} (revision ${rev})`],
+    ["Delivery", whereText(doc)],
+    ["Your PO", o.po_number ?? "-"],
+  ];
+  if (o.scheduled_for) rows.push([o.delivery_method === "pickup" ? "Pickup" : "Delivery date", dateShort(o.scheduled_for)]);
+  const inner = `
+<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">UPDATED ORDER</div>
+<div style="font-size:24px;font-weight:800;margin:4px 0 14px;">${h(no)} · ${h(o.company_name)}</div>
+<p style="font-size:15px;margin:0 0 10px;">${h(hello)}</p>
+<p style="font-size:15px;margin:0 0 6px;line-height:1.5;">Your order ${h(no)} was updated and AMBIT's invoice now matches it. The updated order is attached as a PDF.</p>
+${changesBox(changes)}
+<div style="height:12px;"></div>
+${detailTable(rows)}
+${itemsTable(doc, false)}
+${notOrderHtml}
+<p style="font-size:13px;color:#52525b;margin:10px 0 0;line-height:1.5;">Something not right? Reply to this email${rep ? ` or contact ${h(rep)}` : ""}, or call AMBIT at (817) 677-1200.</p>`;
+  const text = [
+    `UPDATED ORDER ${no} (revision ${rev})`,
+    "",
+    hello,
+    `Your order ${no} was updated and AMBIT's invoice now matches it.`,
+    "",
+    "What changed:",
+    ...changes.map((c) => `- ${c}`),
+    "",
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    "",
+    `${NOT_ORDER_TITLE}.`,
+    NOT_ORDER_FINE,
+  ].join("\n");
+  return { subject, html: wrapEmail("Updated order", inner), text };
 }
 
 /** To the customer: please check and approve the order AMBIT put together for you. */
@@ -199,15 +254,20 @@ export function buildChangeRequestEmail(doc: OrderDoc, link: string) {
   return { subject, html: wrapEmail("Changes requested", inner), text };
 }
 
-export type DeskNotice = "credit_needed" | "credit_hold" | "ready_to_schedule";
+export type DeskNotice = "credit_needed" | "credit_hold" | "ready_to_schedule" | "invoice_update";
 
 /** Order desk heads-ups for AMBIT staff: the order is now in their queue. */
-export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string) {
+export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, changes?: string[]) {
   const o = doc.order;
   const no = orderNo(o.order_no);
   const who = o.account_no ? `${o.company_name} (${o.account_no})` : o.company_name;
+  const ox = o as { revision?: number; invoice_update_by_name?: string | null };
+  const recheck = kind === "credit_needed" && /^Check again/.test(o.credit_note ?? "");
   const head = {
-    credit_needed: { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Sales Order # ${o.ambit_po ?? ""}${o.invoice_no ? ` and Invoice # ${o.invoice_no}` : ""}. Check for credit holds, then release the order or put it on hold.` },
+    credit_needed: recheck
+      ? { eyebrow: "CREDIT CHECK AGAIN", subject: `Credit check again (order edited) · ${no} · ${o.company_name}`, line: `${o.credit_note} The order desk updated the invoice (Invoice # ${o.invoice_no ?? ""}). Check for credit holds, then release the order or put it on hold.` }
+      : { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Sales Order # ${o.ambit_po ?? ""}${o.invoice_no ? ` and Invoice # ${o.invoice_no}` : ""}. Check for credit holds, then release the order or put it on hold.` },
+    invoice_update: { eyebrow: "INVOICE UPDATE NEEDED", subject: `Invoice update needed · ${no} · ${o.company_name}`, line: `${ox.invoice_update_by_name ?? "AMBIT staff"} edited this order (now revision ${ox.revision ?? 2}). Update the invoice in QuickBooks, then enter the new Invoice # and the prices on the order in the app.` },
     credit_hold: { eyebrow: "ON CREDIT HOLD", subject: `On credit hold · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} put this order on hold: ${o.credit_note ?? ""}` },
     ready_to_schedule: { eyebrow: "READY TO SCHEDULE", subject: `Ready to schedule · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} released this order. Set the ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date and the customer is emailed.` },
   }[kind];
@@ -225,9 +285,10 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string) {
 <div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">${head.eyebrow}</div>
 <div style="font-size:26px;font-weight:800;margin:4px 0 12px;">${h(no)} · ${h(o.company_name)}</div>
 <p style="font-size:15px;margin:0 0 16px;line-height:1.5;">${h(head.line)}</p>
+${changes?.length ? changesBox(changes) + '<div style="height:12px;"></div>' : ""}
 ${detailTable(rows)}
 <p style="margin:20px 0 0;">${button(link, "OPEN THE ORDER")}</p>`;
-  const text = [head.eyebrow + " " + no, head.line, "", ...rows.map(([k, v]) => `${k}: ${v}`), "", link].join("\n");
+  const text = [head.eyebrow + " " + no, head.line, "", ...(changes?.length ? ["What changed:", ...changes.map((c) => `- ${c}`), ""] : []), ...rows.map(([k, v]) => `${k}: ${v}`), "", link].join("\n");
   return { subject: head.subject, html: wrapEmail("Order desk", inner), text };
 }
 

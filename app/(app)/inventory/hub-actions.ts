@@ -8,6 +8,7 @@ import { claudeReady, friendlyClaudeError } from "@/lib/ai/claude";
 import { stockItems } from "@/lib/incoming";
 import { readBol, type BolRead } from "@/lib/inventory/bol";
 import { kickSync } from "@/lib/inventory/sync";
+import { emailAdminsReportWaiting, emailReceiverSentBack } from "@/lib/receiving-notify";
 
 // Inventory Hub: Receiving Reports (with the BOL read by AI) and transfers between locations.
 
@@ -40,7 +41,7 @@ export async function readBolAction(input: { branch: string; paths: string[] }):
   }
 }
 
-export type ReportLine = { id?: number | null; product_id: string; qty: number; received_qty: number; lot_no?: string; mfg?: string; exp?: string; note?: string };
+export type ReportLine = { id?: number | null; product_id: string; qty: number; received_qty: number; damaged_qty?: number; lot_no?: string; mfg?: string; exp?: string; note?: string };
 export type ReportInput = {
   id: number | null;
   branch: string;
@@ -48,7 +49,10 @@ export type ReportInput = {
   lines: ReportLine[];
 };
 
-/** Receive: what came goes into stock (and FOAM LOTS) and the report is saved with the BOL. */
+/**
+ * Receive: the report is saved with the BOL. An admin's report goes straight into stock (FOAM LOTS / RECEIVED LOTS);
+ * anyone else's waits for an admin to approve it, and the admins are emailed.
+ */
 export async function receiveReport(input: ReportInput): Promise<{ ok: false; error: string } | never> {
   const s = await receiver();
   if (!s) return { ok: false, error: "You don't have access to receiving." };
@@ -63,6 +67,7 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
       product_id: l.product_id,
       qty: l.qty,
       received_qty: l.received_qty,
+      damaged_qty: l.damaged_qty ?? 0,
       lot_no: l.lot_no ?? "",
       mfg: l.mfg ?? "",
       exp: l.exp ?? "",
@@ -70,10 +75,48 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
     })),
   });
   if (error) return { ok: false, error: error.message };
-  kickSync(input.branch, "receiving report");
+  const id = Number(data);
+  const { data: now } = await s.supabase.from("inbound_deliveries").select("status").eq("id", id).maybeSingle<{ status: string }>();
   revalidatePath("/inventory", "layout");
   revalidatePath("/");
-  redirect(`/inventory/incoming/${data}?msg=${encodeURIComponent("Received. Stock updated; the spreadsheet catches up within 2 minutes.")}`);
+  if (now?.status === "submitted") {
+    const sent = await emailAdminsReportWaiting(s.supabase, id);
+    redirect(
+      `/inventory/incoming/${id}?msg=${encodeURIComponent(
+        `Sent to an admin for approval${sent.status === "sent" ? " (they were emailed)" : ""}. Stock and the spreadsheet update once it's approved.`,
+      )}`,
+    );
+  }
+  kickSync(input.branch, "receiving report");
+  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent("Received. Stock updated; the spreadsheet catches up within 2 minutes.")}`);
+}
+
+/** Admin: approve a Receiving Report as it was sent. Stock and the spreadsheet update. */
+export async function approveReceiving(form: FormData) {
+  const s = await getSession();
+  const id = Number(form.get("id"));
+  if (!s?.profile || s.profile.role !== "admin" || !Number.isFinite(id)) return;
+  const { error } = await s.supabase.rpc("inbound_approve", { p_id: id });
+  const { data: d } = await s.supabase.from("inbound_deliveries").select("branch_id").eq("id", id).maybeSingle<{ branch_id: string }>();
+  revalidatePath("/inventory", "layout");
+  revalidatePath("/");
+  if (error) redirect(`/inventory/incoming/${id}?err=${encodeURIComponent(error.message)}`);
+  if (d) kickSync(d.branch_id, "receiving report approved");
+  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent("Approved. Stock updated; the spreadsheet catches up within 2 minutes.")}`);
+}
+
+/** Admin: send a Receiving Report back to whoever received it, with what to fix. */
+export async function sendBackReceiving(form: FormData) {
+  const s = await getSession();
+  const id = Number(form.get("id"));
+  const note = String(form.get("note") ?? "").trim();
+  if (!s?.profile || s.profile.role !== "admin" || !Number.isFinite(id)) return;
+  const { error } = await s.supabase.rpc("inbound_send_back", { p_id: id, p_note: note });
+  revalidatePath("/inventory", "layout");
+  revalidatePath("/");
+  if (error) redirect(`/inventory/incoming/${id}?err=${encodeURIComponent(error.message)}`);
+  const sent = await emailReceiverSentBack(s.supabase, id);
+  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent(`Sent back${sent.status === "sent" ? " (they were emailed)" : ""}. Nothing went into stock.`)}`);
 }
 
 // ------------------------------------------------------------------ transfers

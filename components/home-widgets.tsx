@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ArrowDownRight, ArrowUpRight, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, FileCheck, Landmark, OctagonAlert, UserCheck, UserCog } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, FileCheck, Landmark, OctagonAlert, Truck, UserCheck, UserCog } from "lucide-react";
 import { money, qtyText } from "@/lib/format";
 import { todayCentral } from "@/lib/sale";
 import type { DueCustomer } from "@/lib/reorder";
@@ -9,6 +9,7 @@ import type { taxCounts } from "@/lib/tax-server";
 import {
   calendar,
   countsWaiting,
+  receivingWaiting,
   creditQueue,
   deskQueue,
   inventoryBranches,
@@ -141,6 +142,7 @@ async function QueueWidget({ db }: { db: Db }) {
     <Card title="Your order desk" href="/orders/desk" link="Order desk">
       <div className="wg-rows">
         <Row n={q.needsPo} label="need a Sales Order # and Invoice #" href="/orders?stage=needs_po" tone="warn" />
+        {q.invoiceUpdate ? <Row n={q.invoiceUpdate} label={`edited: ${q.invoiceUpdate === 1 ? "needs its" : "need their"} invoice updated`} href="/orders?stage=invoice_update" tone="err" /> : null}
         <Row n={q.toSchedule} label="released, need a date" href="/orders?stage=schedule" tone="warn" />
         <Row n={q.today} label="picking up or delivering today" href={`/orders?stage=scheduled&day=${todayCentral()}`} />
         {q.late ? <Row n={q.late} label="past their pickup / delivery date" href="/orders?stuck=1" tone="err" /> : null}
@@ -220,15 +222,16 @@ async function TeamGoalsWidget({ db }: { db: Db }) {
 
 // ------------------------------------------------------------------ Admin
 async function WaitingWidget({ db, known }: { db: Db; known: HomeKnown }) {
-  const counts = await countsWaiting(db).catch(() => []);
+  const [counts, recv] = await Promise.all([countsWaiting(db).catch(() => []), receivingWaiting(db).catch(() => [])]);
   const { access, roles, apps, tax } = known;
-  const all = counts.length + access + roles + apps + (tax ? tax.pending + tax.expired + tax.soon : 0);
+  const all = counts.length + recv.length + access + roles + apps + (tax ? tax.pending + tax.expired + tax.soon : 0);
   return (
     <Card title="Waiting on you" tone={all ? "warn" : undefined}>
       {all === 0 ? (
         <div className="spot-done ok"><CircleCheck size={18} /> Nothing waiting. All caught up.</div>
       ) : (
         <div className="wg-rows">
+          {recv.length ? <Row n={recv.length} label={`Receiving ${recv.length === 1 ? "Report" : "Reports"} to approve`} href={recv.length === 1 ? `/inventory/incoming/${recv[0].id}` : `/inventory/incoming?b=${recv[0].branch_id}`} tone="warn" icon={<Truck size={15} />} /> : null}
           {counts.length ? <Row n={counts.length} label={`inventory ${counts.length === 1 ? "count differs" : "counts differ"} from the app: approve`} href={counts.length === 1 ? `/inventory/counts/${counts[0].id}` : `/inventory/counts?b=${counts[0].branch_id}`} tone="warn" icon={<ClipboardCheck size={15} />} /> : null}
           {apps ? <Row n={apps} label="credit applications / account setups" href="/admin/forms" tone="warn" icon={<FileCheck size={15} />} /> : null}
           {access ? <Row n={access} label={`access ${access === 1 ? "request" : "requests"}`} href="/admin/users" tone="warn" icon={<UserCheck size={15} />} /> : null}

@@ -135,6 +135,7 @@ export type PlaceOrderInput = {
   companyId: string; // employees only; "__other" = not in list
   customerName: string;
   approvalEmail?: string; // employees only: where the customer's approval link goes
+  skipApproval?: boolean; // employees only: approved without the customer's email approval
   draftId?: string; // an AI order intake draft this order came from
 };
 
@@ -178,7 +179,8 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     }
   }
   const neededBy = /^\d{4}-\d{2}-\d{2}$/.test(input.neededBy) ? input.neededBy : null;
-  const needsApproval = emp && approvalsEnabled();
+  const skip = emp && Boolean(input.skipApproval);
+  const needsApproval = emp && approvalsEnabled() && !skip;
   const approvalEmail = String(input.approvalEmail ?? "").trim().slice(0, 200);
   if (needsApproval && !EMAIL_RE.test(approvalEmail)) {
     return { ok: false, error: "Enter the customer's email so they can approve the order." };
@@ -221,6 +223,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     };
   }
 
+  if (skip) await s.supabase.rpc("order_approve_without_customer", { p_order: orderId, p_note: null });
   await sendOrderEmail(s.supabase, orderId);
   return { ok: true, id: orderId, mode: "sent" };
 }

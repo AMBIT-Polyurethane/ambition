@@ -1493,12 +1493,12 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 /* ---- Order desk dashboard: status colors keep their slot everywhere (validated for both themes) */
 .dash {
   position: relative; display: flex; flex-direction: column; gap: 12px;
-  --dc1: #3987e5; --dc2: #d95926; --dc3: #199e70; --dc4: #c98500; --dc5: #d55181; --dc6: #008300;
+  --dc1: #3987e5; --dc2: #d95926; --dc3: #199e70; --dc4: #c98500; --dc5: #d55181; --dc6: #008300; --dc7: #8b5cf6;
   --st-warn: #fab219; --st-crit: #d03b3b;
 }
-:root[data-theme="light"] .dash { --dc1: #2a78d6; --dc2: #eb6834; --dc3: #1baf7a; --dc4: #eda100; --dc5: #e87ba4; --dc6: #008300; }
+:root[data-theme="light"] .dash { --dc1: #2a78d6; --dc2: #eb6834; --dc3: #1baf7a; --dc4: #eda100; --dc5: #e87ba4; --dc6: #008300; --dc7: #7c3aed; }
 @media (prefers-color-scheme: light) {
-  :root[data-theme="system"] .dash { --dc1: #2a78d6; --dc2: #eb6834; --dc3: #1baf7a; --dc4: #eda100; --dc5: #e87ba4; --dc6: #008300; }
+  :root[data-theme="system"] .dash { --dc1: #2a78d6; --dc2: #eb6834; --dc3: #1baf7a; --dc4: #eda100; --dc5: #e87ba4; --dc6: #008300; --dc7: #7c3aed; }
 }
 .dash-filters { display: flex; flex-direction: column; gap: 8px; }
 .dash-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -2454,3 +2454,9 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .lv-in .input { text-align: right; width: 100%; }
 .lv-save { position: sticky; bottom: calc(var(--tabbar, 0px) + env(safe-area-inset-bottom) + 10px); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); z-index: 5; }
 @media (max-width: 520px) { .lv-row { grid-template-columns: minmax(0, 1fr) 104px; gap: 10px; padding: 12px; } }
+/* Receiving Report line with lot / batch fields: BOL, came in, damaged / lot, mfg, exp */
+@media (min-width: 700px) { .recv-grid.recv-lots.grid4 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* What an order edit changed (order desk step, history) */
+.edit-changes { margin: 4px 0 4px; padding-left: 18px; }
+.edit-changes li { margin: 1px 0; }
+.edit-row.removed .t, .edit-row.removed .s { text-decoration: line-through; opacity: 0.55; }

@@ -59,6 +59,9 @@ export type HubLot = {
   days: number | null; // days left until use by (negative = expired)
   remaining: number;
   value: number;
+  unit?: string;
+  /** Not spray foam on FOAM LOTS: a batch logged at receiving. What's left of it is worked out first-in-first-out. */
+  estimated?: boolean;
 };
 
 export type WeekRow = { week: string; label: string; shipped: number; received: number };
@@ -150,6 +153,15 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
   };
   if (!ids.length) return empty;
 
+  const batchRes = every((a, z) =>
+    db
+      .from("inventory_batches")
+      .select("id, branch_id, product_id, sku, name, lot_no, mfg, exp, qty, received_on")
+      .in("branch_id", ids)
+      .order("received_on", { ascending: false })
+      .order("id", { ascending: false })
+      .range(a, z),
+  ).catch(() => []);
   const [invRes, lotRes, levelRes, orderRes, valueRes, inRes, trOutRes, trInRes, trLineRes, countRes, expRes, firstRes] = await Promise.all([
     every((a, z) =>
       db
@@ -372,6 +384,41 @@ export async function loadHub(db: SupabaseClient, scope: string[] | "all"): Prom
         soonestUseBy: myLots.map((l) => l.use_by).filter(Boolean).sort()[0] ?? null,
       } satisfies HubItem;
     });
+
+  // ---- lots / batches of everything else (RECEIVED LOTS): on hand is assumed to be the newest batches
+  // (the oldest went out first), so each batch's share of what's left is an estimate.
+  type Batch = { id: number; branch_id: string; product_id: string; sku: string; name: string | null; lot_no: string; mfg: string | null; exp: string | null; qty: number; received_on: string };
+  const batchesOf = new Map<string, Batch[]>();
+  for (const b of (await batchRes) as Batch[]) {
+    const key = `${b.branch_id}|${b.product_id}`;
+    if (!batchesOf.has(key)) batchesOf.set(key, []);
+    batchesOf.get(key)!.push(b);
+  }
+  for (const i of items) {
+    const list = batchesOf.get(`${i.branch}|${i.product_id}`);
+    if (!list?.length || i.on_hand <= 0) continue;
+    let left = i.on_hand;
+    for (const b of list) {
+      if (left <= 0) break;
+      const here = Math.min(n(b.qty), left);
+      left -= here;
+      lots.push({
+        branch: b.branch_id,
+        sku: b.sku,
+        name: b.name || i.name,
+        lot_no: b.lot_no,
+        mfg: b.mfg,
+        exp: b.exp,
+        use_by: b.exp,
+        days: b.exp ? days(today, b.exp) : null,
+        remaining: here,
+        value: here * (i.price ?? 0),
+        unit: i.unit,
+        estimated: true,
+      });
+    }
+  }
+  lots.sort((a, z) => (a.use_by ?? "9999").localeCompare(z.use_by ?? "9999"));
 
   // ---- movement per item (90 days)
   const moves: MoveRow[] = items

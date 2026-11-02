@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Check, CircleAlert, CircleCheck, FileDown, MailCheck, RefreshCw } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, RefreshCw } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
@@ -10,6 +10,7 @@ import type { LotPick } from "@/lib/order-doc/loads";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderStatus } from "@/app/(app)/orders/actions";
+import { changesText, editable, type OrderEdit } from "@/lib/order-edit";
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
 import type { Alternative, LotChoice, Variance, VarianceData } from "@/components/item-variance";
@@ -59,7 +60,7 @@ export default async function OrderDetailPage({
     staffOpen ? companyTax(supabase, order.company_id!) : Promise.resolve(null),
     // Staff: where each line stands on the branch inventory spreadsheet (Oklahoma City first).
     emp
-      ? supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).or("done_by.is.null,done_by.neq.swap").order("id")
+      ? supabase.from("inventory_lines").select("order_item_id, state, sheet_row, sheet_status").eq("order_id", id).or("done_by.is.null,done_by.not.in.(swap,edit)").order("id")
       : Promise.resolve({ data: null }),
     // Staff: the customer's sales rep, who gets credit for the order.
     emp && order.sales_rep_id
@@ -68,6 +69,12 @@ export default async function OrderDetailPage({
     // (Prices are no longer carried over from the customer's last order: the CFO asked to type each one from the invoice.)
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
+  // Staff: every edit to the order (0041), oldest first.
+  const { data: editRows } = emp
+    ? await supabase.from("order_edits").select("*").eq("order_id", id).order("edited_at")
+    : { data: null };
+  const edits = ((editRows ?? []) as OrderEdit[]).map((e) => ({ ...e, changes: Array.isArray(e.changes) ? e.changes : [] }));
+  const canEdit = emp && editable(order) && (profile.role === "admin" || can(profile, "ordering") || can(profile, "order_desk"));
   const pickFor = (l: OrderItem) => {
     const p = picks.get(l.id);
     return emp && showsPicks(l.sku, p) ? p : undefined;
@@ -223,6 +230,7 @@ export default async function OrderDetailPage({
           {order.scheduled_for && stageOf(order) !== "cancelled" ? (
             <><dt>{order.delivery_method === "pickup" ? "Pickup" : "Delivery"}</dt><dd>{dateShort(order.scheduled_for)}{order.schedule_note ? `\n${order.schedule_note}` : ""}</dd></>
           ) : null}
+          {emp && (order.revision ?? 1) > 1 ? (<><dt>Revision</dt><dd>{order.revision}{order.invoice_update_at ? " · waiting for the invoice update" : ""}</dd></>) : null}
           {emp && order.ambit_po ? (<><dt>Sales Order #</dt><dd>{order.ambit_po}</dd></>) : null}
           {emp && order.invoice_no ? (<><dt>Invoice #</dt><dd>{order.invoice_no}</dd></>) : null}
           {emp && order.tax_note ? (<><dt>Sales tax</dt><dd style={{ color: "var(--warn-text)", fontWeight: 700 }}>{order.tax_note}</dd></>) : null}
@@ -264,11 +272,15 @@ export default async function OrderDetailPage({
           variance={variance}
           lines={lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) }))}
           payDefaults={company ? { cod: Boolean(company.pay_cod), noChecks: Boolean(company.pay_no_checks) } : null}
+          edits={edits}
         />
       ) : null}
 
       <section className="section">
-        <div className="eyebrow">{lines.length} {lines.length === 1 ? "item" : "items"}</div>
+        <div className="row between" style={{ gap: 8 }}>
+          <div className="eyebrow">{lines.length} {lines.length === 1 ? "item" : "items"}</div>
+          {canEdit ? <Link href={`/orders/${order.id}/edit`} className="btn sm dark"><PencilLine size={15} /> Edit order</Link> : null}
+        </div>
         <div className="list">
           {groups.flatMap((g, gi) =>
             g.rows.map((row, ri) => {
@@ -320,6 +332,33 @@ export default async function OrderDetailPage({
         </div>
         <p className="tiny faint" style={{ margin: 0 }}>Final pricing, tax and freight are confirmed by AMBIT on the invoice.</p>
       </section>
+
+      {edits.length ? (
+        <section className="section">
+          <div className="eyebrow row" style={{ gap: 6 }}><History size={14} /> Changes to this order</div>
+          <div className="list">
+            {[...edits].reverse().map((e) => (
+              <div key={e.id} className="item col" style={{ alignItems: "stretch", gap: 4 }}>
+                <div className="row between" style={{ gap: 8 }}>
+                  <b className="small">Revision {e.revision}</b>
+                  <span className="tiny faint">{e.edited_by_name ?? ""} · {dateTime(e.edited_at)}</span>
+                </div>
+                <ul className="edit-changes small">{changesText(e.changes).map((t, i) => <li key={i}>{t}</li>)}</ul>
+                {e.note ? <div className="tiny muted">Why: {e.note}</div> : null}
+                <div className="tiny faint">
+                  {e.invoice_updated_at
+                    ? `Invoice updated by ${e.invoice_updated_by_name ?? ""} · ${dateTime(e.invoice_updated_at)}${e.total_before !== null && e.total_after !== null ? ` · ${money(e.total_before)} → ${money(e.total_after)}` : ""}${e.credit_reopened ? " · credit checked again" : ""}`
+                    : e.stage_before && !["customer", "needs_po"].includes(e.stage_before)
+                      ? "Waiting for the order desk to update the invoice"
+                      : e.stage_before === "customer"
+                        ? "Before the customer approved: they got a fresh approval email"
+                        : "Before the Sales Order #: orders@ambitpu.com got the updated order"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid2">
         <a href={`/orders/${order.id}/pdf`} target="_blank" rel="noopener" className="btn dark sm"><FileDown size={16} /> {lines.some((l) => pickFor(l)) ? "Warehouse PDF" : "Order PDF"}</a>

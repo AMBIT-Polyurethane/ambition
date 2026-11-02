@@ -82,6 +82,10 @@ export type Product = {
   sale_ends?: string | null;
   /** Private label (Alpha): only admins ever see it. */
   admin_only?: boolean;
+  /** Receiving asks for the Lot / Batch # and expiration (0041). */
+  track_lots?: boolean | null;
+  /** Months from the Mfg date to expiration, so receiving fills it in. */
+  shelf_life_months?: number | null;
   active: boolean;
   sort: number;
 };
@@ -151,9 +155,14 @@ export type Order = {
   priced_by_name?: string | null;
   notify_override_by?: string | null;
   notify_override_at?: string | null;
+  // Edits (0041): each edit adds one; edited after the Invoice # was in = waiting for the CRM's invoice update.
+  revision?: number;
+  invoice_update_at?: string | null;
+  invoice_update_by_name?: string | null;
+  invoiced_total?: number | null;
 };
 
-export type OrderStage = "customer" | "needs_po" | "credit" | "hold" | "schedule" | "scheduled" | "completed" | "cancelled";
+export type OrderStage = "customer" | "needs_po" | "invoice_update" | "credit" | "hold" | "schedule" | "scheduled" | "completed" | "cancelled";
 
 export type ApprovalStatus = "not_required" | "pending" | "approved" | "changes_requested";
 
