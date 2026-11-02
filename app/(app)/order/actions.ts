@@ -189,7 +189,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   const { data: id, error } = await s.supabase.rpc("place_order", {
     p_items: items,
     p_delivery_method: input.delivery,
-    p_branch_id: input.delivery !== "dropship" ? input.branchId || null : null, // job sites ship from a branch too
+    p_branch_id: input.delivery !== "dropship" ? input.branchId || null : null, // deliveries to the contractor ship from a branch too
     p_ship_address: input.delivery === "pickup" ? null : input.address,
     p_po_number: input.po || null,
     p_needed_by: neededBy,

@@ -590,7 +590,7 @@ export function OrderBuilder(props: Props) {
           <div className="seg" role="radiogroup" aria-label="Delivery method">
             {([
               ["pickup", "Branch pickup"],
-              ["jobsite", "Job site"],
+              ["jobsite", "Deliver to contractor"],
               ["dropship", "Drop ship"],
             ] as const).map(([id, label]) => (
               <button key={id} type="button" role="radio" aria-checked={delivery === id} className={delivery === id ? "on" : ""} onClick={() => setDelivery(id)}>
@@ -631,8 +631,8 @@ export function OrderBuilder(props: Props) {
           ) : null}
           {delivery === "pickup" ? null : (
             <label className="field">
-              <span className="label">{delivery === "jobsite" ? "Job site address" : "Ship-to address"}</span>
-              <textarea className="textarea" rows={3} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street, city, state, ZIP. Add a site contact if helpful." />
+              <span className="label">{delivery === "jobsite" ? "Delivery address" : "Ship-to address"}</span>
+              <textarea className="textarea" rows={3} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street, city, state, ZIP. Add a contact name and phone if helpful." />
               {fileAddress ? (
                 <span className="addr-hint tiny faint">
                   {address === fileAddress ? (

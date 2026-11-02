@@ -1107,7 +1107,7 @@ async function reconcilePending(
     const item = itemByKey.get(l.sku.toUpperCase());
     const price = l.item?.customer_priced ? "" : l.item?.unit_price ?? "";
     const wt = lineWeight(l);
-    const how = o.delivery_method === "jobsite" ? "Job site delivery" : "Branch pickup";
+    const how = o.delivery_method === "jobsite" ? "Deliver to contractor" : "Branch pickup";
     const notes = [
       `AMBIT A.I. app · ${how}`,
       o.needed_by ? `needed ${sheetDate(o.needed_by)}` : "",

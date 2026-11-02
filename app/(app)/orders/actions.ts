@@ -259,11 +259,12 @@ export async function creditDecision(form: FormData) {
   const note = String(form.get("note") ?? "").trim();
   const chargeTax = form.get("charge_tax") === "on";
   // COD Only / No Checks Allowed: set on release (the customer's next order starts the same way).
-  const pay = approve ? { p_cod: form.get("cod") === "on", p_no_checks: form.get("no_checks") === "on" } : {};
+  // Customer Has Already Paid (0042): nothing to collect, so COD Only / No Checks come off this order.
+  const pay = approve ? { p_cod: form.get("cod") === "on", p_no_checks: form.get("no_checks") === "on", p_prepaid: form.get("prepaid") === "on" } : {};
   const { error } = await s.supabase.rpc("order_credit_decision", { p_order: id, p_approve: approve, p_note: note || null, p_charge_tax: chargeTax, ...pay });
   if (error) back(id, "err", error.message);
   await sendDeskNotice(s.supabase, id, approve ? "ready_to_schedule" : "credit_hold");
-  const flags = [pay.p_cod ? "COD only" : "", pay.p_no_checks ? "no checks" : ""].filter(Boolean).join(", ");
+  const flags = pay.p_prepaid ? "customer has already paid" : [pay.p_cod ? "COD only" : "", pay.p_no_checks ? "no checks" : ""].filter(Boolean).join(", ");
   back(id, "msg", approve ? `Released${flags ? ` (${flags})` : ""}. The order desk can schedule it now.` : "Put on credit hold. The rep and the order desk were told.");
 }
 

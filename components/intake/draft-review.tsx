@@ -223,7 +223,7 @@ export function DraftReview({
             <div className="seg" role="radiogroup" aria-label="Delivery">
               {[
                 ["pickup", "Pickup"],
-                ["jobsite", "Job site"],
+                ["jobsite", "Deliver to contractor"],
                 ["dropship", "Drop ship"],
               ].map(([k, l]) => (
                 <button key={k} type="button" className={delivery === k ? "on" : ""} onClick={() => setDelivery(k)} aria-pressed={delivery === k}>

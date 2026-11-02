@@ -67,7 +67,7 @@ export function qtyText(qty: number, unit: string): string {
 
 export const DELIVERY_LABEL: Record<string, string> = {
   pickup: "Branch pickup",
-  jobsite: "Deliver to job site",
+  jobsite: "Deliver to contractor",
   dropship: "Drop ship",
 };
 

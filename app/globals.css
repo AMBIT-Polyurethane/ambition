@@ -367,7 +367,7 @@ a.tile:hover { background: var(--s2); color: var(--text); border-color: var(--li
 .linkbtn { background: none; border: 0; padding: 0; color: var(--red-text); font-weight: 700; cursor: pointer; font-size: 14px; }
 
 .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; background: var(--s1); border: 1px solid var(--line); border-radius: 12px; }
-.seg button { height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--text2); font-size: 13px; font-weight: 700; cursor: pointer; }
+.seg button { height: 42px; padding: 0 6px; border: 0; border-radius: 9px; background: transparent; color: var(--text2); font-size: 13px; font-weight: 700; line-height: 1.15; cursor: pointer; }
 .seg button.on { background: var(--red); color: #fff; }
 
 .alert { border-radius: 12px; padding: 12px 14px; font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
@@ -2295,6 +2295,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .pay-boxes .check { align-items: center; flex-wrap: wrap; column-gap: 8px; }
 .pay-boxes .check .tiny { flex-basis: 100%; padding-left: 30px; margin-top: -2px; }
 .pay-alert b { letter-spacing: 0.06em; }
+.pay-boxes .check.off { opacity: 0.45; }
 
 /* ---------- AMBIT-OPS crew work orders (field app, works offline) ---------- */
 .fld { max-width: 760px; }

@@ -318,7 +318,7 @@ function OrderPdf({ doc, approveUrl, qr, audience }: { doc: OrderDoc; approveUrl
     ["ORDER DATE", dateShort(o.created_at), 1],
     ["CUSTOMER PO", o.po_number ?? "None", 1],
     ["NEEDED BY", o.needed_by ? dateShort(o.needed_by) : "Not set", 1.05],
-    ["DELIVERY", pickup ? "Branch pickup" : o.delivery_method === "jobsite" ? "Job site" : "Drop ship", 1],
+    ["DELIVERY", pickup ? "Branch pickup" : o.delivery_method === "jobsite" ? "Deliver to contractor" : "Drop ship", 1],
     ["SHIPS FROM", doc.branch?.name ?? (o.delivery_method === "dropship" ? "Supplier" : "AMBIT"), 1.05],
     ["PLACED BY", `${o.placed_by_name ?? o.placed_by_email ?? ""}${o.placed_by_role !== "customer" ? ", AMBIT" : ""}`, 1.45],
   ];
@@ -364,7 +364,12 @@ function OrderPdf({ doc, approveUrl, qr, audience }: { doc: OrderDoc; approveUrl
                 This is an order form only. AMBIT&apos;s accounting staff will send the invoice after the order is approved.
               </Text>
             </View>
-            {o.pay_cod || o.pay_no_checks ? (
+            {o.pay_prepaid ? (
+              <View style={[s.pay, { backgroundColor: GREEN }]}>
+                <Text style={s.payT}>CUSTOMER HAS ALREADY PAID</Text>
+                <Text style={s.payS}>Paid in full. Nothing to collect at pickup or delivery.</Text>
+              </View>
+            ) : o.pay_cod || o.pay_no_checks ? (
               <View style={s.pay}>
                 <Text style={s.payT}>{[o.pay_cod ? "COD ONLY" : "", o.pay_no_checks ? "NO CHECKS ALLOWED" : ""].filter(Boolean).join("  ·  ")}</Text>
                 <Text style={s.payS}>
@@ -494,7 +499,7 @@ function OrderPdf({ doc, approveUrl, qr, audience }: { doc: OrderDoc; approveUrl
 /**
  * The order as a PDF. Pass the approval link for the copy the customer approves from. The customer's copy says
  * it's not an order or a quotation; the staff copy (orders@, the warehouse) says it's not an invoice and shows the
- * payment rules (COD Only, No Checks Allowed). When unsure it's the customer's copy.
+ * payment rules (COD Only, No Checks Allowed, Customer Has Already Paid). When unsure it's the customer's copy.
  */
 export async function renderOrderPdf(doc: OrderDoc, opts: { approveUrl?: string | null; audience?: PdfAudience } = {}): Promise<Buffer> {
   const approveUrl = opts.approveUrl ?? null;

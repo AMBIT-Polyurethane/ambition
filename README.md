@@ -21,7 +21,7 @@ Prices are always read from the products table when an order is placed.
 
 ## Ordering
 
-Pick items → review → choose branch pickup, job site or drop ship → **Send order to AMBIT**.
+Pick items → review → choose branch pickup, deliver to contractor or drop ship → **Send order to AMBIT**.
 The order is saved, then emailed to `ORDERS_EMAIL` (orders@ambitpu.com) with a copy to the person who placed it.
 Spray foam and fiberglass categories show "Based on customer pricing"; everything else shows list price.
 No checkout or payments: AMBIT handles invoices and POs as usual. Locations with a live inventory spreadsheet
@@ -326,7 +326,7 @@ changes in the app:
 - **TOTAL IN STOCK** changed on the sheet → the app takes it. Changed in the app (Inventory screen: count, received,
   damaged / used) → written to the sheet with Last Counted / Counted By. Changed on both at once: a new count on the
   sheet wins, otherwise both changes are kept.
-- **Orders** (branch pickup or job site from that location) reserve stock the moment they're placed: a "Pending
+- **Orders** (branch pickup or deliver to contractor from that location) reserve stock the moment they're placed: a "Pending
   Pickup" line on PENDING ORDERS (Order # ORD-1234), so PENDING PICKUP / NET AVAILABLE on the sheet include it.
   Cancelled → "Cancelled". Picked up / delivered → "Picked Up / Completed" and TOTAL IN STOCK goes down once (Notes
   say "[Stock taken …]"). The AMBIT PO # is filled in when CRM enters it. Lines marked Picked Up / Completed or
@@ -429,6 +429,10 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   and customer emails); the staff copy keeps "THIS IS NOT AN INVOICE" and shows the payment rules. Prices are no
   longer carried over from the customer's last orders, and the invoice file upload was removed from the Sales
   Order # step (invoices live in QuickBooks).
+- **Customer Has Already Paid** (`0042_customer_already_paid.sql`): `orders.pay_prepaid`, set by
+  `order_credit_decision(..., p_prepaid)` at the release. It clears COD Only / No Checks on that order and isn't
+  copied to `companies`. Green "Paid" pill, green alert on the Picked up / Delivered step, green bar on the staff PDF.
+  `order_invoice_update_done` clears it when an edit raises the total and credit opens again.
 - **Deleted orders log** (`0034_order_delete_log.sql`): `order_delete` saves the whole order (`orders` row,
   `order_items`, `inventory_lines` with their lots and sheet rows, `order_variances`, `order_files`, linked
   `order_drafts`) as JSON in `orders_deleted`, then deletes it. Only the people in `order_keepers` (Jeremiah; no

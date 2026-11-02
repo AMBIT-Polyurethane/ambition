@@ -1,7 +1,8 @@
-import { Check, CircleAlert, FileText, Image as ImageIcon, MailX } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, FileText, Image as ImageIcon, MailX } from "lucide-react";
 import { Submit } from "@/components/forms";
 import { approveWithoutEmail, creditDecision, notifyOverride, resendScheduledEmail, scheduleOrder } from "@/app/(app)/orders/actions";
 import { CompleteForm, NumbersForm } from "@/components/order-file-forms";
+import { PayBoxes } from "@/components/pay-boxes";
 import { ItemVariance, VarianceLog, type VarianceData } from "@/components/item-variance";
 import { dateShort, dateTime, money } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
@@ -88,8 +89,19 @@ export function OrderDeskCard({
   const log2 = (variance?.log ?? []).filter((v) => !early(v));
   const noChanges = <span className="tiny muted">No changes: loading what was picked.</span>;
   // Payment rules accounting set at the release, for the warehouse at pickup / delivery.
-  const payFlags = [o.pay_cod ? "COD ONLY" : null, o.pay_no_checks ? "NO CHECKS ALLOWED" : null].filter(Boolean) as string[];
-  const payAlert = payFlags.length ? (
+  // "Customer Has Already Paid" (0042): nothing to collect, so it replaces COD Only / No Checks.
+  const paid = Boolean(o.pay_prepaid);
+  const payFlags = paid ? [] : ([o.pay_cod ? "COD ONLY" : null, o.pay_no_checks ? "NO CHECKS ALLOWED" : null].filter(Boolean) as string[]);
+  const payAlert = paid ? (
+    <div className="alert ok pay-alert" role="status">
+      <CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} />
+      <span>
+        <b>CUSTOMER HAS ALREADY PAID</b>
+        <br />
+        Nothing to collect when the order {pickup ? "is picked up" : "is delivered"}.
+      </span>
+    </div>
+  ) : payFlags.length ? (
     <div className="alert err pay-alert" role="alert">
       <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />
       <span>
@@ -101,7 +113,7 @@ export function OrderDeskCard({
       </span>
     </div>
   ) : null;
-  const payStart = { cod: Boolean(o.pay_cod || payDefaults?.cod), noChecks: Boolean(o.pay_no_checks || payDefaults?.noChecks) };
+  const payStart = { cod: Boolean(o.pay_cod || payDefaults?.cod), noChecks: Boolean(o.pay_no_checks || payDefaults?.noChecks), prepaid: paid };
   // Approve / confirm without the customer's email.
   const noEmail = (action: (f: FormData) => Promise<void>, label = "Customer Approved without Email") => (
     <form action={action}>
@@ -207,6 +219,7 @@ export function OrderDeskCard({
         o.credit_status === "approved" ? (
           <>
             {`Released by ${o.credit_by_name ?? ""} · ${dateTime(o.credit_at)}${o.credit_note ? ` · ${o.credit_note}` : ""}`}
+            {paid ? <> · <b className="ok-text">CUSTOMER HAS ALREADY PAID</b></> : null}
             {payFlags.length ? <> · <b className="red">{payFlags.join(" · ")}</b></> : null}
           </>
         ) : o.credit_status === "hold" ? (
@@ -230,19 +243,7 @@ export function OrderDeskCard({
               ) : (
                 <span className="tiny faint">Check the account for credit holds first.</span>
               )}
-              <div className="pay-boxes">
-                <label className="check small">
-                  <input type="checkbox" name="cod" defaultChecked={payStart.cod} /> <b>COD Only</b>
-                  <span className="tiny faint">Payment collected at pickup or delivery</span>
-                </label>
-                <label className="check small">
-                  <input type="checkbox" name="no_checks" defaultChecked={payStart.noChecks} /> <b>No Checks Allowed</b>
-                  <span className="tiny faint">Cash or card only</span>
-                </label>
-                {payDefaults && (payDefaults.cod || payDefaults.noChecks) && !o.pay_cod && !o.pay_no_checks ? (
-                  <span className="tiny faint">Ticked the way this customer was set last time. Change them if that&apos;s different now.</span>
-                ) : null}
-              </div>
+              <PayBoxes start={payStart} remembered={Boolean(payDefaults && (payDefaults.cod || payDefaults.noChecks) && !o.pay_cod && !o.pay_no_checks)} />
               <Submit className="btn sm block" pendingText="Releasing…">Release order</Submit>
             </form>
             {st !== "hold" ? (
@@ -327,6 +328,7 @@ export function OrderDeskCard({
       detail: st === "completed" ? (
         <>
           {dateTime(o.completed_at)}
+          {paid ? <> · Customer had already paid</> : null}
           {payFlags.length ? <> · {payFlags.join(" · ")}</> : null}
         </>
       ) : st === "scheduled" ? "Attach a photo or scan of the signed BOL, then mark it done." : null,
@@ -348,6 +350,7 @@ export function OrderDeskCard({
       <div className="row between" style={{ marginBottom: 6 }}>
         <div className="eyebrow">Order desk</div>
         <span className="row" style={{ gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {o.pay_prepaid ? <span className="pill ok">Paid</span> : null}
           {o.pay_cod ? <span className="pill red">COD only</span> : null}
           {o.pay_no_checks ? <span className="pill red">No checks</span> : null}
           <span className={STAGES[st].pill}>{STAGES[st].short}</span>

@@ -96,6 +96,8 @@ export type Order = {
   /** Accounting, at the credit release: collect payment at pickup / delivery; no checks taken. */
   pay_cod?: boolean;
   pay_no_checks?: boolean;
+  /** Accounting, at the credit release: the customer already paid in full, nothing to collect (0042). */
+  pay_prepaid?: boolean;
   order_no: number;
   placed_by: string | null;
   company_id: string | null;

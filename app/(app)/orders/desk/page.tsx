@@ -138,13 +138,14 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
             <div className="list">
               {rows.map((o) => {
                 const b = o.branch_id ? branches.get(o.branch_id) : null;
-                const where = o.delivery_method === "pickup" ? `Pickup ${b ? b.name : ""}` : o.delivery_method === "jobsite" ? `Job site${b ? ` from ${b.name}` : ""}` : "Drop ship";
+                const where = o.delivery_method === "pickup" ? `Pickup ${b ? b.name : ""}` : o.delivery_method === "jobsite" ? `Deliver to contractor${b ? ` from ${b.name}` : ""}` : "Drop ship";
                 return (
                   <Link key={o.id} href={`/orders/${o.id}`} className="item">
                     <div className="grow" style={{ minWidth: 0 }}>
                       <div className="row between" style={{ gap: 8 }}>
                         <span className="t">{orderNo(o.order_no)} · <span style={{ fontWeight: 600 }}>{o.company_name}</span></span>
                         <span className="row" style={{ gap: 6, flex: "none" }}>
+                          {o.pay_prepaid ? <span className="pill ok">Paid</span> : null}
                           {o.pay_cod ? <span className="pill red">COD only</span> : null}
                           {o.pay_no_checks ? <span className="pill red">No checks</span> : null}
                           {o.scheduled_for && (tab.stage === "scheduled" || tab.stage === "completed") ? <span className="pill ok">{dateShort(o.scheduled_for)}</span> : null}
