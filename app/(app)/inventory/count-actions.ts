@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { can, canReceive } from "@/lib/access";
+import { HUB_LOCKED_MSG, can, canReceive, hubAllows } from "@/lib/access";
 import { kickSync } from "@/lib/inventory/sync";
 
 // Spot checks, reconciliations (counts) and expected deliveries. The database checks who may do what.
@@ -48,6 +48,7 @@ export async function startReconcile(form: FormData) {
   if (!s) return;
   const branch = String(form.get("branch") ?? "");
   if (!BRANCH.test(branch)) return;
+  if (!hubAllows(s.profile, branch)) done(`/inventory/counts`, "err", HUB_LOCKED_MSG);
   const { data, error } = await s.supabase.rpc("count_start_reconcile", { p_branch: branch });
   if (error) done(`/inventory/counts?b=${branch}`, "err", error.message);
   redirect(`/inventory/counts/${data}`);
@@ -109,6 +110,7 @@ export async function saveIncoming(input: IncomingInput): Promise<{ ok: false; e
   const s = await receivers();
   if (!s) return { ok: false, error: "You don't have access to receiving." };
   if (!BRANCH.test(input.branch)) return { ok: false, error: "Pick the location." };
+  if (!hubAllows(s.profile, input.branch)) return { ok: false, error: HUB_LOCKED_MSG };
   if (!DAY.test(input.expected)) return { ok: false, error: "Pick the day it's expected." };
   const { data, error } = await s.supabase.rpc("inbound_save", {
     p_id: input.id,

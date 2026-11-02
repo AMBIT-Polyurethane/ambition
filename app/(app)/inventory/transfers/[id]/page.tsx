@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CircleAlert, CircleCheck, Truck } from "lucide-react";
 import { requireActive } from "@/lib/session";
-import { can, canReceive } from "@/lib/access";
+import { can, canReceive, hubAllows } from "@/lib/access";
 import { dateShort, dateTime, plural } from "@/lib/format";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -21,7 +21,7 @@ export default async function TransferPage({ params, searchParams }: { params: P
   const { supabase, profile } = await requireActive();
   if (!can(profile, "transfers") && !canReceive(profile)) redirect("/");
   const { data: t } = await supabase.from("inventory_transfers").select("*").eq("id", Number(id)).maybeSingle();
-  if (!t) notFound();
+  if (!t || !(hubAllows(profile, t.from_branch) || hubAllows(profile, t.to_branch))) notFound();
   const [{ data: lineRows }, { data: names }, { data: del }] = await Promise.all([
     supabase.from("inventory_transfer_lines").select("*").eq("transfer_id", t.id).order("id"),
     supabase.from("branches").select("id, name, state"),

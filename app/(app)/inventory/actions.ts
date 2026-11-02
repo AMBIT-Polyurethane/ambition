@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { can } from "@/lib/access";
+import { HUB_LOCKED_MSG, can, hubAllows } from "@/lib/access";
 import { kickSync, syncBranch } from "@/lib/inventory/sync";
 
 const BRANCH = /^[a-z]{2,8}$/;
@@ -25,6 +25,7 @@ export async function stockChange(form: FormData) {
   const sku = String(form.get("sku") ?? "").slice(0, 60);
   const raw = String(form.get("qty") ?? "").trim().replace(/,/g, "");
   if (!BRANCH.test(branch) || !UUID.test(product)) return;
+  if (!hubAllows(s.profile, branch)) back(branch, "err", HUB_LOCKED_MSG);
   if (!/^\d+(\.\d{1,2})?$/.test(raw)) back(branch, "err", "Type a number (up to 2 decimals).", `p-${product}`);
   const qty = Number(raw);
   const { data, error } = await s.supabase.rpc("inventory_set_count", {
@@ -51,7 +52,7 @@ export async function syncNow(form: FormData) {
   if (!s?.profile || !can(s.profile, "inventory")) return;
   const branch = String(form.get("branch") ?? "");
   const to = String(form.get("to") ?? "inventory");
-  if (!BRANCH.test(branch)) return;
+  if (!BRANCH.test(branch) || !hubAllows(s.profile, branch)) return;
   const r = await syncBranch(branch, { force: true, why: "sync now" });
   const text = r.ok
     ? r.skipped === "another sync is running"

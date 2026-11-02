@@ -68,7 +68,7 @@ export function PrfList({ items, mineIds, admin, owners }: { items: PrfItem[]; m
       ) : (
         <div className="list">
           {shown.map((i) => (
-            <Link key={i.id} className="item" href={`/price-requests/${i.id}`}>
+            <Link key={i.id} className="item" href={`/price-requests/${i.id}`} prefetch={false}>
               <div className="ic"><Icon name="tag" /></div>
               <div className="grow" style={{ minWidth: 0 }}>
                 <div className="t ellipsis">{i.customer || i.contact || "Price request"}</div>

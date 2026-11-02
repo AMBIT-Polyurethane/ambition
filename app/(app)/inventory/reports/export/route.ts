@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/session";
-import { can } from "@/lib/access";
+import { can, hubLock } from "@/lib/access";
 import { loadHub } from "@/lib/inventory/hub";
 import { REPORTS, buildReport, reportCsv, type ReportKey } from "@/lib/inventory/reports";
 import { todayCentral } from "@/lib/sale";
@@ -12,7 +12,9 @@ export async function GET(req: NextRequest) {
   const s = await getSession();
   if (!s?.profile || !can(s.profile, "inv_reports")) return new NextResponse("Not allowed", { status: 403 });
   const key = (REPORTS.find((r) => r.key === req.nextUrl.searchParams.get("r"))?.key ?? "reorder") as ReportKey;
-  const b = req.nextUrl.searchParams.get("b") ?? "all";
+  const lock = hubLock(s.profile);
+  if (lock === "") return new NextResponse("Your account isn't set to a location yet.", { status: 403 });
+  const b = lock ?? req.nextUrl.searchParams.get("b") ?? "all";
   const hub = await loadHub(s.supabase, b === "all" ? "all" : [b]);
   const csv = reportCsv(buildReport(hub, key));
   const where = b === "all" ? "all-locations" : b;

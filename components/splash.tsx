@@ -16,6 +16,9 @@
  *  - a newer version is live and they were away a short while -> a small "Update" bar asks;
  *  - the installed app (home screen / computer) was away 30+ minutes -> the animation plays again,
  *    like opening a real app. A browser tab doesn't replay it.
+ *  - a computer's browser window gets focus again (checked at most every 10 minutes) and a newer
+ *    version is live -> the "Update" bar asks.
+ * If an old page still tries to save after an update, app/error.tsx explains and reloads (lib/stale-app.ts).
  * Everything is drawn with code and three small logo files, so it's sharp on any screen.
  * Styles: "Opening animation" in app/globals.css.
  */
@@ -189,6 +192,14 @@ const SCRIPT = `(function () {
       var away = Date.now() - hiddenAt;
       hiddenAt = 0;
       if (away >= 60 * 1000) back(away);
+    });
+    // A computer's browser tab can sit open (and visible) for days: when the window gets focus again,
+    // look for a newer version at most every 10 minutes and offer the Update bar.
+    var checkedAt = Date.now();
+    w.addEventListener("focus", function () {
+      if (Date.now() - checkedAt < 10 * 60 * 1000) return;
+      checkedAt = Date.now();
+      back(0);
     });
   } catch (e) {
     var s = document.getElementById("ambit-splash");

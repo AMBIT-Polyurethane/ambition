@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeftRight, CircleAlert, CircleCheck, FileText, Sparkles } from "lucide-react";
 import { requireActive } from "@/lib/session";
-import { canReceive } from "@/lib/access";
+import { canReceive, hubAllows } from "@/lib/access";
 import { dateShort, dateTime, plural } from "@/lib/format";
 import { todayCentral } from "@/lib/sale";
 import { claudeReady } from "@/lib/ai/claude";
@@ -27,7 +27,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
   const { supabase, profile } = await requireActive();
   if (!canReceive(profile)) redirect("/");
   const { data: d } = await supabase.from("inbound_deliveries").select("*").eq("id", Number(id)).maybeSingle();
-  if (!d) notFound();
+  if (!d || !hubAllows(profile, d.branch_id)) notFound();
   const [{ data: lineRows }, branches, { data: b }] = await Promise.all([
     supabase.from("inbound_lines").select("*").eq("delivery_id", d.id).order("id"),
     inventoryBranches(supabase, profile),

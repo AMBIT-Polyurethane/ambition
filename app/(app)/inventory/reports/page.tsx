@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireActive } from "@/lib/session";
-import { can } from "@/lib/access";
+import { can, hubLock } from "@/lib/access";
 import { inventoryBranches } from "@/lib/widgets";
 import { loadHub } from "@/lib/inventory/hub";
 import { REPORTS, buildReport, type ReportKey } from "@/lib/inventory/reports";
@@ -20,7 +20,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   if (!can(profile, "inv_reports")) redirect(hubHome(profile, sp.b) ?? "/");
   const live = await inventoryBranches(supabase, profile);
   const key = (REPORTS.find((r) => r.key === sp.r)?.key ?? "reorder") as ReportKey;
-  const pick = sp.b === "all" || !sp.b ? (sp.b === "all" || !live.some((b) => b.id === profile.branch_id) ? "all" : profile.branch_id!) : live.find((b) => b.id === sp.b)?.id ?? "all";
+  const pick = hubLock(profile) !== null
+    ? live[0]?.id ?? "none" // warehouse managers: their own location only
+    : sp.b === "all" || !sp.b ? (sp.b === "all" || !live.some((b) => b.id === profile.branch_id) ? "all" : profile.branch_id!) : live.find((b) => b.id === sp.b)?.id ?? "all";
   if (!live.length) return <main className="shell"><TopBar title="Reports" back="/inventory" /><Empty icon="boxes" title="No inventory spreadsheet is connected yet" /></main>;
   const hub = await loadHub(supabase, pick === "all" ? "all" : [pick]);
   const rep = buildReport(hub, key);

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { can } from "@/lib/access";
+import { HUB_LOCKED_MSG, can, hubAllows } from "@/lib/access";
 import { claudeReady, friendlyClaudeError } from "@/lib/ai/claude";
 import { stockItems } from "@/lib/incoming";
 import { readBol, type BolRead } from "@/lib/inventory/bol";
@@ -24,6 +24,7 @@ export async function readBolAction(input: { branch: string; paths: string[] }):
   const s = await receiver();
   if (!s) return { ok: false, error: "You don't have access to receiving." };
   const branch = String(input.branch ?? "");
+  if (!hubAllows(s.profile, branch)) return { ok: false, error: HUB_LOCKED_MSG };
   const paths = (input.paths ?? []).filter((p) => typeof p === "string" && FILE.test(p) && p.startsWith(`${branch}/`)).slice(0, 4);
   if (!paths.length) return { ok: false, error: "Add a photo or PDF of the BOL first." };
   if (!claudeReady()) return { ok: false, error: "Reading BOLs needs the Claude connection (ANTHROPIC_API_KEY in Vercel). Fill the report in by hand for now." };
@@ -51,6 +52,7 @@ export type ReportInput = {
 export async function receiveReport(input: ReportInput): Promise<{ ok: false; error: string } | never> {
   const s = await receiver();
   if (!s) return { ok: false, error: "You don't have access to receiving." };
+  if (!hubAllows(s.profile, input.branch)) return { ok: false, error: HUB_LOCKED_MSG };
   const files = (input.head.files ?? []).filter((f) => FILE.test(f.path)).map((f) => ({ path: f.path, name: String(f.name ?? "").slice(0, 120) }));
   const { data, error } = await s.supabase.rpc("inbound_receive_report", {
     p_id: input.id,
@@ -80,6 +82,7 @@ export type TransferInput = { from: string; to: string; arrive: string; ref: str
 export async function sendTransfer(input: TransferInput): Promise<{ ok: false; error: string } | never> {
   const s = await getSession();
   if (!s?.profile || !can(s.profile, "transfers")) return { ok: false, error: "You don't have access to transfers." };
+  if (!hubAllows(s.profile, input.from)) return { ok: false, error: "Warehouse managers can only send stock from their own location." };
   const { data, error } = await s.supabase.rpc("transfer_send", {
     p_from: input.from,
     p_to: input.to,

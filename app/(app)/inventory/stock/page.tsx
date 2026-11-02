@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CircleAlert, CircleCheck, ClipboardCheck, ExternalLink, ListChecks, RefreshCw, Truck } from "lucide-react";
 import { todayCentral } from "@/lib/sale";
 import { requirePerm } from "@/lib/session";
+import { hubLock } from "@/lib/access";
 import { TopBar, Empty } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { InventoryList } from "@/components/inventory-list";
@@ -22,7 +23,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     supabase.from("branches").select("id, name, state").order("sort"),
     supabase.from("categories").select("*").order("sort"),
   ]);
-  const live = sheets.filter((s) => s.enabled);
+  // Warehouse managers only see their own location.
+  const lock = hubLock(profile);
+  const live = sheets.filter((s) => s.enabled && (lock === null || s.branch_id === lock));
   const branchName = (id: string) => {
     const b = ((branchRows ?? []) as { id: string; name: string; state: string }[]).find((x) => x.id === id);
     return b ? `${b.name}, ${b.state}` : id.toUpperCase();

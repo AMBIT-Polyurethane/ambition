@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { can } from "@/lib/access";
+import { can, hubLock } from "@/lib/access";
 import { addDays, centralStart, deskAccess } from "@/lib/order-desk";
 import { todayCentral } from "@/lib/sale";
 import type { Profile } from "@/lib/types";
@@ -29,14 +29,22 @@ export function widgetsFor(p: Profile) {
 // ------------------------------------------------------------------ locations
 export type InvBranch = { id: string; name: string };
 
-/** Locations with live inventory, the person's own first. */
-export async function inventoryBranches(db: Db, profile: Pick<Profile, "branch_id">): Promise<InvBranch[]> {
+/**
+ * Locations with live inventory, the person's own first. Warehouse managers only get their own location
+ * (see hubLock); pass { all: true } for a list of every location, e.g. where a transfer can go.
+ */
+export async function inventoryBranches(
+  db: Db,
+  profile: Pick<Profile, "branch_id"> & Partial<Pick<Profile, "role" | "job_role">>,
+  opts: { all?: boolean } = {},
+): Promise<InvBranch[]> {
   const [{ data: sheets }, { data: branches }] = await Promise.all([
     db.from("inventory_sheets").select("branch_id").eq("enabled", true),
     db.from("branches").select("id, name, sort").order("sort"),
   ]);
   const on = new Set(((sheets ?? []) as { branch_id: string }[]).map((s) => s.branch_id));
-  const list = ((branches ?? []) as { id: string; name: string }[]).filter((b) => on.has(b.id));
+  const lock = opts.all || !profile.role ? null : hubLock({ role: profile.role, job_role: profile.job_role, branch_id: profile.branch_id });
+  const list = ((branches ?? []) as { id: string; name: string }[]).filter((b) => on.has(b.id) && (lock === null || b.id === lock));
   return list.sort((a, b) => (a.id === profile.branch_id ? -1 : b.id === profile.branch_id ? 1 : 0));
 }
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CircleAlert, CircleCheck } from "lucide-react";
 import { requireActive } from "@/lib/session";
-import { can } from "@/lib/access";
+import { can, hubAllows } from "@/lib/access";
 import { dateShort, dateTime } from "@/lib/format";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -45,7 +45,7 @@ export default async function CountPage({ params, searchParams }: { params: Prom
   if (!admin && !can(profile, "inventory")) redirect("/");
 
   const { data: count } = await supabase.from("inventory_counts").select("*").eq("id", Number(id)).maybeSingle();
-  if (!count) notFound();
+  if (!count || !hubAllows(profile, count.branch_id)) notFound();
   const [{ data: lineRows }, { data: cats }, { data: branch }] = await Promise.all([
     supabase.from("inventory_count_lines").select("*, product:products(category_id)").eq("count_id", count.id).order("id"),
     supabase.from("categories").select("id, name"),

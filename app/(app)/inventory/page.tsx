@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, ArrowLeftRight, ChevronRight, ClipboardCheck, FileDown, Hourglass, ScanLine, Tags, Truck } from "lucide-react";
 import { requireActive } from "@/lib/session";
-import { can, seesInventory } from "@/lib/access";
+import { can, hubLock, seesInventory } from "@/lib/access";
 import { dateShort, plural } from "@/lib/format";
 import { inventoryBranches } from "@/lib/widgets";
 import { AGING_DAYS, EXPIRING_DAYS, agingBuckets, loadHub } from "@/lib/inventory/hub";
@@ -29,17 +29,27 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
   if (!can(profile, "inv_reports")) redirect(hubHome(profile, sp.b) ?? "/");
 
   const live = await inventoryBranches(supabase, profile);
+  // Warehouse managers only ever see their own location.
+  const locked = hubLock(profile) !== null;
   if (!live.length) {
     return (
       <main className="shell">
         <TopBar title="Inventory Hub" back="/" />
-        <Empty icon="boxes" title="No inventory spreadsheet is connected yet">
-          {profile.role === "admin" ? <Link href="/admin/inventory">Set it up in Admin → Inventory</Link> : "An admin sets this up in Admin → Inventory."}
-        </Empty>
+        {locked ? (
+          <Empty icon="boxes" title="Your account isn't set to a location yet">
+            Warehouse managers see the Inventory Hub for their own location. An admin sets your location in Admin → Accounts.
+          </Empty>
+        ) : (
+          <Empty icon="boxes" title="No inventory spreadsheet is connected yet">
+            {profile.role === "admin" ? <Link href="/admin/inventory">Set it up in Admin → Inventory</Link> : "An admin sets this up in Admin → Inventory."}
+          </Empty>
+        )}
       </main>
     );
   }
-  const pick = sp.b === "all" ? "all" : live.find((b) => b.id === sp.b)?.id ?? (live.some((b) => b.id === profile.branch_id) ? profile.branch_id! : "all");
+  const pick = locked
+    ? live[0].id
+    : sp.b === "all" ? "all" : live.find((b) => b.id === sp.b)?.id ?? (live.some((b) => b.id === profile.branch_id) ? profile.branch_id! : "all");
   const hub = await loadHub(supabase, pick === "all" ? "all" : [pick]);
   const k = hub.kpi;
   const name = (id: string) => hub.branches.find((b) => b.id === id)?.name ?? id.toUpperCase();

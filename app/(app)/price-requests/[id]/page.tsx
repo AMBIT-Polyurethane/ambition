@@ -4,9 +4,9 @@ import { TopBar } from "@/components/ui";
 import { TrackRecent } from "@/components/recent";
 import { Submit } from "@/components/forms";
 import { dateTime, jfDate } from "@/lib/format";
-import { answerRows, prfPricing, prfStatus, priceRows, type PricePair } from "@/lib/jotform";
+import { JotformError, answerRows, prfPricing, prfStatus, priceRows, type PricePair } from "@/lib/jotform";
 import { ownedPriceRequest } from "@/lib/prf-access";
-import { savePrfApproval } from "../actions";
+import { PrfApproveForm } from "@/components/prf-approve-form";
 
 export const metadata = { title: "Price request" };
 export const dynamic = "force-dynamic";
@@ -23,7 +23,23 @@ export default async function PriceRequestPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const { supabase, sub, item, mine, ownerName, approver, profile } = await ownedPriceRequest(id);
+  let req: Awaited<ReturnType<typeof ownedPriceRequest>>;
+  try {
+    req = await ownedPriceRequest(id);
+  } catch (e) {
+    // Jotform busy or down: a plain message instead of the error screen. (Sign-in and not-found pass through.)
+    if (!(e instanceof JotformError)) throw e;
+    return (
+      <main className="shell">
+        <TopBar title="Price request" back="/price-requests/approvals" />
+        <div className="alert warn" role="alert">
+          <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />
+          <span>Couldn&apos;t load this price request from Jotform ({e.message}). Wait a minute and reload the page.</span>
+        </div>
+      </main>
+    );
+  }
+  const { supabase, sub, item, mine, ownerName, approver, profile } = req;
 
   let pairs: PricePair[] = [];
   try {
@@ -94,7 +110,7 @@ export default async function PriceRequestPage({
         {pairs.length === 0 ? (
           <div className="alert warn small">Couldn&apos;t read the price boxes on the Jotform form.</div>
         ) : approver ? (
-          <form action={savePrfApproval} className="col" style={{ gap: 12 }}>
+          <PrfApproveForm>
             <input type="hidden" name="id" value={id} />
             <div className="list price-table">
               <div className="price-row head"><span>Product</span><span>Requested</span><span>Approved</span></div>
@@ -131,7 +147,7 @@ export default async function PriceRequestPage({
             </label>
             <Submit className="btn block" pendingText="Saving…">{status === "approved" ? "Update & email rep" : "Approve & email rep"}</Submit>
             <p className="tiny faint center" style={{ margin: 0 }}>Saves into the Jotform request and emails {mine ? "you" : ownerName || item.rep || "the rep"}.</p>
-          </form>
+          </PrfApproveForm>
         ) : (
           <div className="list price-table">
             <div className="price-row head"><span>Product</span><span>Requested</span><span>Approved</span></div>

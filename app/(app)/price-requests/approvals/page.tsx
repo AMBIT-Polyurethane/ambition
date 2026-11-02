@@ -88,7 +88,7 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
           {shown.map((i) => {
             const r = reviews.get(i.id);
             return (
-              <Link key={i.id} className="item" href={`/price-requests/${i.id}`}>
+              <Link key={i.id} className="item" href={`/price-requests/${i.id}`} prefetch={false}>
                 <div className="ic"><Icon name="tag" /></div>
                 <div className="grow" style={{ minWidth: 0 }}>
                   <div className="row between" style={{ gap: 8 }}>

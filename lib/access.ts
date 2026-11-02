@@ -61,3 +61,20 @@ export const seesOrders = (p: Who) => p.role === "customer" || (["ordering", "or
 /** Staff who still need an admin to pick their role. */
 export const needsRole = (p: Pick<Profile, "role" | "status"> & { job_role?: string | null; perms?: string[] | null }) =>
   p.role === "employee" && p.status === "active" && p.perms != null && !p.job_role;
+
+/**
+ * Warehouse managers run one location, so the Inventory Hub only ever shows them their own.
+ * Returns that location ("" if their account has no location yet), or null for anyone who can see every location.
+ */
+type HubWho = (Pick<Profile, "role"> & { job_role?: string | null; branch_id?: string | null }) | null | undefined;
+export function hubLock(p: HubWho): string | null {
+  if (!p) return "";
+  if (p.role !== "employee" || p.job_role !== "warehouse") return null;
+  return p.branch_id ?? "";
+}
+/** Can this person see or work on this location in the Inventory Hub? */
+export function hubAllows(p: HubWho, branch: string | null | undefined): boolean {
+  const lock = hubLock(p);
+  return lock === null || (!!branch && branch === lock);
+}
+export const HUB_LOCKED_MSG = "Warehouse managers can only work on their own location.";

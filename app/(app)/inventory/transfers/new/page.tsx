@@ -18,7 +18,7 @@ export default async function NewTransferPage({ searchParams }: { searchParams: 
   const branches = await inventoryBranches(supabase, profile);
   const branch = branches.find((b) => b.id === sp.b) ?? branches[0];
   if (!branch) redirect("/inventory");
-  const others = branches.filter((b) => b.id !== branch.id);
+  const others = (await inventoryBranches(supabase, profile, { all: true })).filter((b) => b.id !== branch.id);
   if (!others.length) return <main className="shell"><TopBar title="Send stock" back="/inventory/transfers" /><Empty icon="truck" title="Only one location has live inventory">Transfers need a second location with its spreadsheet connected.</Empty></main>;
   const [items, stocks, { data: names }] = await Promise.all([
     sendableItems(supabase, branch.id),

@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { requireAdmin, requirePerm } from "@/lib/session";
 import { JotformError, answerText, looksLikeEmail, normName, prfFields, prfPricing, prfSubmission, priceRows, updateSubmission } from "@/lib/jotform";
 import { sendEmail } from "@/lib/email";
@@ -26,19 +25,33 @@ export async function unlinkRepName(form: FormData) {
   revalidatePath("/price-requests");
 }
 
-/** Approver: save the approved prices into the Jotform submission, record who did it, and email the rep. */
-export async function savePrfApproval(form: FormData) {
+/** What the approval form shows after Approve: a fresh object each time so the page scrolls to it. */
+export type PrfSaveState = { ok: boolean; msg: string; at: number } | null;
+
+/**
+ * Approver: save the approved prices into the Jotform submission, record who did it, and email the rep.
+ * Answers in place (the form shows the result and the page refreshes) instead of redirecting, so a slow
+ * phone or a busy Jotform can't leave the screen stuck.
+ */
+export async function savePrfApproval(_prev: PrfSaveState, form: FormData): Promise<PrfSaveState> {
   const { supabase, profile } = await requirePerm("prf_approve");
   const id = String(form.get("id") ?? "");
   const note = String(form.get("note") ?? "").trim().slice(0, 2000);
-  const back = (kind: "msg" | "err", text: string): never => {
+  const done = (ok: boolean, text: string): PrfSaveState => {
     revalidatePath(`/price-requests/${id}`);
     revalidatePath("/price-requests/approvals");
-    redirect(`/price-requests/${id}?${kind}=${encodeURIComponent(text)}`);
+    return { ok, msg: text, at: Date.now() };
   };
 
-  const [sub, pairs, fields] = await Promise.all([prfSubmission(id), prfPricing(), prfFields()]);
-  if (!sub) back("err", "That price request no longer exists in Jotform.");
+  // Jotform busy or down: say so on the page instead of crashing it.
+  let loaded: [Awaited<ReturnType<typeof prfSubmission>>, Awaited<ReturnType<typeof prfPricing>>, Awaited<ReturnType<typeof prfFields>>];
+  try {
+    loaded = await Promise.all([prfSubmission(id), prfPricing(), prfFields()]);
+  } catch (e) {
+    return done(false, `Nothing was saved: ${e instanceof JotformError ? e.message : "couldn't reach Jotform."} Try again in a minute.`);
+  }
+  const [sub, pairs, fields] = loaded;
+  if (!sub) return done(false, "That price request no longer exists in Jotform.");
   const values: Record<string, string> = {};
   const prices: Record<string, string> = {};
   for (const p of pairs) {
@@ -49,12 +62,12 @@ export async function savePrfApproval(form: FormData) {
     values[p.apprQid] = v;
     if (v) prices[p.product] = v;
   }
-  if (Object.keys(prices).length === 0) back("err", "Enter at least one approved price.");
+  if (Object.keys(prices).length === 0) return { ok: false, msg: "Enter at least one approved price.", at: Date.now() };
 
   try {
     await updateSubmission(id, values);
   } catch (e) {
-    back("err", e instanceof JotformError ? e.message : "Couldn't save to Jotform. Try again.");
+    return done(false, `Nothing was saved: ${e instanceof JotformError ? e.message : "couldn't save to Jotform."} Try again.`);
   }
 
   const approver = profile.full_name || profile.email;
@@ -64,7 +77,7 @@ export async function savePrfApproval(form: FormData) {
   );
 
   // The rep: SALES REP holds their email; otherwise the Sales Person Email box; otherwise their app account.
-  const fresh = (await prfSubmission(id)) ?? sub!;
+  const fresh = (await prfSubmission(id).catch(() => null)) ?? sub;
   const rep = fields.rep ? answerText(fresh.answers[fields.rep]) : "";
   const repBox = fields.repEmail ? answerText(fresh.answers[fields.repEmail]) : "";
   let to = looksLikeEmail(rep) ? rep.trim() : looksLikeEmail(repBox) ? repBox.trim() : "";
@@ -88,8 +101,8 @@ export async function savePrfApproval(form: FormData) {
   }
   if (!saveError) await supabase.from("prf_reviews").update({ email_status: sent.status, email_error: sent.error ?? null }).eq("submission_id", id);
 
-  back(
-    sent.status === "sent" ? "msg" : "err",
+  return done(
+    sent.status === "sent",
     sent.status === "sent"
       ? `Approved prices saved to Jotform and emailed to ${to}.`
       : `Approved prices saved to Jotform, but the email to the rep didn't go out (${sent.error ?? sent.status}).`,

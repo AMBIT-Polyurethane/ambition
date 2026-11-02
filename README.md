@@ -100,7 +100,14 @@ back on screen it asks `/api/version` which version is live: after 30+ minutes a
 by itself (with the opening animation), unless something is half typed; otherwise a small "A new version of AMBIT
 A.I. is ready · Update" bar appears at the top. The installed app also replays the opening animation after 30+
 minutes away. (components/splash.tsx; the opening screen is its own `<ambit-splash>` tag, never a `<div>`, so React
-doesn't mistake it for the first box of the page and wipe it out.)
+doesn't mistake it for the first box of the page and wipe it out.) A computer's browser window also checks when it
+gets focus again (at most every 10 minutes) and shows the Update bar.
+
+If a page that was opened before an update still tries to save (its Save button no longer exists in the new
+version: "Server Action was not found"), or tries to load code that's gone, `app/error.tsx` says "AMBIT A.I. was
+just updated", that the change didn't save, and offers Reload (code that's gone reloads by itself, once).
+`app/global-error.tsx` does the same when even the app frame can't draw, so nobody gets a blank black page.
+Vercel Skew Protection (Project Settings → Advanced, 12 hours) keeps pages under 12 hours old working across updates.
 
 ### AMBIT-OPS
 
@@ -378,6 +385,9 @@ before, spot checks per location).
 `/inventory` is the hub (`components/inventory/hub-nav.tsx` tabs: Dashboard, Stock, Receiving, Transfers, Counts,
 Reports, and List values for admins; each shown by permission). Three permissions from `0037_inventory_hub.sql` (everyone with `inventory` got
 them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock links redirect to `/inventory/stock`.
+- **Warehouse managers see only their own location** (`hubLock`/`hubAllows` in `lib/access.ts`): `inventoryBranches()`
+  returns just their branch (pass `{ all: true }` for transfer destinations), the dashboard, stock, reports and CSV are pinned to it,
+  receiving / count / transfer detail pages 404 for other locations, and the hub's server actions refuse other locations.
 - **Dashboard and reports** (`lib/inventory/hub.ts` → `loadHub(db, branches | "all")`, `lib/inventory/reports.ts`,
   CSV at `/inventory/reports/export`): stock value is an estimated sell value: the item's List value
   (`product_values`, `0039_inventory_list_values.sql`, set by admins at `/inventory/values`; readable only by staff with
@@ -585,7 +595,10 @@ set Cancelled there with `done_by = 'swap'` and the new type is picked again by 
 
 Admins: Home → Price approvals. Waiting requests first; each opens as a clean form with requested vs approved
 prices. Saving writes the approved prices into the Jotform submission and emails the rep, so
-`JOTFORM_API_KEY` must be a **Full Access** key (Jotform → Settings → API).
+`JOTFORM_API_KEY` must be a **Full Access** key (Jotform → Settings → API). The result shows right on the form (green: saved and
+emailed; red: what went wrong, and whether anything saved) instead of jumping to a new page
+(`components/prf-approve-form.tsx`). If Jotform is slow or down, the request page and the Save button say so
+instead of showing the error screen. The approvals list doesn't preload every request in the background.
 
 ### Appearance
 
