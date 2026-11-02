@@ -50,6 +50,8 @@ export type Profile = {
   ops_role?: string | null;
   ops_location_id?: string | null;
   ops_workspace?: string | null;
+  /** Gets the "Credit check needed" emails (0043, Admin > Email alerts). */
+  notify_credit?: boolean;
 };
 
 export type Branch = {

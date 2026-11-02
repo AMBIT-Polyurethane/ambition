@@ -433,6 +433,9 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   `order_credit_decision(..., p_prepaid)` at the release. It clears COD Only / No Checks on that order and isn't
   copied to `companies`. Green "Paid" pill, green alert on the Picked up / Delivered step, green bar on the staff PDF.
   `order_invoice_update_done` clears it when an edit raises the total and credit opens again.
+- **Credit check emails** (`0043_credit_check_emails.sql`): `profiles.notify_credit`, set in Admin › Email alerts
+  (`set_credit_emails(ids)`, admins only, with a test email). `sendDeskNotice("credit_needed")` emails everyone ticked
+  (admins included); with nobody ticked it falls back to staff with the Credit check box, then `ACCOUNTING_EMAIL`.
 - **Deleted orders log** (`0034_order_delete_log.sql`): `order_delete` saves the whole order (`orders` row,
   `order_items`, `inventory_lines` with their lots and sheet rows, `order_variances`, `order_files`, linked
   `order_drafts`) as JSON in `orders_deleted`, then deletes it. Only the people in `order_keepers` (Jeremiah; no

@@ -27,6 +27,7 @@ export default async function AdminPage() {
       <div className="list">
         <ListLink href="/admin/assistant" icon="spark" title="Ask AMBIT" sub="Teach the assistant, answer questions sent to AMBIT's expert, settings" />
         <ListLink href="/admin/users" icon="users" title="Accounts" sub={`${pending.count ?? 0} waiting for approval`} />
+        <ListLink href="/admin/email-alerts" icon="mail" title="Email alerts" sub="Who gets the credit check emails" />
         <ListLink href="/admin/companies" icon="building" title="Customers" sub={`${companies.count ?? 0} companies · sales reps`} />
         <ListLink href="/admin/ops" icon="ops" title="AMBIT-OPS workspaces" sub="Turn OPS on for a contractor, demo workspaces, help a contractor" />
         <ListLink href="/admin/sales-goals" icon="target" title="Sales goals" sub="Monthly goals by product group for sales reps and warehouse managers" />

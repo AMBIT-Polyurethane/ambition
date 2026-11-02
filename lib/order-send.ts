@@ -104,13 +104,29 @@ async function staffWith(supabase: SupabaseClient, perm: string): Promise<string
   return ((data ?? []) as { email: string }[]).map((r) => r.email).filter(Boolean);
 }
 
+/** Who gets "Credit check needed": the people ticked in Admin > Email alerts (0043), admins included. */
+export async function creditEmailList(supabase: SupabaseClient): Promise<{ name: string; email: string }[]> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("full_name, email")
+    .in("role", ["employee", "admin"])
+    .eq("status", "active")
+    .eq("notify_credit", true)
+    .order("full_name");
+  if (error) return []; // before update 0043
+  return ((data ?? []) as { full_name: string | null; email: string }[]).filter((r) => r.email).map((r) => ({ name: r.full_name ?? r.email, email: r.email }));
+}
+
 /** Order desk heads-ups: credit check needed (accounting), on hold (rep + order desk), ready to schedule (order desk). */
 export async function sendDeskNotice(supabase: SupabaseClient, orderId: string, kind: DeskNotice, changes?: string[]): Promise<SendResult> {
   const doc = await loadOrderDoc(supabase, orderId);
   if (!doc) return { status: "failed", error: "Order not found" };
   const o = doc.order;
   let to: string[] = [];
-  if (kind === "credit_needed") to = await staffWith(supabase, "credit_check");
+  if (kind === "credit_needed") {
+    to = (await creditEmailList(supabase)).map((p) => p.email);
+    if (to.length === 0) to = await staffWith(supabase, "credit_check");
+  }
   else to = await staffWith(supabase, "order_desk");
   if (kind === "credit_hold" && o.placed_by_role !== "customer" && o.placed_by_email) to.push(o.placed_by_email);
   if (to.length === 0) to = [kind === "credit_needed" ? ACCOUNTING_EMAIL : ORDERS_EMAIL];
