@@ -184,6 +184,13 @@ export default async function OrderDetailPage({
         <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div>
       ) : null}
 
+      {canEdit ? (
+        <Link href={`/orders/${order.id}/edit`} className="btn dark block edit-order-top">
+          <PencilLine size={17} /> Edit order
+          <span className="tiny faint">Add items, change or remove quantities</span>
+        </Link>
+      ) : null}
+
       {contractorDecides ? (
         <section className="card col" style={{ gap: 12, borderColor: "var(--warn)" }}>
           <div>

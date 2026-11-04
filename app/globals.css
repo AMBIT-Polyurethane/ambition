@@ -657,6 +657,9 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .loc-pick { min-height: 68px; }
 .loc-pick.on { background: var(--s2); }
 .loc-pick .loc-addr { white-space: pre-line; overflow-wrap: anywhere; }
+/* Order page: Edit order at the top, every open step (0041) */
+.edit-order-top { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 8px; min-height: 52px; font-weight: 800; }
+.edit-order-top .tiny { flex-basis: 100%; text-align: center; font-weight: 600; letter-spacing: 0.02em; text-transform: none; }
 /* Order for a customer: "Make Custom Foam Order" (0044) */
 .custom-foam { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 10px; font-weight: 800; }
 .loc-bar { display: flex; align-items: center; gap: 8px; width: 100%; margin: 2px 0 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--s1); color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
