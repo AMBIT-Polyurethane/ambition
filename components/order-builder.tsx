@@ -357,7 +357,7 @@ export function OrderBuilder(props: Props) {
   const availFilter = canFilterAvail && onlyAvail;
   const here = (limited ? products.filter((p) => carried(p.id)) : products).filter((p) => !p.custom);
   // Custom foam order: every ISO brand and resin this location stocks.
-  const foamHere = isEmployee ? products.filter((p) => p.foam && carried(p.id)) : [];
+  const foamHere = products.filter((p) => p.foam && carried(p.id));
   const isoHere = foamHere.filter((p) => p.foam === "iso").sort((a, b) => a.name.localeCompare(b.name));
   const resinHere = foamHere.filter((p) => p.foam === "resin").sort((a, b) => a.name.localeCompare(b.name));
   const drumsOf = (list: CatalogProduct[]) => list.reduce((s, p) => s + (cart[p.id] ?? 0) * (/^totes?$/i.test(p.unit) ? 5 : 1), 0);
@@ -761,7 +761,7 @@ export function OrderBuilder(props: Props) {
         <div className="grow">
           <div className="name">{p.name}</div>
           <div className="desc">{p.sku}</div>
-          <StockTag s={stockHere?.[p.id]} staff />
+          <StockTag s={stockHere?.[p.id]} staff={isEmployee} />
         </div>
         {qty > 0 ? (
           <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
@@ -773,7 +773,7 @@ export function OrderBuilder(props: Props) {
   };
 
   // ------------------------------------------------------ custom foam order (staff)
-  if (foamMode && isEmployee) {
+  if (foamMode) {
     const iso = drumsOf(isoHere), resin = drumsOf(resinHere);
     const totes = [...isoHere, ...resinHere].some((p) => (cart[p.id] ?? 0) > 0 && /^totes?$/i.test(p.unit));
     return (
@@ -788,8 +788,16 @@ export function OrderBuilder(props: Props) {
           {placeBars}
         </div>
         <p className="small muted" style={{ margin: 0 }}>
-          Pick the exact ISO brand and the resins the customer asked for, from {branch ? branch.name : "this location"}&apos;s inventory. They go on the
-          order as separate lines, and the warehouse holds those drums (the lot that expires soonest first).
+          {isEmployee ? (
+            <>
+              Pick the exact ISO brand and the resins the customer asked for, from {branch ? branch.name : "this location"}&apos;s inventory. They go on the
+              order as separate lines, and the warehouse holds those drums (the lot that expires soonest first).
+            </>
+          ) : (
+            <>
+              Order ISO and resin by the drum, in any mix you need{branch ? ` from ${branch.name}` : ""}. Tap ADD on each one, then review your order.
+            </>
+          )}
         </p>
         {foamHere.length === 0 ? (
           <div className="card muted small center">{branch ? `${branch.name} has no spray foam on its inventory list.` : "Pick a location first."}</div>
@@ -808,10 +816,10 @@ export function OrderBuilder(props: Props) {
               <span>
                 <b>ISO {qtyText(iso)} · Resin {qtyText(resin)}</b> {totes ? "(in drums; a tote counts as 5)" : "drums"}.{" "}
                 {iso && resin && iso !== resin
-                  ? `That isn't even sets (${qtyText(iso)} ISO to ${qtyText(resin)} resin). Fine if that's what the customer asked for.`
+                  ? `That isn't even sets (${qtyText(iso)} ISO to ${qtyText(resin)} resin). Fine if that's what ${isEmployee ? "the customer asked for" : "you need"}.`
                   : iso || resin
                     ? "Change the quantities with + and −, then review the order."
-                    : "Tap ADD on each ISO and resin the customer wants."}
+                    : `Tap ADD on each ISO and resin ${isEmployee ? "the customer wants" : "you need"}.`}
               </span>
             </div>
           </>
@@ -829,7 +837,7 @@ export function OrderBuilder(props: Props) {
         <div className="topbar">
           <h1 className="title" style={{ margin: 0 }}>{isEmployee ? "Order for a customer" : "Place an order"}</h1>
         </div>
-        {isEmployee && foamHere.length ? (
+        {foamHere.length ? (
           <button type="button" className="btn dark block custom-foam" onClick={() => { setFoamMode(true); window.scrollTo(0, 0); }}>
             <FlaskConical size={17} /> Make Custom Foam Order
           </button>

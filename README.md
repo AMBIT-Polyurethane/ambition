@@ -433,8 +433,8 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   `order_credit_decision(..., p_prepaid)` at the release. It clears COD Only / No Checks on that order and isn't
   copied to `companies`. Green "Paid" pill, green alert on the Picked up / Delivered step, green bar on the staff PDF.
   `order_invoice_update_done` clears it when an edit raises the total and credit opens again.
-- **Custom foam orders** (`0044_custom_foam_orders.sql`): "Make Custom Foam Order" at the top of Order for a
-  customer (staff). Lists the location's ISO brands (inactive products with `stock_of`, loaded for staff only) and
+- **Custom foam orders** (`0044_custom_foam_orders.sql`): "Make Custom Foam Order" at the top of the order screen.
+  Contractors get ISO A-Side and the resins by the drum; staff (Order for a customer) pick the ISO brand. Lists the location's ISO brands (inactive products with `stock_of`, loaded for staff only) and
   resins (`foam` on `CatalogProduct`: ambit-foam / alpha-chemicals drums and totes). `place_order` lets staff order
   an ISO brand by name; `inventory_pick` then holds that brand only.
 - **Credit check emails** (`0043_credit_check_emails.sql`): `profiles.notify_credit`, set in Admin › Email alerts

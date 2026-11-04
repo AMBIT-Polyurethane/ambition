@@ -61,11 +61,12 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
   const cats = (categories ?? []) as Category[];
   const cpByCat = new Map(cats.map((c) => [c.id, c.customer_priced]));
   const today = todayCentral();
-  // Custom foam order (staff): ISO (A side) and resin (B side) drums and totes, picked one by one. The store's
-  // single "ISO A-Side" isn't in it (there the app picks the brand); the ISO brands are.
+  // Custom foam order: ISO (A side) and resin (B side) drums and totes, picked one by one.
   const foamOf = (p: Product): "iso" | "resin" | undefined => {
     if (!["ambit-foam", "alpha-chemicals"].includes(p.category_id ?? "") || !/^(drum|tote)s?$/i.test(p.unit)) return undefined;
-    if (p.sku.trim().toUpperCase() === "ISO") return undefined;
+    // Staff pick the brand (the store's single "ISO A-Side" stays off their list); contractors get ISO A-Side,
+    // since brands are never shown to them (AMBIT picks the brand and lot).
+    if (p.sku.trim().toUpperCase() === "ISO") return emp ? undefined : "iso";
     return /\bISO\b/i.test(`${p.sku} ${p.name}`.replace(/-/g, " ")) ? "iso" : "resin";
   };
   const brands = ((brandRows ?? []) as Product[]).map((p) => ({ ...p, custom: true }));
@@ -86,7 +87,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       sale,
       cp: !sale && (p.customer_priced ?? (p.category_id ? cpByCat.get(p.category_id) ?? false : false)),
       sqft: p.sqft_per_unit != null && Number(p.sqft_per_unit) > 0 ? Number(p.sqft_per_unit) : null,
-      foam: emp ? foamOf(p) : undefined,
+      foam: foamOf(p),
       custom: p.custom || undefined,
     };
   });
