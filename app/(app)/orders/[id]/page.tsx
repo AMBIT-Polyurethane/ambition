@@ -74,7 +74,11 @@ export default async function OrderDetailPage({
     ? await supabase.from("order_edits").select("*").eq("order_id", id).order("edited_at")
     : { data: null };
   const edits = ((editRows ?? []) as OrderEdit[]).map((e) => ({ ...e, changes: Array.isArray(e.changes) ? e.changes : [] }));
-  const canEdit = emp && editable(order) && (profile.role === "admin" || can(profile, "ordering") || can(profile, "order_desk"));
+  // Open orders: admins, Ordering and the order desk. A completed order (picked up / delivered): admins only (0046).
+  const canEdit =
+    emp &&
+    ((editable(order) && (profile.role === "admin" || can(profile, "ordering") || can(profile, "order_desk"))) ||
+      (order.status === "completed" && profile.role === "admin"));
   const pickFor = (l: OrderItem) => {
     const p = picks.get(l.id);
     return emp && showsPicks(l.sku, p) ? p : undefined;
@@ -186,8 +190,8 @@ export default async function OrderDetailPage({
 
       {canEdit ? (
         <Link href={`/orders/${order.id}/edit`} className="btn dark block edit-order-top">
-          <PencilLine size={17} /> Edit order
-          <span className="tiny faint">Add items, change or remove quantities</span>
+          <PencilLine size={17} /> {order.status === "completed" ? "Correct this order (admin)" : "Edit order"}
+          <span className="tiny faint">{order.status === "completed" ? "Already picked up or delivered: fixes stock and the invoice" : "Add items, change or remove quantities"}</span>
         </Link>
       ) : null}
 

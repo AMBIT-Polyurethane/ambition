@@ -18,8 +18,13 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
   if (!isEmployee(profile) || !(profile.role === "admin" || can(profile, "ordering") || can(profile, "order_desk"))) redirect(`/orders/${id}`);
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) notFound();
-  if (order.status === "completed" || order.status === "cancelled") {
-    redirect(`/orders/${id}?err=${encodeURIComponent(`This order is ${order.status}. Place a new order instead.`)}`);
+  if (order.status === "cancelled") {
+    redirect(`/orders/${id}?err=${encodeURIComponent("This order was cancelled. Place a new order instead.")}`);
+  }
+  // A completed order (picked up / delivered): only an admin corrects it (0046).
+  const closed = order.status === "completed";
+  if (closed && profile.role !== "admin") {
+    redirect(`/orders/${id}?err=${encodeURIComponent("This order is completed. Only an admin can correct a completed order.")}`);
   }
   const [{ data: itemRows }, { data: picked }, carried, { data: products }] = await Promise.all([
     supabase.from("order_items").select("*").eq("order_id", id).order("id"),
@@ -35,21 +40,23 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
     name: i.name,
     unit: i.unit,
     qty: Number(i.qty),
-    locked: done.has(i.id) ? "Already picked up on the spreadsheet: can't be changed here." : null,
+    locked: !closed && done.has(i.id) ? "Already picked up on the spreadsheet: can't be changed here." : null,
   }));
   const choices: AddChoice[] = ((products ?? []) as { id: string; sku: string; name: string; unit: string }[])
     .filter((p) => !carried || carried.has(p.id))
     .map((p) => ({ product_id: p.id, sku: p.sku, name: p.name, unit: p.unit }));
   const st = stageOf(order);
-  const next =
-    st === "customer"
+  const where = order.delivery_method === "pickup" ? "picked up" : "delivered";
+  const next = closed
+    ? `This order was already ${where}. Saving corrects stock${order.branch_id ? ` at ${order.branch_id.toUpperCase()}` : ""}: whatever you change goes back in and the new amount comes out (the spreadsheet updates on its next sync). Then the order desk updates the invoice, and if the total changed the credit team is emailed to collect or credit the difference. Credit isn't checked again, and the customer is emailed the updated order.`
+    : st === "customer"
       ? `It's still waiting on the customer: saving sends them a fresh approval email${order.approval_email ? ` (${order.approval_email})` : ""} and the old link stops working.`
       : !order.ambit_po
         ? "The Sales Order # isn't in yet: saving sends the updated order to orders@ambitpu.com. Stock is held for the new amounts right away."
         : `The Invoice # is already in (${st ? STAGES[st].short : ""}): saving sends the order back to the order desk to update the invoice. If the total goes up, accounting checks credit again, and the customer is emailed the updated order once the invoice is updated.`;
   return (
     <main className="shell">
-      <TopBar title={`Edit ${orderNo(order.order_no)}`} back={`/orders/${id}`} />
+      <TopBar title={`${closed ? "Correct" : "Edit"} ${orderNo(order.order_no)}`} back={`/orders/${id}`} />
       <p className="small muted" style={{ margin: 0 }}>
         {order.company_name} · revision {order.revision ?? 1}. Change a quantity, take an item off (trash can), or add an item, then tap Save changes.
       </p>

@@ -105,10 +105,20 @@ export async function editOrder(input: { id: string; lines: EditLine[]; note: st
     .filter((l) => Number.isFinite(l.qty) && l.qty >= 0 && (l.id || l.product_id));
   const { data, error } = await s.supabase.rpc("order_edit", { p_order: id, p_lines: lines, p_note: String(input.note ?? "").slice(0, 500) || null });
   if (error) return { ok: false, error: error.message };
-  const r = (data ?? {}) as { revision?: number; invoice_update?: boolean; customer?: boolean; changes?: OrderChange[] };
+  const r = (data ?? {}) as { revision?: number; invoice_update?: boolean; customer?: boolean; closed?: boolean; changes?: OrderChange[] };
   const changes = changesText(r.changes);
   await kickForOrder(s.supabase, id, "order edited");
   const rev = `Saved as revision ${r.revision ?? 2}.`;
+  if (r.closed) {
+    const sent = r.invoice_update ? await sendDeskNotice(s.supabase, id, "invoice_update", changes) : null;
+    back(
+      id,
+      "msg",
+      `${rev} Stock was corrected (what changed went back in, the new amounts came out), and the spreadsheet updates on its next sync.${
+        r.invoice_update ? ` The order desk${sent?.status === "sent" ? " was emailed to" : " needs to"} update the invoice. If the total changes, the credit team is emailed to collect or credit the difference.` : ""
+      }`,
+    );
+  }
   if (r.customer) {
     const { data: o } = await s.supabase.from("orders").select("approval_email").eq("id", id).maybeSingle<{ approval_email: string | null }>();
     if (o?.approval_email) {
@@ -209,17 +219,24 @@ export async function setOrderPo(form: FormData) {
   if (before?.invoice_update_at) {
     const { data: done, error: doneErr } = await s.supabase.rpc("order_invoice_update_done", { p_order: id });
     if (doneErr) back(id, "err", doneErr.message);
-    const r = (done ?? {}) as { was?: boolean; reopened?: boolean; before?: number; after?: number; changes?: OrderChange[] };
+    const r = (done ?? {}) as { was?: boolean; reopened?: boolean; closed?: boolean; before?: number; after?: number; changes?: OrderChange[] };
     if (r.was) {
       const changes = changesText(r.changes);
       if (r.reopened) await sendDeskNotice(s.supabase, id, "credit_needed");
+      // Corrected after pickup / delivery: no credit check (the goods are gone); the credit team settles the difference.
+      const diff = r.closed && r.before !== undefined && r.after !== undefined && Math.abs(Number(r.after) - Number(r.before)) > 0.004;
+      if (diff) await sendDeskNotice(s.supabase, id, "corrected", [`Total ${money(Number(r.before))} → ${money(Number(r.after))}`, ...changes]);
       const mailed = await sendOrderUpdatedNotice(s.supabase, id, changes);
       const total = r.before !== undefined && r.after !== undefined ? ` Total ${money(r.before)} → ${money(r.after)}.` : "";
       back(
         id,
         fileErr ? "err" : "msg",
         `Invoice # ${invoice} and prices saved.${total} ${
-          r.reopened ? "The total went up, so accounting was asked to check credit again." : "Credit stays approved."
+          r.closed
+            ? diff
+              ? `The credit team was emailed to ${Number(r.after) > Number(r.before) ? "collect" : "credit the customer"} the difference.`
+              : "The total didn't change."
+            : r.reopened ? "The total went up, so accounting was asked to check credit again." : "Credit stays approved."
         } ${mailed.status === "sent" ? "The customer was emailed the updated order." : `The customer wasn't emailed (${mailed.error ?? mailed.status}).`}${
           fileErr ? ` The invoice file wasn't added: ${fileErr}` : ""
         }`,

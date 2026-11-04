@@ -433,6 +433,11 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   `order_credit_decision(..., p_prepaid)` at the release. It clears COD Only / No Checks on that order and isn't
   copied to `companies`. Green "Paid" pill, green alert on the Picked up / Delivered step, green bar on the staff PDF.
   `order_invoice_update_done` clears it when an edit raises the total and credit opens again.
+- **Correcting completed orders** (`0046_correct_completed_orders.sql`): admins only. `order_edit` puts back the
+  stock taken for each changed line (`inventory_line_stock` +1), re-picks with `inventory_pick` (allowed on a completed
+  order while `ambit.pick_closed` is on) and takes it out again. The stage is `invoice_update` while a completed order
+  waits for its invoice; `order_set_numbers` allows that; `order_invoice_update_done` returns `closed` and never reopens
+  credit; the credit list gets a "corrected" email when the total changed.
 - **Who adds customers** (`0045_add_customers_permission.sql`): new permission `add_customers` (admins; the
   Accounting preset). The `companies_employee_insert` policy requires it. Without it the customer picker shows
   "Request a new customer" (`requestCustomer`): an email to the credit list, nothing is created.

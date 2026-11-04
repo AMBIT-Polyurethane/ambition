@@ -80,7 +80,9 @@ export function OrderDeskCard({
   const contractor = o.placed_by_role === "customer";
   const invoices = files.filter((f) => f.kind === "invoice");
   const bols = files.filter((f) => f.kind === "bol");
-  const open = st !== "completed";
+  // Picked up / delivered. A corrected one waits at "Invoice update" but stays done (0046).
+  const closed = o.status === "completed";
+  const open = !closed;
   // The item variance table sits before the Sales Order # step until that's saved, then before Delivered.
   const varyNow: "before_po" | "before_done" | null = !variance || !open || st === "customer" ? null : o.ambit_po ? "before_done" : "before_po";
   // Changes made before the Sales Order # was saved show on the first check; later ones on the final check.
@@ -311,7 +313,7 @@ export function OrderDeskCard({
       key: "vary2",
       title: "Final item variance check (before loading)",
       check: true,
-      done: st === "completed",
+      done: closed,
       current: false,
       open: Boolean(variance),
       detail: variance && o.ambit_po ? (log2.length ? <VarianceLog log={log2} /> : noChanges) : null,
@@ -323,9 +325,9 @@ export function OrderDeskCard({
     {
       key: "done",
       title: pickup ? "Picked up" : "Delivered",
-      done: st === "completed",
+      done: closed,
       current: st === "scheduled",
-      detail: st === "completed" ? (
+      detail: closed ? (
         <>
           {dateTime(o.completed_at)}
           {paid ? <> · Customer had already paid</> : null}
@@ -333,7 +335,7 @@ export function OrderDeskCard({
         </>
       ) : st === "scheduled" ? "Attach a photo or scan of the signed BOL, then mark it done." : null,
       extra:
-        payAlert && st !== "completed" && o.credit_status === "approved" ? (
+        payAlert && !closed && o.credit_status === "approved" ? (
           <div className="col" style={{ gap: 6 }}>
             {payAlert}
             {bols.length ? <FileLinks orderId={o.id} files={bols} label="Signed BOL" /> : null}

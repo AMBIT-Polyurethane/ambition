@@ -123,13 +123,13 @@ export async function sendDeskNotice(supabase: SupabaseClient, orderId: string, 
   if (!doc) return { status: "failed", error: "Order not found" };
   const o = doc.order;
   let to: string[] = [];
-  if (kind === "credit_needed") {
+  if (kind === "credit_needed" || kind === "corrected") {
     to = (await creditEmailList(supabase)).map((p) => p.email);
     if (to.length === 0) to = await staffWith(supabase, "credit_check");
   }
   else to = await staffWith(supabase, "order_desk");
   if (kind === "credit_hold" && o.placed_by_role !== "customer" && o.placed_by_email) to.push(o.placed_by_email);
-  if (to.length === 0) to = [kind === "credit_needed" ? ACCOUNTING_EMAIL : ORDERS_EMAIL];
+  if (to.length === 0) to = [kind === "credit_needed" || kind === "corrected" ? ACCOUNTING_EMAIL : ORDERS_EMAIL];
   const origin = await currentOrigin();
   return sendEmail({ to, ...buildDeskEmail(kind, doc, `${origin}/orders/${orderId}`, changes) });
 }

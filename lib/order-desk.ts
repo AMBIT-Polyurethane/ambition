@@ -22,6 +22,7 @@ export function stageOf(o: Pick<Order, "status" | "approval_status" | "ambit_po"
   if (o.stage) return o.stage;
   if (o.ambit_po === undefined) return null; // the order desk update (0011) hasn't been run
   if (o.status === "cancelled") return "cancelled";
+  if (o.status === "completed" && o.invoice_update_at) return "invoice_update"; // corrected after pickup / delivery (0046)
   if (o.status === "completed") return "completed";
   if (o.approval_status === "pending" || o.approval_status === "changes_requested") return "customer";
   if (!o.ambit_po) return "needs_po";
@@ -40,7 +41,7 @@ export function customerProgress(o: Order): string | null {
   if (st === "scheduled" && o.scheduled_for) {
     return o.delivery_method === "pickup" ? "Ready for pickup on the scheduled date" : "Scheduled for delivery";
   }
-  if (st === "completed") return o.delivery_method === "pickup" ? "Picked up" : "Delivered";
+  if (st === "completed" || o.status === "completed") return o.delivery_method === "pickup" ? "Picked up" : "Delivered";
   if (st === "cancelled") return "Cancelled";
   return "Approved, AMBIT is processing it";
 }

@@ -254,7 +254,7 @@ export function buildChangeRequestEmail(doc: OrderDoc, link: string) {
   return { subject, html: wrapEmail("Changes requested", inner), text };
 }
 
-export type DeskNotice = "credit_needed" | "credit_hold" | "ready_to_schedule" | "invoice_update";
+export type DeskNotice = "credit_needed" | "credit_hold" | "ready_to_schedule" | "invoice_update" | "corrected";
 
 /** Order desk heads-ups for AMBIT staff: the order is now in their queue. */
 export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, changes?: string[]) {
@@ -267,7 +267,8 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, ch
     credit_needed: recheck
       ? { eyebrow: "CREDIT CHECK AGAIN", subject: `Credit check again (order edited) · ${no} · ${o.company_name}`, line: `${o.credit_note} The order desk updated the invoice (Invoice # ${o.invoice_no ?? ""}). Check for credit holds, then release the order or put it on hold.` }
       : { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Sales Order # ${o.ambit_po ?? ""}${o.invoice_no ? ` and Invoice # ${o.invoice_no}` : ""}. Check for credit holds, then release the order or put it on hold.` },
-    invoice_update: { eyebrow: "INVOICE UPDATE NEEDED", subject: `Invoice update needed · ${no} · ${o.company_name}`, line: `${ox.invoice_update_by_name ?? "AMBIT staff"} edited this order (now revision ${ox.revision ?? 2}). Update the invoice in QuickBooks, then enter the new Invoice # and the prices on the order in the app.` },
+    invoice_update: { eyebrow: "INVOICE UPDATE NEEDED", subject: `Invoice update needed · ${no} · ${o.company_name}`, line: `${ox.invoice_update_by_name ?? "AMBIT staff"} ${o.status === "completed" ? "corrected this order after it was " + (o.delivery_method === "pickup" ? "picked up" : "delivered") : "edited this order"} (now revision ${ox.revision ?? 2}). Update the invoice in QuickBooks, then enter the new Invoice # and the prices on the order in the app.` },
+    corrected: { eyebrow: "SETTLE THE DIFFERENCE", subject: `Corrected after ${o.delivery_method === "pickup" ? "pickup" : "delivery"} · ${no} · ${o.company_name}`, line: `This order was corrected after it was ${o.delivery_method === "pickup" ? "picked up" : "delivered"}, and the order desk updated the invoice (Invoice # ${o.invoice_no ?? ""}). Collect the difference from the customer if the total went up, or credit them if it went down. Credit isn't checked again.` },
     credit_hold: { eyebrow: "ON CREDIT HOLD", subject: `On credit hold · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} put this order on hold: ${o.credit_note ?? ""}` },
     ready_to_schedule: { eyebrow: "READY TO SCHEDULE", subject: `Ready to schedule · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} released this order. Set the ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date and the customer is emailed.` },
   }[kind];
