@@ -138,6 +138,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       branches={(branches ?? []) as Branch[]}
       companies={emp ? ((companiesRes.data ?? []) as Company[]).map((c) => packCustomer({ ...c, contact_name: c.contact_name ?? null, city: c.city ?? null, state: c.state ?? null, needs_qb_setup: c.needs_qb_setup ?? false })) : null}
       isEmployee={emp}
+      canAddCustomers={emp && can(profile, "add_customers")}
       approvals={emp && approvalsEnabled()}
       me={{
         name: profile.full_name ?? profile.email,

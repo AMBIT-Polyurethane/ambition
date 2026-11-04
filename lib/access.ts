@@ -19,6 +19,7 @@ export const PERMS = [
   { key: "receiving", label: "Receiving", hint: "Receiving Reports: upload a BOL, check it, add it to stock" },
   { key: "transfers", label: "Transfers", hint: "Send stock to another AMBIT location" },
   { key: "inv_reports", label: "Inventory dashboard", hint: "Inventory Hub KPIs, charts and reports (stock value, aging, expiring lots)" },
+  { key: "add_customers", label: "Add new customers", hint: "Create customer accounts after credit vetting. Everyone else sends a request" },
 ] as const;
 
 export type Perm = (typeof PERMS)[number]["key"];
@@ -26,11 +27,11 @@ export const PERM_KEYS = PERMS.map((p) => p.key) as Perm[];
 
 export const ROLES = [
   { key: "admin", label: "Admin", perms: PERM_KEYS },
-  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance") },
+  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance" && k !== "add_customers") },
   { key: "sales_rep", label: "Sales rep", perms: ["ordering", "price_requests", "time_off", "travel", "takeoff"] as Perm[] },
   { key: "tech", label: "Tech", perms: ["time_off", "travel", "spray_log", "complaints"] as Perm[] },
   { key: "warehouse", label: "Warehouse manager", perms: ["inventory", "receiving", "transfers", "inv_reports", "ordering", "time_off", "travel"] as Perm[] },
-  { key: "accounting", label: "Accounting", perms: ["credit_check", "time_off", "travel"] as Perm[] },
+  { key: "accounting", label: "Accounting", perms: ["credit_check", "add_customers", "time_off", "travel"] as Perm[] },
 ] as const;
 
 export type JobRole = (typeof ROLES)[number]["key"];

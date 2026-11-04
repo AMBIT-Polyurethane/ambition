@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { CircleAlert, CircleCheck, Search, UserPlus, X } from "lucide-react";
-import { addCustomer } from "@/app/(app)/order/actions";
+import { addCustomer, requestCustomer } from "@/app/(app)/order/actions";
 import { matchCustomers, type OrderCustomer } from "@/lib/customers";
 import type { Branch } from "@/lib/types";
 
@@ -16,10 +16,12 @@ type Props = {
   defaultBranch?: string;
   /** Put the cursor in the search box straight away (its own step on the order screen). */
   autoFocus?: boolean;
+  /** "Add new customers" (admins, the credit team). Everyone else sends a request instead. */
+  canAdd?: boolean;
 };
 
 /** AMBIT staff: type part of a customer's name, account # or city to find them. */
-export function CustomerPicker({ customers, value, onChange, onAdded, branches, defaultBranch, autoFocus }: Props) {
+export function CustomerPicker({ customers, value, onChange, onAdded, branches, defaultBranch, autoFocus, canAdd = true }: Props) {
   const selected = customers.find((c) => c.id === value) ?? null;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -69,6 +71,12 @@ export function CustomerPicker({ customers, value, onChange, onAdded, branches, 
         startName={query}
         branches={branches}
         defaultBranch={defaultBranch}
+        request={!canAdd}
+        onRequested={(message) => {
+          setAdding(false);
+          setQuery("");
+          setFlash(message);
+        }}
         onCancel={() => setAdding(false)}
         onSaved={(c, message) => {
           onAdded(c);
@@ -118,6 +126,9 @@ export function CustomerPicker({ customers, value, onChange, onAdded, branches, 
 
   return (
     <div className="col" style={{ gap: 8 }}>
+      {flash ? (
+        <div className="alert ok small" role="status"><CircleCheck size={18} style={{ flex: "none" }} /><span>{flash}</span></div>
+      ) : null}
       <div className="cust-search">
         <Search size={18} className="cust-search-ic" aria-hidden="true" />
         <input
@@ -165,15 +176,15 @@ export function CustomerPicker({ customers, value, onChange, onAdded, branches, 
             </button>
           ))}
           {shown.length === 0 ? (
-            <div className="item muted small">No customer matches “{query.trim()}”. Check the spelling, or add them below.</div>
+            <div className="item muted small">No customer matches “{query.trim()}”. Check the spelling, or {canAdd ? "add them below" : "request them below"}.</div>
           ) : more > 0 ? (
             <div className="item tiny faint">{more} more. Keep typing to narrow the list.</div>
           ) : null}
         </div>
       ) : null}
 
-      <button type="button" className="btn dark sm" style={{ alignSelf: "flex-start" }} onClick={() => setAdding(true)}>
-        <UserPlus size={16} /> Add new customer
+      <button type="button" className="btn dark sm" style={{ alignSelf: "flex-start" }} onClick={() => { setFlash(null); setAdding(true); }}>
+        <UserPlus size={16} /> {canAdd ? "Add new customer" : "Request a new customer"}
       </button>
     </div>
   );
@@ -183,12 +194,17 @@ function NewCustomerForm({
   startName,
   branches,
   defaultBranch,
+  request,
+  onRequested,
   onCancel,
   onSaved,
 }: {
   startName: string;
   branches: Branch[];
   defaultBranch?: string;
+  /** Can't add customers: send the details to the credit team instead. */
+  request?: boolean;
+  onRequested?: (message: string) => void;
   onCancel: () => void;
   onSaved: (c: OrderCustomer, message: string) => void;
 }) {
@@ -200,12 +216,19 @@ function NewCustomerForm({
   const [same, setSame] = useState(true);
   const [ship, setShip] = useState("");
   const [branchId, setBranchId] = useState(defaultBranch ?? "");
+  const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const save = () => {
     setError(null);
     start(async () => {
+      if (request) {
+        const res = await requestCustomer({ name, contact, phone, email, billAddress: bill, shipAddress: same ? "" : ship, branchId, note });
+        if (res.ok) onRequested?.(res.message);
+        else setError(res.error);
+        return;
+      }
       const res = await addCustomer({ name, contact, phone, email, billAddress: bill, shipAddress: same ? "" : ship, branchId });
       if (res.ok) onSaved(res.customer, res.message);
       else setError(res.error);
@@ -215,13 +238,15 @@ function NewCustomerForm({
   return (
     <div className="card col" style={{ gap: 12 }}>
       <div className="row between">
-        <b>New customer</b>
+        <b>{request ? "Request a new customer" : "New customer"}</b>
         <button type="button" className="iconbtn" aria-label="Cancel" onClick={onCancel} style={{ width: 36, height: 36 }}>
           <X size={18} />
         </button>
       </div>
       <p className="tiny faint" style={{ margin: 0 }}>
-        They can be used for this order right away. Accounting is emailed to set them up in QuickBooks.
+        {request
+          ? "New customers need a credit application and credit approval before they can order. This sends their details to the credit team; once they're approved and added, you can pick them here."
+          : "They can be used for this order right away. Accounting is emailed to set them up in QuickBooks."}
       </p>
       <label className="field">
         <span className="label">Company name</span>
@@ -265,12 +290,18 @@ function NewCustomerForm({
           <textarea className="textarea" rows={3} value={ship} onChange={(e) => setShip(e.target.value)} placeholder="Street, city, state, ZIP" />
         </label>
       ) : null}
+      {request ? (
+        <label className="field">
+          <span className="label">Note for the credit team (optional)</span>
+          <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="First order is 12 sets of AMBI-TITE, needed by Friday" />
+        </label>
+      ) : null}
       {error ? (
         <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{error}</span></div>
       ) : null}
       <div className="row" style={{ gap: 8 }}>
         <button type="button" className="btn sm" disabled={pending || name.trim().length < 2} onClick={save}>
-          {pending ? "Saving…" : "Save customer"}
+          {pending ? (request ? "Sending…" : "Saving…") : request ? "Send request" : "Save customer"}
         </button>
         <button type="button" className="btn dark sm" onClick={onCancel} disabled={pending}>Cancel</button>
       </div>

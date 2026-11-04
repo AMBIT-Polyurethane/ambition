@@ -98,6 +98,7 @@ export function DraftReview({
   branches,
   carried,
   suggestions,
+  canAddCustomers = true,
 }: {
   draft: DraftView;
   products: PickProduct[];
@@ -106,6 +107,8 @@ export function DraftReview({
   /** Each location's item list (its inventory spreadsheet). Locations with no spreadsheet aren't in it. */
   carried: Record<string, string[]>;
   suggestions: CustomerMatch[];
+  /** "Add new customers"; without it the picker sends a request to the credit team. */
+  canAddCustomers?: boolean;
 }) {
   const router = useRouter();
   const [customerList, setCustomerList] = useState(companies);
@@ -202,6 +205,7 @@ export function DraftReview({
               </div>
             ) : null}
             <CustomerPicker
+              canAdd={canAddCustomers}
               customers={customerList}
               value={companyId}
               onChange={(id) => {

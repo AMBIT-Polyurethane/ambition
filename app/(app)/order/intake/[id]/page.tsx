@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requirePerm } from "@/lib/session";
+import { can } from "@/lib/access";
 import { DraftReview, type DraftView, type PickProduct } from "@/components/intake/draft-review";
 import { ORDER_CUSTOMER_COLUMNS, type OrderCustomer } from "@/lib/customers";
 import type { CustomerMatch } from "@/lib/intake/read";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function DraftPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const { supabase } = await requirePerm("ordering");
+  const { supabase, profile } = await requirePerm("ordering");
   const { data: d } = await supabase.from("order_drafts").select("*").eq("id", id).maybeSingle();
   if (!d) notFound();
 
@@ -60,6 +61,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
       branches={branches}
       carried={carried}
       suggestions={suggestions.slice(0, 4)}
+      canAddCustomers={can(profile, "add_customers")}
     />
   );
 }

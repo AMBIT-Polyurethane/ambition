@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getSession, isEmployee } from "@/lib/session";
-import { approvalsEnabled, sendApprovalRequest, sendOrderEmail } from "@/lib/order-send";
+import { approvalsEnabled, creditEmailList, sendApprovalRequest, sendOrderEmail } from "@/lib/order-send";
+import { can } from "@/lib/access";
 import { sendEmail, wrapEmail } from "@/lib/email";
 import { ACCOUNTING_EMAIL } from "@/lib/env";
 import { currentOrigin } from "@/lib/origin";
@@ -33,10 +34,66 @@ export async function customerDetails(id: string): Promise<OrderCustomer | null>
   return (data as OrderCustomer | null) ?? null;
 }
 
+export type CustomerRequestResult = { ok: true; message: string } | { ok: false; error: string };
+
+/** Staff who can't add customers: the details go to the credit team, who vet them and add the customer. */
+export async function requestCustomer(input: NewCustomerInput & { note?: string }): Promise<CustomerRequestResult> {
+  const s = await getSession();
+  if (!s || !s.profile) return { ok: false, error: "Please sign in again." };
+  if (!isEmployee(s.profile)) return { ok: false, error: "Only AMBIT staff can request customers." };
+  const name = clip(input.name, 120).replace(/\s+/g, " ");
+  if (name.length < 2) return { ok: false, error: "Type the customer's company name." };
+  const email = clip(input.email, 120);
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: "That email address doesn't look right." };
+  const pattern = name.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const { data: same } = await s.supabase.from("companies").select("name").ilike("name", pattern).eq("active", true).limit(1);
+  if (same && same.length) return { ok: false, error: `${(same[0] as { name: string }).name} is already a customer. Search for them instead.` };
+
+  const team = await creditEmailList(s.supabase);
+  const to = team.length ? team.map((p) => p.email) : [ACCOUNTING_EMAIL];
+  const who = s.profile.full_name || s.profile.email;
+  const origin = await currentOrigin();
+  const fields: [string, string][] = [
+    ["Company", name],
+    ["Contact", clip(input.contact, 120) || "-"],
+    ["Phone", clip(input.phone, 40) || "-"],
+    ["Email", email || "-"],
+    ["Billing address", clip(input.billAddress, 400) || "-"],
+    ["Shipping address", clip(input.shipAddress, 400) || "Same as billing"],
+    ["Home branch", (input.branchId || "-").toUpperCase()],
+    ["Note", clip(input.note ?? "", 500) || "-"],
+    ["Requested by", `${who} (${s.profile.email})`],
+  ];
+  const rows = fields
+    .map(([k, v]) => `<tr><td style="padding:6px 12px 6px 0;width:150px;color:#71717a;font-size:13px;vertical-align:top;">${h(k)}</td><td style="padding:6px 0;font-size:14px;white-space:pre-line;">${h(v)}</td></tr>`)
+    .join("");
+  const sent = await sendEmail({
+    to,
+    replyTo: s.profile.email,
+    subject: `New customer request · ${name} · from ${who}`,
+    html: wrapEmail(
+      "New customer request",
+      `<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">NEW CUSTOMER REQUEST</div>
+<div style="font-size:22px;font-weight:800;margin:4px 0 8px;">${h(name)}</div>
+<p style="margin:0 0 16px;color:#52525b;font-size:14px;">${h(who)} would like to order for a new customer. Vet them (credit application and credit approval), then add them in the app so ${h(who)} can pick them. Reply to this email to reach ${h(who)}.</p>
+<table role="presentation" cellpadding="0" cellspacing="0">${rows}</table>
+<p style="margin:20px 0 0;"><a href="${h(origin)}/admin/companies" style="display:inline-block;background:#E33527;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 18px;border-radius:8px;">Open customers</a></p>`,
+    ),
+    text: `New customer request from ${who}.\n\n${fields.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\nVet them (credit application and credit approval), then add them in the app.\n${origin}/admin/companies`,
+  });
+  if (sent.status !== "sent") return { ok: false, error: `The request didn't go out (${sent.error ?? sent.status}). Call or email the credit team instead.` };
+  return { ok: true, message: `Sent to the credit team (${team.length ? team.map((p) => p.name).join(", ") : "accounting"}). Once ${name} is approved and added, you'll find them here.` };
+}
+
 export async function addCustomer(input: NewCustomerInput): Promise<NewCustomerResult> {
   const s = await getSession();
   if (!s || !s.profile) return { ok: false, error: "Please sign in again." };
   if (!isEmployee(s.profile)) return { ok: false, error: "Only AMBIT staff can add customers." };
+  // New customers are vetted first (credit application, credit approval): only admins and people with
+  // "Add new customers" create them. Everyone else sends a request (requestCustomer).
+  if (!can(s.profile, "add_customers")) {
+    return { ok: false, error: "New customers are added by the credit team after a credit application. Use Request a new customer." };
+  }
 
   const name = clip(input.name, 120).replace(/\s+/g, " ");
   if (name.length < 2) return { ok: false, error: "Type the customer's company name." };

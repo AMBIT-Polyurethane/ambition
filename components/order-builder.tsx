@@ -60,6 +60,8 @@ type Props = {
   /** Staff: every customer, packed small (see lib/customers). */
   companies: PackedCustomer[] | null;
   isEmployee: boolean;
+  /** Staff with "Add new customers" (admins, the credit team); others send a request. */
+  canAddCustomers?: boolean;
   /** Staff orders go to the customer to approve before AMBIT orders gets them. */
   approvals: boolean;
   me: {
@@ -495,6 +497,7 @@ export function OrderBuilder(props: Props) {
             value=""
             onChange={pickCustomer}
             onAdded={addToList}
+            canAdd={props.canAddCustomers}
             branches={branches}
             defaultBranch={branchId}
             autoFocus
@@ -527,6 +530,7 @@ export function OrderBuilder(props: Props) {
               value={companyId}
               onChange={setCompanyId}
               onAdded={addToList}
+              canAdd={props.canAddCustomers}
               branches={branches}
               defaultBranch={branchId}
             />
