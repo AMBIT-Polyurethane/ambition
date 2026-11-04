@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, type Cart } from "@/lib/cart";
 import { money } from "@/lib/format";
@@ -26,6 +26,10 @@ export type CatalogProduct = {
   sale?: boolean;
   cp: boolean; // "Based on customer pricing"
   sqft: number | null; // batts: square feet per bag (order by bags or by square feet)
+  /** Staff: spray foam ISO (A side) or resin (B side) by the drum or tote, for a custom foam order. */
+  foam?: "iso" | "resin";
+  /** An ISO brand: only offered on the custom foam order (the store sells one "ISO A-Side"). */
+  custom?: boolean;
 };
 
 /** Live stock at a location (only locations with an inventory spreadsheet). Contractors get the label only. */
@@ -177,6 +181,7 @@ export function OrderBuilder(props: Props) {
   const [q, setQ] = useState(props.initialSearch ?? "");
   // Staff: show only what's available (in stock, not reserved) at the location, when it has live stock.
   const [onlyAvail, setOnlyAvail] = useState(false);
+  const [foamMode, setFoamMode] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [zoom, setZoom] = useState<CatalogProduct | null>(null);
 
@@ -350,7 +355,12 @@ export function OrderBuilder(props: Props) {
   const canFilterAvail = isEmployee && !!stockHere && Object.keys(stockHere).length > 0;
   const isAvail = (id: string) => (stockHere?.[id]?.net ?? 0) > 0;
   const availFilter = canFilterAvail && onlyAvail;
-  const here = limited ? products.filter((p) => carried(p.id)) : products;
+  const here = (limited ? products.filter((p) => carried(p.id)) : products).filter((p) => !p.custom);
+  // Custom foam order: every ISO brand and resin this location stocks.
+  const foamHere = isEmployee ? products.filter((p) => p.foam && carried(p.id)) : [];
+  const isoHere = foamHere.filter((p) => p.foam === "iso").sort((a, b) => a.name.localeCompare(b.name));
+  const resinHere = foamHere.filter((p) => p.foam === "resin").sort((a, b) => a.name.localeCompare(b.name));
+  const drumsOf = (list: CatalogProduct[]) => list.reduce((s, p) => s + (cart[p.id] ?? 0) * (/^totes?$/i.test(p.unit) ? 5 : 1), 0);
   const catsHere = limited ? categories.filter((c) => here.some((p) => p.category_id === c.id)) : categories;
   const catNow = cat === "all" || catsHere.some((c) => c.id === cat) ? cat : "all";
   const shown = here.filter(
@@ -717,6 +727,101 @@ export function OrderBuilder(props: Props) {
     );
   }
 
+  const backToCatalog = () => { setFoamMode(false); window.scrollTo(0, 0); };
+  const placeBars = isEmployee ? (
+    <>
+      <button type="button" className="loc-bar" onClick={() => { setFoamMode(false); setStep("location"); window.scrollTo(0, 0); }} aria-label={`Location: ${branchLabel(branch)}. Change location`}>
+        <MapPin size={15} />
+        <span className="grow">From <b>{branch ? branchLabel(branch) : "no location"}</b></span>
+        <span className="linkbtn small">Change</span>
+      </button>
+      <button type="button" className="loc-bar" onClick={() => { setFoamMode(false); setStep("customer"); window.scrollTo(0, 0); }} aria-label={`Customer: ${customer?.name ?? "none"}. Change customer`}>
+        <UserRound size={15} />
+        <span className="grow ellipsis">For <b>{customer ? customer.name : "no customer yet"}</b>{customer?.account_no ? <span className="faint"> · {customer.account_no}</span> : null}</span>
+        <span className="linkbtn small">{customer ? "Change" : "Pick"}</span>
+      </button>
+    </>
+  ) : null;
+  const cartBar =
+    loaded && lineCount > 0 ? (
+      <div className="cartbar">
+        <div className="inner">
+          <button type="button" className="btn" onClick={() => { setFoamMode(false); setStep("review"); window.scrollTo(0, 0); }}>
+            <span className="count">{lineCount} {lineCount === 1 ? "item" : "items"}</span>
+            <span>Review order</span>
+            <span style={{ minWidth: 60, textAlign: "right", letterSpacing: 0 }}>{subtotal > 0 ? money(subtotal) : ""}</span>
+          </button>
+        </div>
+      </div>
+    ) : null;
+  const foamRow = (p: CatalogProduct) => {
+    const qty = cart[p.id] ?? 0;
+    return (
+      <div key={p.id} className="product">
+        <div className="grow">
+          <div className="name">{p.name}</div>
+          <div className="desc">{p.sku}</div>
+          <StockTag s={stockHere?.[p.id]} staff />
+        </div>
+        {qty > 0 ? (
+          <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
+        ) : (
+          <button type="button" className="add" onClick={() => setQty(p.id, 1)} aria-label={`Add ${p.name}`}>ADD</button>
+        )}
+      </div>
+    );
+  };
+
+  // ------------------------------------------------------ custom foam order (staff)
+  if (foamMode && isEmployee) {
+    const iso = drumsOf(isoHere), resin = drumsOf(resinHere);
+    const totes = [...isoHere, ...resinHere].some((p) => (cart[p.id] ?? 0) > 0 && /^totes?$/i.test(p.unit));
+    return (
+      <main className="shell" style={{ paddingBottom: "calc(var(--tabbar) + env(safe-area-inset-bottom) + 100px)" }}>
+        <div className="sticky-top">
+          <div className="topbar">
+            <button type="button" className="iconbtn" aria-label="Back to all products" onClick={backToCatalog}>
+              <ChevronLeft size={20} />
+            </button>
+            <h1 className="title" style={{ margin: 0 }}>Custom foam order</h1>
+          </div>
+          {placeBars}
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>
+          Pick the exact ISO brand and the resins the customer asked for, from {branch ? branch.name : "this location"}&apos;s inventory. They go on the
+          order as separate lines, and the warehouse holds those drums (the lot that expires soonest first).
+        </p>
+        {foamHere.length === 0 ? (
+          <div className="card muted small center">{branch ? `${branch.name} has no spray foam on its inventory list.` : "Pick a location first."}</div>
+        ) : (
+          <>
+            <section className="section">
+              <div className="eyebrow">ISO · A side</div>
+              {isoHere.length ? <div className="list">{isoHere.map(foamRow)}</div> : <div className="card muted small">No ISO on {branch?.name ?? "this location"}&apos;s list.</div>}
+            </section>
+            <section className="section">
+              <div className="eyebrow">Resin · B side</div>
+              {resinHere.length ? <div className="list">{resinHere.map(foamRow)}</div> : <div className="card muted small">No resins on {branch?.name ?? "this location"}&apos;s list.</div>}
+            </section>
+            <div className={`alert ${iso && resin && iso !== resin ? "warn" : "info"} small`} role="status">
+              <FlaskConical size={16} style={{ flex: "none", marginTop: 2 }} />
+              <span>
+                <b>ISO {qtyText(iso)} · Resin {qtyText(resin)}</b> {totes ? "(in drums; a tote counts as 5)" : "drums"}.{" "}
+                {iso && resin && iso !== resin
+                  ? `That isn't even sets (${qtyText(iso)} ISO to ${qtyText(resin)} resin). Fine if that's what the customer asked for.`
+                  : iso || resin
+                    ? "Change the quantities with + and −, then review the order."
+                    : "Tap ADD on each ISO and resin the customer wants."}
+              </span>
+            </div>
+          </>
+        )}
+        <button type="button" className="btn ghost block" onClick={backToCatalog}>Back to all products</button>
+        {cartBar}
+      </main>
+    );
+  }
+
   // ----------------------------------------------------------------- catalog
   return (
     <main className="shell" style={{ paddingBottom: "calc(var(--tabbar) + env(safe-area-inset-bottom) + 100px)" }}>
@@ -724,20 +829,12 @@ export function OrderBuilder(props: Props) {
         <div className="topbar">
           <h1 className="title" style={{ margin: 0 }}>{isEmployee ? "Order for a customer" : "Place an order"}</h1>
         </div>
-        {isEmployee ? (
-          <button type="button" className="loc-bar" onClick={() => { setStep("location"); window.scrollTo(0, 0); }} aria-label={`Location: ${branchLabel(branch)}. Change location`}>
-            <MapPin size={15} />
-            <span className="grow">From <b>{branch ? branchLabel(branch) : "no location"}</b></span>
-            <span className="linkbtn small">Change</span>
+        {isEmployee && foamHere.length ? (
+          <button type="button" className="btn dark block custom-foam" onClick={() => { setFoamMode(true); window.scrollTo(0, 0); }}>
+            <FlaskConical size={17} /> Make Custom Foam Order
           </button>
         ) : null}
-        {isEmployee ? (
-          <button type="button" className="loc-bar" onClick={() => { setStep("customer"); window.scrollTo(0, 0); }} aria-label={`Customer: ${customer?.name ?? "none"}. Change customer`}>
-            <UserRound size={15} />
-            <span className="grow ellipsis">For <b>{customer ? customer.name : "no customer yet"}</b>{customer?.account_no ? <span className="faint"> · {customer.account_no}</span> : null}</span>
-            <span className="linkbtn small">{customer ? "Change" : "Pick"}</span>
-          </button>
-        ) : null}
+        {placeBars}
         <div className="search">
           <Search size={18} />
           <input className="input" type="search" placeholder="Search products or SKU" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search products" />
@@ -801,17 +898,7 @@ export function OrderBuilder(props: Props) {
         </div>
       )}
 
-      {loaded && lineCount > 0 ? (
-        <div className="cartbar">
-          <div className="inner">
-            <button type="button" className="btn" onClick={() => { setStep("review"); window.scrollTo(0, 0); }}>
-              <span className="count">{lineCount} {lineCount === 1 ? "item" : "items"}</span>
-              <span>Review order</span>
-              <span style={{ minWidth: 60, textAlign: "right", letterSpacing: 0 }}>{subtotal > 0 ? money(subtotal) : ""}</span>
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {cartBar}
       {lightbox}
     </main>
   );
