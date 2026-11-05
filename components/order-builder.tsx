@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
-import { readCart, writeCart, readOrderBranch, writeOrderBranch, type Cart } from "@/lib/cart";
+import { readCart, writeCart, readOrderBranch, writeOrderBranch, readLots, writeLots, NO_LOTS, type Cart, type LotPicks } from "@/lib/cart";
 import { money } from "@/lib/format";
 import { customerDetails, placeOrder } from "@/app/(app)/order/actions";
 import { CustomerPicker } from "@/components/customer-picker";
@@ -30,6 +30,20 @@ export type CatalogProduct = {
   foam?: "iso" | "resin";
   /** An ISO brand: only offered on the custom foam order (the store sells one "ISO A-Side"). */
   custom?: boolean;
+};
+
+/** Staff: one lot / batch of an ISO brand or resin at a location (FOAM LOTS tab), with the drums still free to order. */
+export type FoamLot = {
+  id: number;
+  product_id: string;
+  sku: string;
+  lot_no: string;
+  mfg: string | null;
+  exp: string | null;
+  use_by: string | null;
+  remaining: number;
+  available: number;
+  expired: boolean;
 };
 
 /** Live stock at a location (only locations with an inventory spreadsheet). Contractors get the label only. */
@@ -78,6 +92,8 @@ type Props = {
   /** Opens the catalog already searched (the Home banner sends people to one product). */
   initialSearch?: string;
   stock?: StockMap;
+  /** Staff: each location's ISO and resin lots (custom foam order picks exact drums). */
+  lots?: Record<string, FoamLot[]>;
 };
 
 function PriceLine({ p }: { p: CatalogProduct }) {
@@ -92,7 +108,8 @@ function PriceLine({ p }: { p: CatalogProduct }) {
   );
 }
 
-function Stepper({ qty, onChange, label }: { qty: number; onChange: (n: number) => void; label: string }) {
+function Stepper({ qty, onChange, label, max }: { qty: number; onChange: (n: number) => void; label: string; max?: number }) {
+  const cap = (n: number) => (max === undefined ? n : Math.min(n, max));
   return (
     <div className="stepper">
       <button type="button" aria-label={`One less ${label}`} onClick={() => onChange(qty - 1)}>
@@ -103,11 +120,12 @@ function Stepper({ qty, onChange, label }: { qty: number; onChange: (n: number) 
         inputMode="numeric"
         type="number"
         min={0}
+        max={max}
         value={qty}
-        onChange={(e) => onChange(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+        onChange={(e) => onChange(cap(Math.max(0, Math.floor(Number(e.target.value) || 0))))}
         onFocus={(e) => e.target.select()}
       />
-      <button type="button" aria-label={`One more ${label}`} onClick={() => onChange(qty + 1)}>
+      <button type="button" aria-label={`One more ${label}`} disabled={max !== undefined && qty >= max} onClick={() => onChange(cap(qty + 1))}>
         <Plus size={16} />
       </button>
     </div>
@@ -184,6 +202,8 @@ export function OrderBuilder(props: Props) {
   // Staff: show only what's available (in stock, not reserved) at the location, when it has live stock.
   const [onlyAvail, setOnlyAvail] = useState(false);
   const [foamMode, setFoamMode] = useState(false);
+  // Staff, custom foam order: the exact lots picked (product -> lot -> drums). The rest of a line is "any lot".
+  const [lotPicks, setLotPicks] = useState<LotPicks>(NO_LOTS);
   const [notice, setNotice] = useState<string | null>(null);
   const [zoom, setZoom] = useState<CatalogProduct | null>(null);
 
@@ -217,6 +237,7 @@ export function OrderBuilder(props: Props) {
       }
       setCart(fresh);
       writeCart(fresh);
+      writeLots(NO_LOTS);
       if (d.delivery) setDelivery(d.delivery);
       if (d.branchId && branches.some((b) => b.id === d.branchId)) setBranchId(d.branchId);
       if (d.address) setAddress(d.address);
@@ -242,6 +263,7 @@ export function OrderBuilder(props: Props) {
       }
       setCart(fresh);
       writeCart(fresh);
+      writeLots(NO_LOTS);
       setNotice(
         `Loaded order ORD-${props.reorderNo}. Check the quantities, then review.` +
           (missing ? ` ${missing} item${missing > 1 ? "s are" : " is"} no longer in the catalog.` : ""),
@@ -252,6 +274,7 @@ export function OrderBuilder(props: Props) {
       const valid: Cart = {};
       for (const [id, n] of Object.entries(saved)) if (byId.has(id) && n > 0) valid[id] = n;
       setCart(valid);
+      if (isEmployee) setLotPicks(readLots());
     }
     if (isEmployee) {
       const last = readOrderBranch();
@@ -319,11 +342,87 @@ export function OrderBuilder(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileAddress]);
 
+  // ---- Custom foam order lots (staff): only at the location they were picked at, never on a drop ship ----
+  const lotsHere = useMemo(() => {
+    const m = new Map<string, FoamLot[]>();
+    if (!isEmployee || delivery === "dropship" || !branchId) return m;
+    for (const l of props.lots?.[branchId] ?? []) m.set(l.product_id, [...(m.get(l.product_id) ?? []), l]);
+    // Soonest to expire first (the way the warehouse picks); expired lots at the bottom.
+    for (const [k, v] of m) m.set(k, [...v].sort((a, b) => Number(a.expired) - Number(b.expired)));
+    return m;
+  }, [props.lots, branchId, delivery, isEmployee]);
+  // The picks that still hold: the lot is still there, not expired, and has the drums free.
+  const picksHere = useMemo(() => {
+    const out: LotPicks["picks"] = {};
+    if (lotPicks.branch !== branchId) return out;
+    for (const [pid, m] of Object.entries(lotPicks.picks)) {
+      const free = new Map((lotsHere.get(pid) ?? []).filter((l) => !l.expired).map((l) => [String(l.id), l.available]));
+      const keep: Record<string, number> = {};
+      for (const [lid, n] of Object.entries(m)) {
+        const q = Math.min(n, free.get(lid) ?? 0);
+        if (q > 0) keep[lid] = q;
+      }
+      const sum = Object.values(keep).reduce((a, b) => a + b, 0);
+      if (sum > 0 && sum <= (cart[pid] ?? 0)) out[pid] = keep;
+    }
+    return out;
+  }, [lotPicks, lotsHere, branchId, cart]);
+  const pickedOf = (pid: string) => Object.values(picksHere[pid] ?? {}).reduce((a, b) => a + b, 0);
+  const savePicks = (picks: LotPicks["picks"]) => {
+    const next = { branch: branchId, picks };
+    setLotPicks(next);
+    writeLots(next);
+  };
+  // Lots are counted per location: picks made at another location don't carry over.
+  useEffect(() => {
+    if (!loaded || !isEmployee || !branchId || !lotPicks.branch || lotPicks.branch === branchId) return;
+    if (Object.keys(lotPicks.picks).length) {
+      const from = branches.find((b) => b.id === lotPicks.branch);
+      setNotice(`The lots you picked were at ${from?.name ?? "another location"}, so they were cleared. The drums are still on the order: pick lots again here, or the warehouse picks them.`);
+    }
+    setLotPicks(NO_LOTS);
+    writeLots(NO_LOTS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchId, loaded]);
+
   const setQty = (id: string, n: number) => {
     const next = { ...cart, [id]: Math.max(0, n) };
     if (next[id] === 0) delete next[id];
     setCart(next);
     writeCart(next);
+    // Fewer drums than the lots picked: they come off the latest-expiring lots first.
+    const mine = picksHere[id];
+    let over = pickedOf(id) - Math.max(0, n);
+    if (mine && over > 0) {
+      const left = { ...mine };
+      for (const lid of (lotsHere.get(id) ?? []).map((l) => String(l.id)).filter((x) => left[x]).reverse()) {
+        if (over <= 0) break;
+        const t = Math.min(over, left[lid]);
+        left[lid] -= t;
+        over -= t;
+      }
+      savePicks({ ...picksHere, [id]: left });
+    }
+  };
+  // A lot's drums (capped at what that lot has free); the line's total follows.
+  const setLot = (pid: string, lot: FoamLot, n: number) => {
+    const mine = { ...(picksHere[pid] ?? {}), [String(lot.id)]: Math.max(0, Math.min(n, lot.available)) };
+    const any = Math.max(0, (cart[pid] ?? 0) - pickedOf(pid));
+    const total = any + Object.values(mine).reduce((a, b) => a + b, 0);
+    const next = { ...cart, [pid]: total };
+    if (!total) delete next[pid];
+    setCart(next);
+    writeCart(next);
+    savePicks({ ...picksHere, [pid]: mine });
+  };
+  // "Any lot" drums: the warehouse picks them (soonest-expiring first).
+  const setAny = (pid: string, n: number) => setQty(pid, pickedOf(pid) + Math.max(0, n));
+  const lotSummary = (pid: string) => {
+    const mine = picksHere[pid] ?? {};
+    const parts = (lotsHere.get(pid) ?? []).filter((l) => mine[String(l.id)]).map((l) => `${l.lot_no || "(no lot #)"} × ${qtyText(mine[String(l.id)])}`);
+    const any = Math.max(0, (cart[pid] ?? 0) - pickedOf(pid));
+    if (any) parts.push(`any lot × ${qtyText(any)}`);
+    return parts.join(" · ");
   };
 
   // Each location offers only what's on its own inventory spreadsheet. A location with no spreadsheet shows
@@ -389,9 +488,16 @@ export function OrderBuilder(props: Props) {
         approvalEmail: isEmployee && approvals && !skipApproval ? approvalEmail : "",
         skipApproval: isEmployee && approvals && skipApproval,
         draftId: draftId ?? undefined,
+        lots:
+          isEmployee && delivery !== "dropship"
+            ? Object.entries(picksHere)
+                .filter(([pid]) => carried(pid) && (cart[pid] ?? 0) > 0)
+                .flatMap(([pid, m]) => Object.entries(m).map(([lid, qty]) => ({ product_id: pid, lot_id: Number(lid), qty })))
+            : [],
       });
       if (res.ok) {
         writeCart({});
+        writeLots(NO_LOTS);
         router.push(`/orders/${res.id}?sent=${res.mode === "approval" ? "approval" : "1"}${res.warning ? "&warn=1" : ""}`);
       } else {
         setError(res.error);
@@ -582,6 +688,14 @@ export function OrderBuilder(props: Props) {
                           : "None available here. It ships from the supplier."}
                       </div>
                     ) : null}
+                    {p.foam && lotsHere.has(p.id) ? (
+                      <div className="lot-sum">
+                        {picksHere[p.id] ? <>Lots: <b>{lotSummary(p.id)}</b></> : <>Any lot: the warehouse picks the soonest-expiring.</>}{" "}
+                        <button type="button" className="linkbtn tiny" onClick={() => { setFoamMode(true); setStep("catalog"); window.scrollTo(0, 0); }}>
+                          {picksHere[p.id] ? "Change lots" : "Pick lots"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
                 </div>
@@ -614,7 +728,10 @@ export function OrderBuilder(props: Props) {
           </div>
           {isEmployee ? (
             delivery === "dropship" ? (
-              <p className="tiny faint" style={{ margin: 0 }}>Drop ship goes straight from the supplier, not from an AMBIT location.</p>
+              <p className="tiny faint" style={{ margin: 0 }}>
+                Drop ship goes straight from the supplier, not from an AMBIT location.
+                {lotPicks.branch === branchId && Object.keys(lotPicks.picks).length ? " The lots you picked aren't used." : ""}
+              </p>
             ) : (
               <div className="loc-line">
                 <MapPin size={18} />
@@ -776,6 +893,73 @@ export function OrderBuilder(props: Props) {
     );
   };
 
+  // "Made 4/2/26 · Expires 4/2/27" (short, so it fits a phone)
+  const md = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}/${iso.slice(2, 4)}`;
+  const lotDates = (l: FoamLot) =>
+    [l.mfg ? `Made ${md(l.mfg)}` : null, l.exp ? `Expires ${md(l.exp)}` : l.use_by ? `Use by ${md(l.use_by)}` : null].filter(Boolean).join(" · ");
+  // Staff: every lot / batch of this brand or resin, to order exact drums, plus "Any lot".
+  const foamLotsRow = (p: CatalogProduct, list: FoamLot[]) => {
+    const qty = cart[p.id] ?? 0;
+    const mine = picksHere[p.id] ?? {};
+    const any = Math.max(0, qty - pickedOf(p.id));
+    return (
+      <div key={p.id} className="foam-prod">
+        <div className="product">
+          <div className="grow">
+            <div className="name">{p.name}</div>
+            <div className="desc">{p.sku} · {list.length} {list.length === 1 ? "lot" : "lots"}</div>
+            <StockTag s={stockHere?.[p.id]} staff />
+          </div>
+          {qty > 0 ? <span className="pill ok">{qtyText(qty)} on order</span> : null}
+        </div>
+        <div className="lot-opts" role="group" aria-label={`Lots of ${p.name}`}>
+          {list.map((l) => {
+            const n = mine[String(l.id)] ?? 0;
+            const lotName = `Lot ${l.lot_no || "(no lot #)"}`;
+            const off = l.expired || l.available <= 0;
+            return (
+              <div key={l.id} className={`lot-opt${off ? " off" : ""}${n ? " on" : ""}`}>
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="lot-no">
+                    <span>{lotName}</span>
+                    {l.expired ? (
+                      <span className="pill red">Expired</span>
+                    ) : l.available > 0 ? (
+                      <span className="lot-avail">{qtyText(l.available)} available</span>
+                    ) : (
+                      <span className="lot-avail none">0 available · held for other orders</span>
+                    )}
+                  </div>
+                  <div className="lot-meta">{lotDates(l) || "No dates on the FOAM LOTS tab"}</div>
+                </div>
+                {off ? null : n > 0 ? (
+                  <Stepper qty={n} max={l.available} label={`${p.name}, ${lotName}`} onChange={(v) => setLot(p.id, l, v)} />
+                ) : (
+                  <button type="button" className="add" onClick={() => setLot(p.id, l, 1)} aria-label={`Add one from ${lotName} of ${p.name}`}>ADD</button>
+                )}
+              </div>
+            );
+          })}
+          <div className={`lot-opt any${any ? " on" : ""}`}>
+            <div className="grow" style={{ minWidth: 0 }}>
+              <div className="lot-no"><span>Any lot</span></div>
+              <div className="lot-meta">The warehouse picks, soonest-expiring first</div>
+            </div>
+            {any > 0 ? (
+              <Stepper qty={any} label={`${p.name}, any lot`} onChange={(v) => setAny(p.id, v)} />
+            ) : (
+              <button type="button" className="add" onClick={() => setAny(p.id, 1)} aria-label={`Add one ${p.name}, any lot`}>ADD</button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const foamItem = (p: CatalogProduct) => {
+    const list = lotsHere.get(p.id);
+    return list?.length ? foamLotsRow(p, list) : foamRow(p);
+  };
+
   // ------------------------------------------------------ custom foam order (staff)
   if (foamMode) {
     const iso = drumsOf(isoHere), resin = drumsOf(resinHere);
@@ -794,8 +978,8 @@ export function OrderBuilder(props: Props) {
         <p className="small muted" style={{ margin: 0 }}>
           {isEmployee ? (
             <>
-              Pick the exact ISO brand and the resins the customer asked for, from {branch ? branch.name : "this location"}&apos;s inventory. They go on the
-              order as separate lines, and the warehouse holds those drums (the lot that expires soonest first).
+              Pick the exact drums the customer asked for, from {branch ? branch.name : "this location"}&apos;s inventory: tap ADD on a lot / batch to
+              hold drums from that lot, or on <b>Any lot</b> and the warehouse picks the soonest-expiring. Each brand and resin is its own line on the order.
             </>
           ) : (
             <>
@@ -809,11 +993,11 @@ export function OrderBuilder(props: Props) {
           <>
             <section className="section">
               <div className="eyebrow">ISO · A side</div>
-              {isoHere.length ? <div className="list">{isoHere.map(foamRow)}</div> : <div className="card muted small">No ISO on {branch?.name ?? "this location"}&apos;s list.</div>}
+              {isoHere.length ? <div className="list">{isoHere.map(foamItem)}</div> : <div className="card muted small">No ISO on {branch?.name ?? "this location"}&apos;s list.</div>}
             </section>
             <section className="section">
               <div className="eyebrow">Resin · B side</div>
-              {resinHere.length ? <div className="list">{resinHere.map(foamRow)}</div> : <div className="card muted small">No resins on {branch?.name ?? "this location"}&apos;s list.</div>}
+              {resinHere.length ? <div className="list">{resinHere.map(foamItem)}</div> : <div className="card muted small">No resins on {branch?.name ?? "this location"}&apos;s list.</div>}
             </section>
             <div className={`alert ${iso && resin && iso !== resin ? "warn" : "info"} small`} role="status">
               <FlaskConical size={16} style={{ flex: "none", marginTop: 2 }} />

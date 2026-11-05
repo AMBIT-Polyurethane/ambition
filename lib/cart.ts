@@ -58,3 +58,34 @@ export function writeOrderBranch(id: string) {
     // storage blocked: nothing to remember
   }
 }
+
+// Custom foam order (staff): the exact lots picked, per product. Lots belong to one location, so the picks
+// remember which location they were picked at.
+export type LotPicks = { branch: string; picks: Record<string, Record<string, number>> }; // product id -> lot id -> drums
+const LOTS_KEY = "ambition-lots-v1";
+export const NO_LOTS: LotPicks = { branch: "", picks: {} };
+
+export function readLots(): LotPicks {
+  try {
+    const raw = window.localStorage.getItem(LOTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" && typeof parsed.branch === "string" && parsed.picks && typeof parsed.picks === "object"
+      ? parsed
+      : NO_LOTS;
+  } catch {
+    return NO_LOTS;
+  }
+}
+
+export function writeLots(l: LotPicks) {
+  const picks: LotPicks["picks"] = {};
+  for (const [pid, lots] of Object.entries(l.picks)) {
+    const keep = Object.fromEntries(Object.entries(lots).filter(([, n]) => n > 0));
+    if (Object.keys(keep).length) picks[pid] = keep;
+  }
+  try {
+    window.localStorage.setItem(LOTS_KEY, JSON.stringify({ branch: l.branch, picks }));
+  } catch {
+    // storage blocked: the picks still work for this visit
+  }
+}

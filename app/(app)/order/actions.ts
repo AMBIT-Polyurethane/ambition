@@ -194,6 +194,8 @@ export type PlaceOrderInput = {
   approvalEmail?: string; // employees only: where the customer's approval link goes
   skipApproval?: boolean; // employees only: approved without the customer's email approval
   draftId?: string; // an AI order intake draft this order came from
+  /** Employees only (custom foam order): the exact lots picked, drums per lot. The rest is picked by the app. */
+  lots?: { product_id: string; lot_id: number; qty: number }[];
 };
 
 /** sent = went to orders@ (or saved, if email is off); approval = emailed to the customer to approve first. */
@@ -243,6 +245,14 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     return { ok: false, error: "Enter the customer's email so they can approve the order." };
   }
 
+  // Staff picked exact lots (custom foam order): only for items on this order, from an AMBIT location.
+  const lots = emp && input.delivery !== "dropship"
+    ? (Array.isArray(input.lots) ? input.lots : [])
+        .filter((l) => l && UUID.test(String(l.product_id)) && Number.isInteger(Number(l.lot_id)) && Number(l.qty) > 0 && items.some((i) => i.product_id === l.product_id))
+        .slice(0, 200)
+        .map((l) => ({ product_id: String(l.product_id), lot_id: Number(l.lot_id), qty: Math.min(Number(l.qty), 100000) }))
+    : [];
+
   const { data: id, error } = await s.supabase.rpc("place_order", {
     p_items: items,
     p_delivery_method: input.delivery,
@@ -253,6 +263,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     p_notes: input.notes || null,
     p_company_id: emp && UUID.test(input.companyId) ? input.companyId : null,
     p_customer_name: emp && input.companyId === "__other" ? input.customerName : null,
+    ...(lots.length ? { p_lots: lots } : {}),
   });
   if (error || !id) return { ok: false, error: error?.message ?? "Something went wrong. Please try again." };
 

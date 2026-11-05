@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
-import { OrderBuilder, type CatalogProduct, type OrderDraft, type StockMap } from "@/components/order-builder";
+import { OrderBuilder, type CatalogProduct, type FoamLot, type OrderDraft, type StockMap } from "@/components/order-builder";
 import { approvalsEnabled } from "@/lib/order-send";
 import { saleOn, todayCentral } from "@/lib/sale";
 import { packCustomer } from "@/lib/customers";
@@ -17,7 +17,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
   const emp = isEmployee(profile);
   if (emp && !can(profile, "ordering")) redirect("/");
 
-  const [{ data: products }, { data: categories }, { data: branches }, companiesRes, myCompanyRes, reorderRes, { data: brandRows }] = await Promise.all([
+  const [{ data: products }, { data: categories }, { data: branches }, companiesRes, myCompanyRes, reorderRes, { data: brandRows }, lotsRes] = await Promise.all([
     supabase.from("products").select("*").eq("active", true).order("sort").order("name"),
     supabase.from("categories").select("*").order("sort"),
     supabase.from("branches").select("*").eq("active", true).order("sort"),
@@ -34,7 +34,24 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       : Promise.resolve({ data: null }),
     // Staff: the ISO brands (stocked under "ISO A-Side", never sold by name) for a custom foam order.
     emp ? supabase.from("products").select("*").eq("active", false).not("stock_of", "is", null).order("name") : Promise.resolve({ data: null }),
+    // Staff: every lot / batch with drums left at each location, so a custom foam order can name the exact drums.
+    emp ? supabase.rpc("order_lot_choices", { p_branch: null }) : Promise.resolve({ data: null }),
   ]);
+  const lots: Record<string, FoamLot[]> = {};
+  for (const r of ((lotsRes.data ?? []) as (Omit<FoamLot, "id" | "available" | "remaining"> & { lot_id: number; branch_id: string; available: number | string; remaining: number | string })[])) {
+    (lots[r.branch_id] ??= []).push({
+      id: r.lot_id,
+      product_id: r.product_id,
+      sku: r.sku,
+      lot_no: r.lot_no,
+      mfg: r.mfg,
+      exp: r.exp,
+      use_by: r.use_by,
+      remaining: Number(r.remaining),
+      available: Math.max(0, Math.floor(Number(r.available))),
+      expired: r.expired,
+    });
+  }
 
   // Live stock for every location with an inventory spreadsheet. Staff see the numbers; contractors only
   // In stock / Low stock / Ships from supplier (the database decides what each gets). It's also each location's
@@ -159,6 +176,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       reorderCompany={reorderData?.company_id ?? null}
       initialSearch={sp.q ?? ""}
       stock={stock}
+      lots={emp ? lots : undefined}
     />
   );
 }

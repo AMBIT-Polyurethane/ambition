@@ -441,6 +441,13 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
 - **Who adds customers** (`0045_add_customers_permission.sql`): new permission `add_customers` (admins; the
   Accounting preset). The `companies_employee_insert` policy requires it. Without it the customer picker shows
   "Request a new customer" (`requestCustomer`): an email to the credit list, nothing is created.
+- **Custom foam lots** (`0047_custom_foam_lots.sql`): on the staff custom foam screen each ISO brand and resin lists
+  its lots / batches from that location's FOAM LOTS tab (`order_lot_choices(branch)`: on the sheet, drums left, free =
+  remaining − sheet_pending − reserved, expired flagged), plus "Any lot". Picks live in the browser
+  (`ambition-lots-v1`, tied to the location; moving location clears them) and go to `place_order(..., p_lots)`
+  as `[{product_id, lot_id, qty}]`. `order_item_pick_lots` (internal) swaps the app's own hold for those lots after
+  checking location, product, expiry and free drums under the location's pick lock; the rest of the line is picked
+  soonest-expiring first. Contractors can't send lots.
 - **Custom foam orders** (`0044_custom_foam_orders.sql`): "Make Custom Foam Order" at the top of the order screen.
   Contractors get ISO A-Side and the resins by the drum; staff (Order for a customer) pick the ISO brand. Lists the location's ISO brands (inactive products with `stock_of`, loaded for staff only) and
   resins (`foam` on `CatalogProduct`: ambit-foam / alpha-chemicals drums and totes). `place_order` lets staff order

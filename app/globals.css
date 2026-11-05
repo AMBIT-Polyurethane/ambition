@@ -2466,3 +2466,18 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .edit-changes { margin: 4px 0 4px; padding-left: 18px; }
 .edit-changes li { margin: 1px 0; }
 .edit-row.removed .t, .edit-row.removed .s { text-decoration: line-through; opacity: 0.55; }
+
+/* Custom foam order (staff): pick exact drums by lot / batch */
+.foam-prod > .product { padding-bottom: 10px; }
+.lot-opts { display: flex; flex-direction: column; gap: 6px; padding: 0 12px 12px; }
+.lot-opt { display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 8px 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--s2); }
+.lot-opt.on { border-color: var(--red); background: var(--red-soft); }
+.lot-opt.off { opacity: 0.6; }
+.lot-opt.any { border-style: dashed; background: transparent; }
+.lot-opt.any.on { border-style: solid; background: var(--red-soft); }
+.lot-no { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 14px; font-weight: 750; line-height: 1.25; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.lot-avail { font-size: 12px; font-weight: 750; color: var(--ok-text); }
+.lot-avail.none { color: var(--text3); font-weight: 650; }
+.lot-meta { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.lot-sum { font-size: 12px; color: var(--text2); margin-top: 6px; line-height: 1.4; }
+.stepper button:disabled { opacity: 0.35; cursor: default; }
