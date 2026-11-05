@@ -10808,6 +10808,7 @@ begin
 end $$;
 
 select 'admins can correct completed orders' as status;
+
 -- =====================================================================
 -- AMBIT Intelligence update 0047 - Custom foam order: pick the exact lot / batch
 -- * "Make Custom Foam Order" (AMBIT staff) lists every lot of each ISO brand and resin at the location (lot #,
