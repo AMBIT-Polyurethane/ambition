@@ -5,10 +5,10 @@ import { dateShort, money } from "@/lib/format";
 import { LOGO_ASPECT, LOGO_PNG } from "@/lib/order-doc/logo";
 import { fetchJotformFile } from "@/lib/forms";
 import { shrinkImage } from "@/lib/image-shrink";
-import { monthLabel, totals, type Receipt } from "@/lib/expenses";
+import { monthLabel } from "@/lib/expense-kinds";
 
-// The monthly expense report: a summary page (totals, categories, every receipt in a table) and then
-// the receipt photos, two to a page, each labeled with its line number.
+// The monthly expense report: a summary page (totals, categories, every receipt and card charge in a
+// table, who approved it) and then the receipt photos, two to a page, each labeled with its line number.
 
 const INK = "#1d1d1f";
 const GRAY = "#5b5f66";
@@ -58,12 +58,12 @@ const day = (d: string) => dateShort(d);
 
 const COLS = [
   { k: "#", w: 18, align: "left" as const },
-  { k: "DATE", w: 58 },
-  { k: "VENDOR", w: 112 },
-  { k: "CATEGORY", w: 86 },
-  { k: "WHAT FOR", flex: 1 },
-  { k: "PAID", w: 44 },
-  { k: "AMOUNT", w: 62, align: "right" as const },
+  { k: "DATE", w: 54 },
+  { k: "VENDOR", w: 104 },
+  { k: "CATEGORY", w: 78 },
+  { k: "CUSTOMER / WHAT FOR", flex: 1 },
+  { k: "PAID", w: 50 },
+  { k: "AMOUNT", w: 58, align: "right" as const },
 ];
 
 function Row({ cells, style, bold }: { cells: string[]; style?: Style; bold?: boolean }) {
@@ -81,48 +81,76 @@ function Row({ cells, style, bold }: { cells: string[]; style?: Style; bold?: bo
   );
 }
 
+/** One line on the report: a receipt, or a card charge with no receipt. */
+export type PdfLine = {
+  id: string;
+  date: string;
+  vendor: string;
+  category: string;
+  what: string;
+  paid: string;
+  amount: number;
+  /** Photo keys: storage paths or Jotform links, read with loadPhoto. */
+  photos: string[];
+  /** Printed where the photo would be. */
+  noPhoto?: string | null;
+};
+
 export type ExpenseDocInput = {
   name: string;
   email: string;
   month: string; // YYYY-MM
-  receipts: Receipt[];
-  sentAt?: string | null;
+  lines: PdfLine[];
+  totals: { total: number; card: number; personal: number };
+  byCategory: { category: string; total: number; count: number }[];
+  status?: { kind: "approved" | "submitted" | "returned" | "draft"; by?: string | null; at?: string | null; note?: string | null } | null;
+  /** Reads one photo (the receipts bucket, or Jotform for old receipts). */
+  loadPhoto: (key: string) => Promise<Buffer | ArrayBuffer | null>;
 };
 
 /** Receipt photos as small JPEGs (a PDF receipt or an unreadable photo prints as a note instead). */
-async function photos(receipts: Receipt[]): Promise<Map<string, string | null>> {
+async function photos(keys: string[], load: ExpenseDocInput["loadPhoto"]): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
-  const jobs = receipts.flatMap((r) => r.files.map((u) => ({ key: u })));
   let i = 0;
   const worker = async () => {
-    while (i < jobs.length) {
-      const { key } = jobs[i++];
+    while (i < keys.length) {
+      const key = keys[i++];
       try {
-        const file = await fetchJotformFile(key);
-        const small = file ? await shrinkImage(file.body, 1100, 68) : null;
+        const file = /^https:\/\//.test(key) ? (await fetchJotformFile(key))?.body ?? null : await load(key);
+        const small = file ? await shrinkImage(file, 1100, 68) : null;
         out.set(key, small ? `data:image/jpeg;base64,${small.body.toString("base64")}` : null);
       } catch {
         out.set(key, null);
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(4, jobs.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(4, keys.length) }, worker));
   return out;
 }
 
 export async function renderExpensePdf(d: ExpenseDocInput): Promise<Buffer> {
   // Oldest first on paper, like a statement.
-  const list = [...d.receipts].sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
-  const t = totals(list);
-  const pics = await photos(list);
+  const list = [...d.lines].sort((a, b) => a.date.localeCompare(b.date));
+  const t = d.totals;
+  const pics = await photos(list.flatMap((r) => r.photos), d.loadPhoto);
   const title = monthLabel(d.month);
-  const shots = list.flatMap((r, n) => (r.files.length ? r.files.map((u, k) => ({ r, n: n + 1, u, k, of: r.files.length })) : [{ r, n: n + 1, u: "", k: 0, of: 0 }]));
+  const shots = list.flatMap((r, n) =>
+    r.photos.length ? r.photos.map((u, k) => ({ r, n: n + 1, u, k, of: r.photos.length })) : r.noPhoto ? [{ r, n: n + 1, u: "", k: 0, of: 0 }] : [],
+  );
   const pairs: (typeof shots)[] = [];
   for (let i = 0; i < shots.length; i += 2) pairs.push(shots.slice(i, i + 2));
   const printed = dateShort(new Date().toISOString());
   const foot = `AMBIT Polyurethane  ·  Expense report  ·  ${d.name}  ·  ${title}  ·  Printed ${printed}`;
   const cont = `EXPENSE REPORT  ·  ${up(d.name)}  ·  ${up(title)}  ·  CONTINUED`;
-  const stamp = d.sentAt ? { text: `SENT TO CORPORATE  ·  ${up(day(d.sentAt))}`, color: GREEN } : { text: `${t.count} ${t.count === 1 ? "RECEIPT" : "RECEIPTS"}`, color: GRAY };
+  const st = d.status;
+  const stamp =
+    st?.kind === "approved"
+      ? { text: `APPROVED${st.by ? ` BY ${up(st.by)}` : ""}${st.at ? `  ·  ${up(day(st.at))}` : ""}`, color: GREEN }
+      : st?.kind === "submitted"
+        ? { text: `WAITING FOR APPROVAL${st.at ? `  ·  SENT ${up(day(st.at))}` : ""}`, color: GRAY }
+        : st?.kind === "returned"
+          ? { text: "SENT BACK FOR CHANGES", color: RED }
+          : { text: `${list.length} ${list.length === 1 ? "LINE" : "LINES"}  ·  NOT SENT YET`, color: GRAY };
 
   return renderToBuffer(
     <Document title={`Expense report - ${d.name} - ${title}`} author="AMBIT Polyurethane" creator="AMBIT Intelligence" producer="AMBIT Intelligence" subject={`Expense report for ${title}`}>
@@ -150,7 +178,7 @@ export async function renderExpensePdf(d: ExpenseDocInput): Promise<Buffer> {
             ["TOTAL", money(t.total), 1.2],
             ["AMBIT CARD", money(t.card), 1],
             ["PAY BACK TO EMPLOYEE", money(t.personal), 1.3],
-            ["RECEIPTS", String(t.count), 0.8],
+            ["LINES", String(list.length), 0.8],
           ] as [string, string, number][]).map(([k, v, f], i) => (
             <View key={k} style={[s.fact, { flex: f }, i ? { borderLeftWidth: 0.7, borderLeftColor: RULE } : {}]}>
               <Text style={s.factL}>{k}</Text>
@@ -162,16 +190,16 @@ export async function renderExpensePdf(d: ExpenseDocInput): Promise<Buffer> {
         <View style={s.secHead}>
           <Text style={s.secT}>BY CATEGORY</Text>
         </View>
-        {t.byCategory.map((c, i) => (
+        {d.byCategory.map((c, i) => (
           <View key={c.category} style={[s.tr, i % 2 ? { backgroundColor: ZEBRA } : {}]} wrap={false}>
             <Text style={[s.td, { flex: 1 }]}>{c.category}</Text>
-            <Text style={[s.td, { width: 80, color: GRAY }]}>{c.count} {c.count === 1 ? "receipt" : "receipts"}</Text>
+            <Text style={[s.td, { width: 80, color: GRAY }]}>{c.count} {c.count === 1 ? "line" : "lines"}</Text>
             <Text style={[s.td, { width: 70, textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{money(c.total)}</Text>
           </View>
         ))}
 
         <View style={s.secHead}>
-          <Text style={s.secT}>RECEIPTS</Text>
+          <Text style={s.secT}>RECEIPTS AND CARD CHARGES</Text>
           <Text style={{ fontSize: 6.6, color: GRAY }}>Photos follow, numbered to match</Text>
         </View>
         <View style={s.thead} fixed={false}>
@@ -180,31 +208,19 @@ export async function renderExpensePdf(d: ExpenseDocInput): Promise<Buffer> {
           ))}
         </View>
         {list.map((r, i) => (
-          <Row
-            key={r.id}
-            style={i % 2 ? { backgroundColor: ZEBRA } : undefined}
-            cells={[
-              String(i + 1),
-              day(r.date),
-              r.vendor || "-",
-              r.category,
-              [r.purpose, r.notes].filter(Boolean).join(" · ") || "-",
-              r.paidWith === "personal" ? "Personal" : "Card",
-              r.amount === null ? "?" : money(r.amount),
-            ]}
-          />
+          <Row key={r.id} style={i % 2 ? { backgroundColor: ZEBRA } : undefined} cells={[String(i + 1), day(r.date), r.vendor || "-", r.category, r.what || "-", r.paid, money(r.amount)]} />
         ))}
         <View style={s.tot} wrap={false}>
           <Text style={{ flex: 1, paddingHorizontal: 4 }}>Total for {title}</Text>
           <Text style={{ width: 90, textAlign: "right", paddingHorizontal: 4 }}>{money(t.total)}</Text>
         </View>
-        {t.missing ? <Text style={s.fine}>{t.missing} receipt{t.missing === 1 ? " has" : "s have"} no amount typed in (marked ?). Check the photo.</Text> : null}
         <Text style={s.fine}>
-          &quot;Card&quot; = paid with the AMBIT company card. &quot;Personal&quot; = paid with the employee&apos;s own money; the &quot;Pay back to employee&quot; total is owed to them.
+          &quot;Card&quot; = the AMBIT company card (the amount the bank charged when the charge is matched). &quot;Personal&quot; = paid with the employee&apos;s own money; the &quot;Pay back to employee&quot; total is owed to them.
         </Text>
+        {st?.kind === "returned" && st.note ? <Text style={[s.fine, { color: RED }]}>Sent back: {st.note}</Text> : null}
         <View style={s.sign} wrap={false}>
-          <Text style={s.signLine}>Employee signature / date</Text>
-          <Text style={s.signLine}>Approved by / date</Text>
+          <Text style={s.signLine}>Employee: {d.name}</Text>
+          <Text style={s.signLine}>{st?.kind === "approved" ? `Approved in AMBIT Intelligence by ${st.by ?? "an approver"}${st.at ? `, ${day(st.at)}` : ""}${st.note ? ` (${st.note})` : ""}` : "Approved by / date"}</Text>
         </View>
 
         {pairs.map((pair, pi) => (
@@ -223,13 +239,13 @@ export async function renderExpensePdf(d: ExpenseDocInput): Promise<Buffer> {
                       <Text style={s.b}>#{x.n}  {x.r.vendor || "Receipt"}</Text>  ·  {day(x.r.date)}  ·  {x.r.category}
                       {x.of > 1 ? `  ·  photo ${x.k + 1} of ${x.of}` : ""}
                     </Text>
-                    <Text style={s.b}>{x.r.amount === null ? "" : money(x.r.amount)}</Text>
+                    <Text style={s.b}>{money(x.r.amount)}</Text>
                   </View>
                   {src ? (
                     <Image src={src} style={s.photo} />
                   ) : (
                     <View style={s.noPhoto}>
-                      <Text>{x.u ? "This receipt is a PDF or a photo type that can't print here. It's saved in Jotform." : "No photo was uploaded with this receipt."}</Text>
+                      <Text>{x.u ? "This receipt is a PDF or a photo type that can't print here. Open it in AMBIT Intelligence." : `No receipt photo: ${x.r.noPhoto ?? "none was uploaded"}`}</Text>
                     </View>
                   )}
                 </View>

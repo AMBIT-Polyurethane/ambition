@@ -38,6 +38,15 @@ export async function requireEmployee() {
   return s;
 }
 
+/** Expense approvers (Admin > Expense reports picks them). */
+export const isExpenseApprover = (p: Pick<Profile, "role" | "expense_approver">) => isEmployee(p) && Boolean(p.expense_approver);
+
+export async function requireExpenseApprover() {
+  const s = await requireEmployee();
+  if (!isExpenseApprover(s.profile)) redirect("/expenses");
+  return s;
+}
+
 export async function requireAdmin() {
   const s = await requireActive();
   if (s.profile.role !== "admin") redirect("/");

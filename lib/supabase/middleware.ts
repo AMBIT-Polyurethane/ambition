@@ -3,9 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/env";
 
 // /approve: customers approve orders from an emailed link without an account.
-// /api/inventory/sync and /api/tax/reminders: Vercel's timers (they check CRON_SECRET themselves).
+// /api/inventory/sync, /api/tax/reminders and /api/expenses/daily: Vercel's timers (they check CRON_SECRET themselves).
 // /lead: a contractor's public "Request a quote" form (AMBIT-OPS).
-const PUBLIC_PATHS = ["/signin", "/request-access", "/forgot", "/auth", "/setup", "/approve", "/join", "/lead", "/p", "/api/inventory/sync", "/api/tax/reminders"];
+const PUBLIC_PATHS = ["/signin", "/request-access", "/forgot", "/auth", "/setup", "/approve", "/join", "/lead", "/p", "/api/inventory/sync", "/api/tax/reminders", "/api/expenses/daily"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

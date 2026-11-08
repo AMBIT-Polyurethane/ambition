@@ -52,6 +52,8 @@ export type Profile = {
   ops_workspace?: string | null;
   /** Gets the "Credit check needed" emails (0043, Admin > Email alerts). */
   notify_credit?: boolean;
+  /** Approves expense reports and sees the expense dashboard (0050, Admin > Expense reports). */
+  expense_approver?: boolean;
 };
 
 export type Branch = {

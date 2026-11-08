@@ -570,13 +570,31 @@ Employee forms, price-request links in Sales tools, the rest in Learn & resource
 
 ### Expenses (AMBIT staff)
 
-Home → Expenses: "Add a receipt" opens the AMBIT Expense Receipt form in Jotform (filled in with who's signed in):
-date, store, amount, category, what it was for, AMBIT card or personal, and a photo of the receipt. The app
-reads the receipts back from Jotform and shows each month's total, categories and receipts. "Send to Corporate"
-emails the month's report (a PDF with every receipt photo) to Jeremiah, Kim and Kevin (Vercel EXPENSE_REPORT_TO
-changes who) and remembers it was sent; "Download PDF" works any time. Admin → Expense reports shows every
-employee's month. The form's id is EXPENSE_FORM_ID (set in the code; Vercel can override it). Needs
-`supabase/migrations/0017_expense_reports.sql`.
+Receipts live in the app (`supabase/migrations/0050_expenses_v2.sql`; the old Jotform form is only read to bring
+old receipts over). Home → Expenses → "Add a receipt": take a photo (private "receipts" bucket), AMBIT
+Intelligence reads it (`readReceipt`: vendor, date, total, tip, category, card last 4), and the person picks
+the customer it was for from the customer list or types a name (`company_id` / `customer_name`); meals and
+entertainment also ask who was there.
+
+Card charges come from Chase two ways: an approver uploads the card's CSV download (Admin → Expense reports →
+Card charges; `lib/expense-chase.ts` reads it, a fingerprint per line means uploading twice adds nothing twice),
+or "Connect Chase" through Plaid (`lib/plaid.ts`; Vercel PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV, and the
+SUPABASE_SECRET_KEY, since the bank's key is kept where no login can read it). `expense_auto_match` pairs each
+charge with its receipt (same person, same amount within 4 days; meals and entertainment can be up to 35% more
+for the tip; a card nobody is assigned to matches a single exact receipt from anyone). Cards are assigned to
+people in the same tab.
+
+Each month: every card purchase needs a receipt or a "Lost receipt" (no photo, a reason). Then "Send for
+approval" (`expense_submit`), or the daily job (`/api/expenses/daily`, vercel.json) sends it on its own from
+the 3rd once nothing is missing, and reminds people with missing receipts (Mondays, and on the 3rd). Approvers
+(Admin → Expense reports → Setup; `profiles.expense_approver`, admins pick) get an email, open the review
+screen, and Approve (the employee gets the approved PDF) or Send back with a note (`expense_review`; nobody
+approves their own). A month that's waiting or approved is locked for the employee.
+
+Admin → Expense reports → the chart button: the approvers-only dashboard (`expense_kpis`): spend by category,
+travel vs meals by month, customers by expense next to what they bought (cost of sales), "same customer, over
+and over" (3+ visit days within 30 days), person × category, everyone, locations, places, missing receipts and
+the biggest expenses.
 
 ### Creating accounts (admins)
 

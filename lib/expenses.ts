@@ -1,32 +1,17 @@
 import "server-only";
-import { api, JOTFORM_SITE, type Answer, type Submission } from "@/lib/jotform";
-import { todayCentral } from "@/lib/sale";
+import type { Answer, Submission } from "@/lib/jotform";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { CHARGE_COLS, REPORT_COLS, RECEIPT_COLS, addDays, chargeLabel, isMonth, monthSpan, monthView, type XCharge, type XReceipt, type XReport } from "@/lib/expense-kinds";
+import { expensePdfName, renderExpensePdf, type PdfLine } from "@/lib/expense-doc/pdf";
 
-// Employee expenses. Each receipt is one submission of the "AMBIT Expense Receipt" Jotform form
-// (a photo of the receipt plus date, store, amount and category). The app reads them back to build
-// each person's monthly expense report. Vercel settings (optional): EXPENSE_FORM_ID, EXPENSE_REPORT_TO.
+export * from "@/lib/expense-kinds";
+
+// Employee expenses. Receipts are saved in the app (migration 0050); card charges come from the Chase
+// statement (or the bank link) and are matched to them. Receipts used to be submissions of the "AMBIT
+// Expense Receipt" Jotform form: the Jotform reading below is what brings those old ones over.
 
 export const EXPENSE_FORM_ID = (process.env.EXPENSE_FORM_ID || "262964802280965").trim();
 export const expensesReady = () => /^\d{6,25}$/.test(EXPENSE_FORM_ID) && Boolean(process.env.JOTFORM_API_KEY?.trim());
-
-/** Who gets the monthly reports ("Corporate"). */
-export const REPORT_TO = (process.env.EXPENSE_REPORT_TO || "jeremiah.bryant@ambitpu.com, kim.hight@ambitpu.com, kevin.lall@ambitpu.com")
-  .split(/[,;\s]+/)
-  .map((e) => e.trim().toLowerCase())
-  .filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
-
-export const CATEGORIES = [
-  "Fuel",
-  "Meals",
-  "Lodging",
-  "Airfare & travel",
-  "Vehicle & equipment repair",
-  "Tools & supplies",
-  "Shipping",
-  "Customer entertainment",
-  "Training & events",
-  "Other",
-] as const;
 
 export type Receipt = {
   id: string;
@@ -44,19 +29,6 @@ export type Receipt = {
   notes: string;
   files: string[];
 };
-
-// ------------------------------------------------------------------ months
-export const thisMonth = () => todayCentral().slice(0, 7);
-export const isMonth = (m: unknown): m is string => typeof m === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
-export function shiftMonth(m: string, by: number): string {
-  const [y, mo] = m.split("-").map(Number);
-  const d = new Date(Date.UTC(y, mo - 1 + by, 1));
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-export function monthLabel(m: string): string {
-  const [y, mo] = m.split("-").map(Number);
-  return new Date(Date.UTC(y, mo - 1, 15)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-}
 
 // ------------------------------------------------------------------ answers
 const label = (a: Answer) => `${a.text ?? ""}`.toLowerCase();
@@ -114,83 +86,82 @@ export function toReceipt(s: Submission): Receipt {
   };
 }
 
-/**
- * Receipts with a purchase date in this month (newest first), for one person or everyone.
- * Receipts uploaded late (next month) still land on the month they were bought.
- */
-export async function receiptsFor(month: string, email?: string): Promise<Receipt[]> {
-  if (!expensesReady() || !isMonth(month)) return [];
-  // Anything bought this month was uploaded on or after the 1st (a few days' slack for typos).
-  const from = new Date(`${month}-01T00:00:00Z`);
-  from.setUTCDate(from.getUTCDate() - 5);
-  const filter = encodeURIComponent(JSON.stringify({ "status:ne": "DELETED", "created_at:gt": from.toISOString().slice(0, 19).replace("T", " ") }));
-  const all: Submission[] = [];
-  for (let offset = 0; offset < 10000; offset += 1000) {
-    const page = await api<Submission[]>(`/form/${EXPENSE_FORM_ID}/submissions?limit=1000&offset=${offset}&orderby=created_at&filter=${filter}`, false);
-    all.push(...(page ?? []).filter((s) => s.status !== "DELETED"));
-    if (!page || page.length < 1000) break;
-  }
-  const who = email?.toLowerCase();
-  return all
-    .map(toReceipt)
-    .filter((r) => r.date.startsWith(month) && (!who || r.email === who))
-    .sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
+// ------------------------------------------------------------------ the app's own receipts (0050)
+
+/** One person's month: their receipts (and nearby ones, for matching by hand), card charges and the report. */
+export async function loadMonth(supabase: SupabaseClient, userId: string, month: string) {
+  if (!isMonth(month)) throw new Error("Pick a month.");
+  const { from, next } = monthSpan(month);
+  const [rec, chg, rep] = await Promise.all([
+    supabase.from("expense_receipts").select(RECEIPT_COLS).eq("user_id", userId).is("deleted_at", null).gte("bought_on", addDays(from, -10)).lt("bought_on", addDays(next, 10)).limit(2000),
+    supabase.from("expense_charges").select(CHARGE_COLS).eq("user_id", userId).eq("removed", false).gte("txn_date", addDays(from, -10)).lt("txn_date", addDays(next, 10)).limit(2000),
+    supabase.from("expense_reports").select(REPORT_COLS).eq("user_id", userId).eq("month", from).maybeSingle(),
+  ]);
+  if (rec.error) throw new Error(rec.error.message);
+  const receipts = ((rec.data ?? []) as XReceipt[]).map((r) => ({ ...r, amount: Number(r.amount), tip: r.tip === null ? null : Number(r.tip) }));
+  const charges = ((chg.data ?? []) as XCharge[]).map((c) => ({ ...c, amount: Number(c.amount) }));
+  const report = (rep.data as XReport | null) ?? null;
+  return { view: monthView(month, receipts, charges), report };
 }
 
-/** One receipt (for showing its photo), or null if it's not on the expense form. */
-export async function receiptById(id: string): Promise<Receipt | null> {
-  if (!expensesReady() || !/^\d{6,25}$/.test(id)) return null;
-  try {
-    const s = await api<Submission>(`/submission/${id}`, false);
-    if (!s || String(s.form_id) !== EXPENSE_FORM_ID || s.status === "DELETED") return null;
-    return toReceipt(s);
-  } catch {
-    return null;
+/** The report's lines: every receipt, and every card charge without one (returns, fees, "no receipt needed"). */
+export function pdfLines(view: ReturnType<typeof monthView>): PdfLine[] {
+  const out: PdfLine[] = [];
+  for (const r of view.receipts) {
+    const c = view.chargeFor.get(r.id);
+    const cust = (r.customer_name ?? "").trim();
+    out.push({
+      id: r.id,
+      date: r.bought_on,
+      vendor: r.vendor,
+      category: r.category,
+      what: [cust ? `For ${cust}` : "", r.purpose ?? "", r.attendees ? `With ${r.attendees}` : ""].filter(Boolean).join(" · "),
+      paid: r.paid_with === "personal" ? "Personal" : "Card",
+      amount: c ? Number(c.amount) : Number(r.amount),
+      photos: r.photos,
+      noPhoto: r.photos.length ? null : r.no_photo_reason || "none was uploaded",
+    });
   }
+  for (const c of view.charges) {
+    if (c.receipt_id || c.kind === "other") continue;
+    out.push({
+      id: c.id,
+      date: c.txn_date,
+      vendor: chargeLabel(c),
+      category: c.kind === "return" ? "Returns & credits" : c.kind === "fee" ? "Bank fees" : c.excused_note ? c.category ?? "Other" : "No receipt",
+      what: c.kind === "purchase" ? (c.excused_note ? `No receipt needed: ${c.excused_note}` : "No receipt yet") : c.description,
+      paid: "Card",
+      amount: Number(c.amount),
+      photos: [],
+    });
+  }
+  return out;
 }
 
-export type Totals = { total: number; card: number; personal: number; count: number; missing: number; byCategory: { category: string; total: number; count: number }[] };
-
-export function totals(list: Receipt[]): Totals {
-  const cats = new Map<string, { total: number; count: number }>();
-  let total = 0,
-    card = 0,
-    personal = 0,
-    missing = 0;
-  for (const r of list) {
-    const a = r.amount ?? 0;
-    if (r.amount === null) missing++;
-    total += a;
-    if (r.paidWith === "personal") personal += a;
-    else card += a;
-    const c = cats.get(r.category) ?? { total: 0, count: 0 };
-    c.total += a;
-    c.count++;
-    cats.set(r.category, c);
-  }
-  const round = (n: number) => Math.round(n * 100) / 100;
-  return {
-    total: round(total),
-    card: round(card),
-    personal: round(personal),
-    count: list.length,
-    missing,
-    byCategory: [...cats.entries()].map(([category, v]) => ({ category, total: round(v.total), count: v.count })).sort((a, b) => b.total - a.total),
-  };
+/** One person's monthly report as a PDF (photos read with whichever login is given). */
+export async function expensePdf(supabase: SupabaseClient, who: { id: string; name: string; email: string }, month: string) {
+  const { view, report } = await loadMonth(supabase, who.id, month);
+  const status = report
+    ? report.status === "approved"
+      ? { kind: "approved" as const, by: report.approved_by_name, at: report.approved_at, note: report.review_note }
+      : report.status === "submitted"
+        ? { kind: "submitted" as const, at: report.submitted_at }
+        : report.status === "returned"
+          ? { kind: "returned" as const, note: report.review_note }
+          : null
+    : null;
+  const pdf = await renderExpensePdf({
+    name: who.name,
+    email: who.email,
+    month,
+    lines: pdfLines(view),
+    totals: view.totals,
+    byCategory: view.totals.byCategory,
+    status,
+    loadPhoto: async (key) => {
+      const { data } = await supabase.storage.from("receipts").download(key);
+      return data ? Buffer.from(await data.arrayBuffer()) : null;
+    },
+  });
+  return { pdf, filename: expensePdfName(who.name, month), view, report };
 }
-
-/** The receipt form, filled in with who's signed in (Jotform fills fields whose name matches). */
-export function receiptFormUrl(p: { full_name: string | null; email: string }): string {
-  const u = new URL(`${JOTFORM_SITE}/${EXPENSE_FORM_ID}`);
-  const full = (p.full_name ?? "").trim();
-  if (full) {
-    const parts = full.split(/\s+/);
-    const last = parts.length > 1 ? parts.pop()! : "";
-    u.searchParams.set("name[first]", parts.join(" "));
-    if (last) u.searchParams.set("name[last]", last);
-  }
-  u.searchParams.set("email", p.email.toLowerCase());
-  return u.toString();
-}
-
-export const receiptFileHref = (r: Pick<Receipt, "id">, i = 0, w?: number) => `/expenses/file?s=${r.id}&i=${i}${w ? `&w=${w}` : ""}`;

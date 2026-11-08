@@ -115,10 +115,11 @@ const SECTIONS: Section[] = [
   {
     who: "staff",
     title: "Expenses (AMBIT staff)",
-    body: `[Expenses](/expenses): snap every receipt when you use the company card.
-1. "Add a receipt" opens the AMBIT Expense Receipt form (already filled in with your name): date, store, amount, category, what it was for, company card or personal, and a photo of the receipt.
-2. The Expenses screen shows the month's total, categories and receipts.
-3. At month end, "Send to Corporate" emails your report (a PDF with every receipt photo) to Jeremiah, Kim and Kevin. "Download PDF" works any time.`,
+    body: `[Expenses](/expenses): snap every receipt when you use the AMBIT card.
+1. "Add a receipt": take a photo; AMBIT Intelligence reads the date, place, total and category for you. Check them, pick the customer it was for (type a few letters, or type a name that isn't on the list; "Not for a customer" if it wasn't), and for meals and entertainment say who was there. Paid with your own money? Tap "My own money" and it's paid back to you.
+2. The Chase card charges come in on their own and each one is matched to its receipt. A charge with no receipt shows in red at the top: tap "Add receipt", "I uploaded it" (pick the receipt), or "Lost receipt" (say what it was and why there's no receipt).
+3. When the month is over and every charge has a receipt, tap "Send for approval" (if you don't, it goes on its own a few days into the next month). An approver approves it (you get the approved PDF) or sends it back with a note: fix it and send it again. While it's waiting or approved, that month can't be changed.
+4. Approvers (Jeremiah, Kim and Kevin to start; admins change who in Admin > Expense reports > Setup) see "Approve reports" and the expense dashboard: which customers cost the most to look after next to what they buy, who keeps visiting the same customer, and who spends the most on what. Approvers also upload the Chase statement (Card charges tab) and say whose card is whose.`,
   },
   {
     who: "staff",
@@ -279,7 +280,7 @@ Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work o
 - Accounts: create an account (contractor with company, or AMBIT employee with job role and boxes for what they can use); the person gets a private invite link. Invited tab: Edit changes anything on an invite before it's used (name, email, phone, account type, job role, boxes, location, company, note; a new email gets a fresh link and the old one stops working; or tick "Email them a fresh invite link now"), Send again, Cancel invite. After someone has joined, edit their account card in the AMBIT staff or Contractors tab (Recently set up links straight to it): name, cell phone, login email (they sign in with the new email and their same password, and get an email saying so; you can't change your own), account type, job role, boxes, location, access. "Needs a role" tab for staff without a job role. Turn anyone off instantly.
 - Customers (companies), Products (CSV import, sale prices with an end date, square feet per bag for batts), Docs & bulletins, Links (Home-screen form tiles), Home banner (promo slides), Branches, Academy.
 - Forms hub: every Jotform form; credit applications and account setup forms wait for approval with credit limit, terms and a note; any submission prints as a PDF.
-- Expense reports: every employee's month. Inventory: the Microsoft connection and each location's spreadsheet.
+- Expense reports (approvers): reports waiting for approval, every employee's month, the Chase statement upload and cards, the approvers list, and the expense dashboard. Inventory: the Microsoft connection and each location's spreadsheet.
 - Ask AMBIT: teach the assistant (TSBs, teaching notes, documents), answer questions sent to AMBIT's expert, review conversations, and settings (who can use it, model, approved websites, daily limits).
 - Tax certificates and Complaint reports also have their own tiles and menu items.`,
   },
