@@ -97,6 +97,21 @@ function friendlyError(e: unknown): string {
   return "Something went wrong while answering. Try again in a moment.";
 }
 
+/**
+ * More tools on top of the knowledge search (AMBIT-OPS adds the contractor's own data). handle() answers a
+ * tool call; system is added after the rules; who replaces the "who's asking" line; preSearch: false skips
+ * the knowledge search before the first round (most OPS questions are about their business, not products).
+ */
+export type ExtraTools = {
+  tools: Anthropic.Messages.Tool[];
+  handle: (name: string, input: Record<string, unknown>) => Promise<{ content: string; is_error?: boolean }>;
+  system: string;
+  who?: string;
+  preSearch?: boolean;
+  status?: (name: string) => string;
+  maxTokens?: number;
+};
+
 export async function runAnswer(opts: {
   supabase: SupabaseClient;
   profile: Profile;
@@ -105,20 +120,24 @@ export async function runAnswer(opts: {
   question: string;
   photos?: string[];
   emit: Emit;
+  extra?: ExtraTools;
 }): Promise<Answer> {
-  const { supabase, profile, settings, question, emit } = opts;
+  const { supabase, profile, settings, question, emit, extra } = opts;
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 2, timeout: 100_000 });
   const model = modelInfo(settings.model);
   let webOn = settings.web_lookups && settings.allowed_sites.length > 0;
-  const { rules, who } = systemPrompt(profile, settings, webOn);
+  const base = systemPrompt(profile, settings, webOn);
+  const rules = base.rules;
+  const who = extra?.who ?? base.who;
   const refs = new Map<string, Ref>();
 
   // Look first with the question itself (and the previous answered question, for short follow-ups).
   const hist = historyMessages(opts.history);
   const prevUser = String([...hist].reverse().find((h) => h.role === "user")?.content ?? "").slice(0, 300);
   const firstQuery = question.length < 80 && prevUser ? `${question} ${prevUser}` : question;
-  emit({ t: "status", text: "Searching AMBIT knowledge…" });
-  const first = await search(supabase, firstQuery || "spray foam problem", null, refs, 8);
+  const preSearch = extra?.preSearch ?? true;
+  if (preSearch) emit({ t: "status", text: "Searching AMBIT knowledge…" });
+  const first = preSearch ? await search(supabase, firstQuery || "spray foam problem", null, refs, 8) : [];
   const pics = opts.photos?.length ? await photoBlocks(supabase, opts.photos, opts.profile.id) : [];
   if (opts.photos?.length && !pics.length) throw new Error("Couldn't read the photos. Try adding them again.");
 
@@ -135,15 +154,17 @@ export async function runAnswer(opts: {
       required: ["query"],
     },
   };
-  const toolsFor = (web: boolean): Anthropic.Messages.ToolUnion[] =>
-    web
-      ? [searchTool, { type: "web_search_20250305", name: "web_search", max_uses: 3, allowed_domains: settings.allowed_sites }]
-      : [searchTool];
+  const toolsFor = (web: boolean): Anthropic.Messages.ToolUnion[] => [
+    searchTool,
+    ...(extra?.tools ?? []),
+    ...(web ? [{ type: "web_search_20250305", name: "web_search", max_uses: 3, allowed_domains: settings.allowed_sites } as Anthropic.Messages.WebSearchTool20250305] : []),
+  ];
   let tools = toolsFor(webOn);
   const system = (web: boolean): Anthropic.Messages.TextBlockParam[] => {
     const r = web === webOn ? rules : systemPrompt(profile, settings, web).rules;
     return [
-      { type: "text", text: r, cache_control: { type: "ephemeral" } },
+      { type: "text", text: r, ...(extra ? {} : { cache_control: { type: "ephemeral" } }) },
+      ...(extra ? [{ type: "text", text: extra.system, cache_control: { type: "ephemeral" } } as Anthropic.Messages.TextBlockParam] : []),
       { type: "text", text: who },
     ];
   };
@@ -152,6 +173,13 @@ export async function runAnswer(opts: {
     ...hist,
     { role: "user", content: [...pics, ...first, { type: "text", text: question || "What do you see in these photos?" }] },
   ];
+  if (extra && !preSearch) {
+    // Two cache marks on the conversation so a follow-up question reuses everything before it.
+    const lastHist = hist[hist.length - 1];
+    if (lastHist && typeof lastHist.content === "string") {
+      messages[hist.length - 1] = { role: lastHist.role, content: [{ type: "text", text: lastHist.content, cache_control: { type: "ephemeral" } }] };
+    }
+  }
 
   const kept: { blocks: Block[]; final: boolean }[] = [];
   let inputTokens = 0;
@@ -164,12 +192,15 @@ export async function runAnswer(opts: {
   for (let round = 0; round < 8; round++) {
     let msg: Anthropic.Messages.Message;
     try {
-      const stream = client.messages.stream({ model: model.id, max_tokens: 2048, system: system(webOn), tools, messages });
+      const stream = client.messages.stream({ model: model.id, max_tokens: extra?.maxTokens ?? 2048, system: system(webOn), tools, messages });
       let wrote = false;
       for await (const ev of stream) {
         if (ev.type === "content_block_start") {
           if (ev.content_block.type === "server_tool_use") emit({ t: "status", text: "Checking approved websites…" });
-          else if (ev.content_block.type === "tool_use") emit({ t: "status", text: "Searching AMBIT knowledge…" });
+          else if (ev.content_block.type === "tool_use") {
+            const name = ev.content_block.name;
+            emit({ t: "status", text: name !== "search_knowledge" && extra?.status ? extra.status(name) : "Searching AMBIT knowledge…" });
+          }
         } else if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
           if (!wrote) emit({ t: "status", text: "" });
           wrote = true;
@@ -205,6 +236,16 @@ export async function runAnswer(opts: {
       for (const b of msg.content) {
         if (b.type !== "tool_use") continue;
         if (b.name !== "search_knowledge") {
+          if (extra && extra.tools.some((t) => t.name === b.name)) {
+            try {
+              const r = await extra.handle(b.name, (b.input ?? {}) as Record<string, unknown>);
+              results.push({ type: "tool_result", tool_use_id: b.id, content: r.content.slice(0, 60_000), ...(r.is_error ? { is_error: true } : {}) });
+            } catch (e) {
+              console.error("AMBIT Intelligence tool failed", b.name, e);
+              results.push({ type: "tool_result", tool_use_id: b.id, content: "That lookup failed. Tell the person you couldn't get it right now.", is_error: true });
+            }
+            continue;
+          }
           results.push({ type: "tool_result", tool_use_id: b.id, content: "Unknown tool.", is_error: true });
           continue;
         }

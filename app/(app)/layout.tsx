@@ -5,6 +5,7 @@ import { can, roleLabel, seesInventory } from "@/lib/access";
 import { deskAccess } from "@/lib/order-desk";
 import { assistantAccess } from "@/lib/assistant/settings";
 import { opsCan, opsMember, opsRoleLabel } from "@/lib/ops/roles";
+import { AiPanel } from "@/components/ops/ai/panel";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       ? `${opsRoleLabel(profile.ops_role)} · ${profile.company?.name ?? ""}`
       : profile.company?.name ?? "Contractor";
 
+  // AMBIT Intelligence (the atom button): everyone in an AMBIT-OPS workspace, and AMBIT admins while
+  // they have a workspace open (Admin -> AMBIT-OPS).
+  const aiAdmin = profile.role === "admin" && !!profile.ops_workspace;
+  const intel = ops || aiAdmin;
+
   return (
     <div className="app-frame">
       <Sidebar items={items.filter(Boolean) as SideItem[]} name={name} sub={sub} />
@@ -88,7 +94,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <TabBar
         showOrder={ops ? opsCan.order(profile.ops_role) : profile.role === "customer" || can(profile, "ordering")}
         mode={ops ? (opsCan.fieldOnly(profile.ops_role) ? "crew" : "ops") : "default"}
+        ai={ops ? "always" : aiAdmin ? "ops" : false}
       />
+      {intel ? <AiPanel name={name} field={ops && opsCan.fieldOnly(profile.ops_role)} canEdit={ops ? opsCan.editCrm(profile.ops_role) : true} /> : null}
     </div>
   );
 }

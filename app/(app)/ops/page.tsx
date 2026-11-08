@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  ArrowRight, CalendarRange, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, FileSignature, Flame, FlaskConical, Gauge, Layers, LifeBuoy, Package, Plus, Ruler, Target, TrendingDown, Users,
+  ArrowRight, CalendarRange, ChevronRight, UserRound, CircleAlert, CircleCheck, ClipboardCheck, FileSignature, Flame, FlaskConical, Gauge, Layers, LifeBuoy, Package, Plus, Ruler, Target, TrendingDown, Users,
 } from "lucide-react";
 import { HBar, ProfitBars, Spark, YieldRing } from "@/components/ops/charts";
 import { requireActive, isEmployee } from "@/lib/session";
@@ -14,6 +14,10 @@ import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { dateShort, firstName, greeting } from "@/lib/format";
 import { lineText, rangeText, timeText } from "@/lib/ops/schedule";
+import { setupSteps } from "@/lib/ops/setup";
+import type { Kpis } from "@/lib/ops/kpis";
+import { dailyBrief } from "@/lib/ops/brief";
+import { Guide, GuideButton } from "@/components/ops/ai/guide";
 import { enterWorkspace } from "./workspace-actions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/types";
@@ -76,7 +80,7 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
 
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
   const co = ws.company.id;
-  const [{ data: kpiRaw }, { data: leadRows }, { data: tasks }, { count: customers }, { count: team }, { count: products }, { count: invites }] = await Promise.all([
+  const [{ data: kpiRaw }, { data: leadRows }, { data: tasks }, steps] = await Promise.all([
     supabase.rpc("ops_kpis"),
     supabase.from("ops_leads").select("id, number, title, stage, created_at, customer:ops_customers(name)").eq("company_id", co).not("stage", "in", "(won,lost)").order("created_at", { ascending: false }).limit(6),
     supabase
@@ -88,10 +92,7 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
       .or(`assigned_to.eq.${profile.id},and(assigned_to.is.null,created_by.eq.${profile.id})`)
       .order("due_on", { ascending: true, nullsFirst: false })
       .limit(7),
-    supabase.from("ops_customers").select("id", { count: "exact", head: true }).eq("company_id", co),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("company_id", co).not("ops_role", "is", null),
-    supabase.from("ops_products").select("id", { count: "exact", head: true }).eq("company_id", co).eq("active", true),
-    opsCan.manage(role) ? supabase.from("invites").select("id", { count: "exact", head: true }).eq("company_id", co).is("accepted_at", null).is("cancelled_at", null) : Promise.resolve({ count: 0 }),
+    setupSteps(supabase, ws),
   ]);
   const k = (kpiRaw ?? null) as Kpis | null;
   type L = { id: string; number: number; title: string | null; stage: string; created_at: string; customer: { name: string } | null };
@@ -99,20 +100,8 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
   type Tk = { id: string; body: string; due_on: string | null; lead_id: string | null; customer_id: string | null; lead: { number: number; title: string | null } | null };
   const taskList = (tasks ?? []) as unknown as Tk[];
 
-  // Guided setup (owner and office): what's left before the first quote.
+  // Guided setup (owner and office): what's left before the first quote (lib/ops/setup.ts).
   const s = ws.settings;
-  const raw = (ws.company.ops_settings ?? {}) as Record<string, unknown>;
-  const reviewed = (raw.reviewed ?? {}) as Record<string, boolean>;
-  const steps = opsCan.manage(role)
-    ? [
-        { done: !!ws.company.ops_logo_path && !!s.phone, label: "Add your logo and contact info", hint: "Your colors come from your logo", href: "/ops/settings/company" },
-        { done: !!reviewed.products && (products ?? 0) > 0, label: "Check your products and AMBIT costs", hint: "Foam sets and fiberglass are loaded from your AMBIT invoices", href: "/ops/settings/products" },
-        { done: !!reviewed.labor && s.target_margin !== null && s.floor_margin !== null, label: "Set labor rates and margins", hint: "Defaults are in; add your target and lowest margin", href: "/ops/settings/pricing" },
-        { done: (team ?? 0) + (invites ?? 0) > 1, label: "Invite your team", hint: "Office, sales and crews each get their own login", href: "/ops/settings/team" },
-        { done: (customers ?? 0) > 0, label: "Bring in your customers", hint: "Upload a spreadsheet or add them as you go", href: "/ops/customers/import" },
-        { done: !!reviewed.form, label: "Put the lead form on your website", hint: "Requests land right in your pipeline", href: "/ops/settings/lead-form" },
-      ]
-    : [];
   const left = steps.filter((x) => !x.done).length;
 
   // ---- the numbers
@@ -151,6 +140,8 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
   const custMax = Math.max(1, ...(k?.customers ?? []).map((c) => Number(c.revenue)));
   const dayName = new Date(`${today}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
+  const brief = dailyBrief({ k, tasks: taskList, first: firstName(profile.full_name, profile.email), today, hello: greeting() });
+
   const summary = [
     crewsOut ? `${crewsOut} crew${crewsOut === 1 ? " is" : "s are"} out on ${todayTrips.length} job${todayTrips.length === 1 ? "" : "s"} today.` : "No crews are scheduled today.",
     review ? `${review} finished work order${review === 1 ? "" : "s"} need${review === 1 ? "s" : ""} your review` : null,
@@ -166,7 +157,7 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
         <div className="oh-hero-main">
           {ws.logoUrl ? <img src={ws.logoUrl} alt="" className="oh-logo" /> : <span className="oh-logo ph">{ws.brand.slice(0, 1)}</span>}
           <span className="col tight" style={{ minWidth: 0 }}>
-            <span className="oh-eyebrow">{ws.brand} · {dayName}</span>
+            <span className="oh-eyebrow"><span className="oh-eb-brand">{ws.brand} · </span>{dayName}</span>
             <h1 className="oh-hi">{hi}</h1>
             <span className="oh-sum">{summaryText}</span>
           </span>
@@ -176,8 +167,13 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
           <Link href="/ops/quotes/new" className="btn sm dark"><FileSignature size={15} /> New quote</Link>
           <Link href="/ops/schedule" className="btn sm dark"><CalendarRange size={15} /> Schedule</Link>
         </div>
-        <span className="oh-ambit" aria-hidden="true"><img src="/brand/atom-mark.png" alt="" /> AMBIT Intelligence</span>
+        <GuideButton mode="brief" className="oh-ambit">
+          <img src="/brand/atom-mark.png" alt="" /> <span>Today&apos;s briefing</span>
+        </GuideButton>
+        <Link href="/profile" className="oh-me" aria-label="Your profile"><UserRound size={18} /></Link>
       </section>
+
+      <Guide userId={profile.id} first={firstName(profile.full_name, profile.email)} brand={ws.brand} today={today} steps={steps} brief={brief} />
 
       {steps.length && left ? (
         <section className="card oh-setup">
@@ -186,6 +182,9 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
               <b>Finish setting up ({steps.length - left} of {steps.length})</b>
               <span className="tiny faint">About 15 minutes. AMBIT products and your AMBIT prices are already in.</span>
             </span>
+            <GuideButton mode="setup" className="btn sm dark oh-walk">
+              <img src="/brand/atom-mark.png" alt="" /> Walk me through it
+            </GuideButton>
             <div className="gbar" aria-hidden="true" style={{ flex: "1 1 200px", maxWidth: 360 }}><div className="fill" style={{ width: `${((steps.length - left) / steps.length) * 100}%` }} /></div>
           </div>
           <div className="oh-setup-list">
@@ -440,7 +439,7 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
       ) : null}
 
       <div className="ops-two">
-        <section className="card col" style={{ gap: 10 }}>
+        <section className="card col" style={{ gap: 10 }} id="tasks">
           <div className="row between">
             <b>Your tasks</b>
             <Link href="/ops/leads/new" className="btn sm"><Plus size={15} /> New lead</Link>
@@ -494,29 +493,8 @@ function Delta({ pct }: { pct: number }) {
   return <span className={`oh-chip ${up ? "ok" : "bad"}`}>{up ? "▲" : "▼"} {Math.abs(pct) >= 999 ? "999+" : Math.abs(pct).toFixed(0)}%</span>;
 }
 
-type Kpis = {
-  today: string;
-  sold: { month: number; prev: number; prev_full: number; jobs: number };
-  months: { m: string; revenue: number; cost: number; jobs: number; sold: number }[];
-  backlog: { value: number; jobs: number; unscheduled: number; weekly: number };
-  pipeline: { stages: { key: string; count: number; value: number }[]; won90: number; lost90: number; quotes_out: number; quotes_out_n: number; due: number; new7: number };
-  yield: {
-    kinds: { kind: string; bf: number; sets: number; actual: number; target: number | null }[];
-    rigs: { rig: string; color: string | null; kind: string; actual: number; target: number; sets: number }[];
-    waste_dollars: number;
-    waste_sets: number;
-  };
-  today_trips: { id: string; job_id: string; job_no: number; title: string | null; customer: string; city: string | null; rig: string | null; color: string | null; status: string; day: number; days: number; wo_open: boolean }[];
-  week: { d: string; n: number }[];
-  rigs: number;
-  work_orders: { review: number; open: number };
-  chem: { oc_need: number; cc_need: number; iso: number; oc: number; cc: number };
-  attention: {
-    low_yield: { job_id: string; job_no: number; customer: string; kind: string; pct: number }[];
-    hot_quotes: { id: string; number: number; customer: string; views: number; total: number }[];
-  };
-  customers: { id: string; name: string; kind: string; jobs: number; revenue: number }[];
-};
+
+
 
 
 // ------------------------------------------------------------------ AMBIT staff (no workspace open)

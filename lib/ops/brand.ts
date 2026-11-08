@@ -165,9 +165,12 @@ const block = (v: Record<string, string>) => Object.entries(v).map(([k, x]) => `
 export function brandCss(p: BrandPalette): string {
   const dark = block(varsFor(p, "dark"));
   const light = block(varsFor(p, "light"));
+  // The AMBIT Intelligence panel and the phone's atom button sit outside the workspace wrapper (they're
+  // part of the app frame), so they take the same colors by name.
+  const at = (pre: string) => [".ops-brand", ".ix-root", ".tab-ai", ".ops-ai-btn"].map((c) => `${pre}${c}`).join(",");
   return [
-    `.ops-brand{${dark}}`,
-    `:root[data-theme="light"] .ops-brand,.theme-light .ops-brand{${light}}`,
-    `@media (prefers-color-scheme: light){:root[data-theme="system"] .ops-brand{${light}}}`,
+    `${at("")}{${dark}}`,
+    `${at(':root[data-theme="light"] ')},${at(".theme-light ")}{${light}}`,
+    `@media (prefers-color-scheme: light){${at(':root[data-theme="system"] ')}{${light}}}`,
   ].join("");
 }

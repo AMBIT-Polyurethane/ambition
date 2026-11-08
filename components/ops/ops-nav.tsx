@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Fragment } from "react";
 import { CalendarRange, ClipboardCheck, Contact, FileSignature, Gauge, House, Receipt, Settings, SquareKanban } from "lucide-react";
+import { AiNavButton } from "@/components/ops/ai/ai-button";
 
 // AMBIT-OPS: the work in the order it happens, left to right. Steps still being built show when
 // they arrive; nothing to click until then.
@@ -18,7 +20,8 @@ const STEPS = [
   { href: "/ops/costing", label: "Job costing", icon: Gauge, soon: "Dec 1" },
 ] as const;
 
-export function OpsNav({ crm, manage }: { crm: boolean; manage: boolean }) {
+/** ai: the pulsing AMBIT Intelligence atom, between Schedule and Work orders. */
+export function OpsNav({ crm, manage, ai = true }: { crm: boolean; manage: boolean; ai?: boolean }) {
   const path = usePathname() || "/ops";
   const on = (href: string, exact?: boolean, also?: readonly string[]) =>
     exact ? path === href : path === href || path.startsWith(href + "/") || !!also?.some((a) => path.startsWith(a));
@@ -38,11 +41,15 @@ export function OpsNav({ crm, manage }: { crm: boolean; manage: boolean }) {
           }
           const active = on(s.href, "exact" in s ? s.exact : false, "also" in s ? s.also : undefined);
           return (
-            <Link key={s.href} href={s.href} className={`ops-step${active ? " on" : ""}`} aria-current={active ? "page" : undefined}>
-              <I size={16} /> {s.label}
-            </Link>
+            <Fragment key={s.href}>
+              {ai && s.href === "/ops/work-orders" ? <AiNavButton /> : null}
+              <Link href={s.href} className={`ops-step${active ? " on" : ""}`} aria-current={active ? "page" : undefined}>
+                <I size={16} /> {s.label}
+              </Link>
+            </Fragment>
           );
         })}
+        {ai && !steps.some((s) => s.href === "/ops/work-orders") ? <AiNavButton /> : null}
         {manage ? (
           <Link href="/ops/settings" className={`ops-step end${path.startsWith("/ops/settings") ? " on" : ""}`}>
             <Settings size={16} /> Settings

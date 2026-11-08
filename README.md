@@ -123,6 +123,24 @@ Vercel Skew Protection (Project Settings → Advanced, 12 hours) keeps pages und
   jobs: 150 fully costed (sets, lots, time, areas = yield), 150 across leads → quotes → scheduled → in progress →
   to review, 25 builders with repeat jobs, 200 homeowners, 160 lost leads, rigs, crews, stock. example.com emails,
   555-01xx phones, logs not shared with AMBIT. Admin > AMBIT-OPS has the buttons.
+- **AMBIT Intelligence** (the pulsing atom; `components/ops/ai/`, `app/api/ops/assistant/route.ts`, `lib/ops/ai/`,
+  `0049`): a button in the OPS top bar between Schedule and Work orders on computers and in the middle of the phone's
+  bottom bar (tap to open, press and hold to open already listening). The panel (`panel.tsx`, mounted once in
+  `app/(app)/layout.tsx` for OPS logins and admins with a workspace open) streams answers from Ask AMBIT's engine
+  (`lib/assistant/run.ts` with `extra` tools, Ask AMBIT's sourcing rules still apply to products and building
+  science) plus workspace tools in `lib/ops/ai/tools.ts`: `business_snapshot` (`ops_kpis`), `schedule`, `record`
+  (lead / quote / job / customer), `find`, `follow_ups`, `stock`, `open_screen`, and `draft_lead` / `draft_task`
+  that come back as cards saved only when the person taps Save (`app/(app)/ops/ai-actions.ts`). Every lookup runs
+  with the person's own login (RLS); crews get no prices. Voice is the browser's own (`voice.ts`): speech
+  recognition where the browser has it, and talking back when the question was spoken (mute in the header).
+  Conversations aren't stored; each question counts toward the Ask AMBIT daily limit and cost. `0049` lets OPS
+  logins use it (`ai_can_use()`); the Ask AMBIT screen stays as set in Admin.
+- **The guide** (`guide.tsx`, `lib/ops/setup.ts`, `lib/ops/brief.ts`): on OPS Home the atom pops up once a day
+  (remembered per device): the setup walkthrough for owners and office managers until setup is done (Show me opens
+  each screen, where `GuideCoach` in the OPS layout says what to do and moves on when it's done), then the daily
+  briefing (chemical short, crews out, reminders due, work orders to review, follow-ups, hot quotes, low yield,
+  unscheduled work) with Read it to me. "Today's briefing" in the Home header and "Walk me through it" on the
+  setup card bring them back.
 
 `/ops`: the contractor's own operations software inside AMBIT Intelligence, built as one straight path: CRM (leads
 and customers), quotes, proposals and e-sign (with Takeoff), jobs, the rig board and stock, crew work orders (with
