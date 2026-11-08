@@ -64,6 +64,15 @@ export async function setLogo(path: string | null): Promise<{ ok: boolean; error
   return { ok: true };
 }
 
+/** Colors picked from the logo (or null to go back to AMBIT's colors). */
+export async function setTheme(theme: { primary: string; secondary: string | null; palette: string[] } | null): Promise<{ ok: boolean; error?: string }> {
+  const { supabase } = await requireOps(opsCan.manage);
+  const { error } = await supabase.rpc("ops_set_theme", { p_theme: theme ? { ...theme, from: "logo" } : null });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/ops", "layout");
+  return { ok: true };
+}
+
 // ------------------------------------------------------------------ pricing, defaults and labor
 export async function savePricing(f: FormData) {
   const back = "/ops/settings/pricing";

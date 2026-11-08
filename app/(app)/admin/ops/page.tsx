@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Blocks, CircleAlert, CircleCheck, FlaskConical, LifeBuoy, Search } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { TopBar } from "@/components/ui";
-import { Submit } from "@/components/forms";
+import { ConfirmSubmit, Submit } from "@/components/forms";
 import { dateShort } from "@/lib/format";
-import { createDemo, openWorkspace, turnBackOn, turnOff } from "./actions";
+import { createDemo, deleteDemo, fillDemo, openWorkspace, turnBackOn, turnOff } from "./actions";
 import { TurnOnForm } from "./turn-on-form";
 
 export const metadata = { title: "AMBIT-OPS workspaces" };
@@ -72,6 +72,18 @@ export default async function AdminOpsPage({ searchParams }: { searchParams: Pro
                       <form action={openWorkspace}>
                         <input type="hidden" name="company_id" value={c.id} />
                         <Submit className="btn sm" pendingText="Opening…"><LifeBuoy size={15} /> Open</Submit>
+                      </form>
+                    ) : null}
+                    {c.ops_demo && c.ops_enabled ? (
+                      <form action={fillDemo}>
+                        <input type="hidden" name="company_id" value={c.id} />
+                        <ConfirmSubmit className="btn sm dark" pendingText="Loading…" confirm={`Load about 300 sample jobs into "${c.name}"? Anything already in this demo is replaced.`}>Fill with sample jobs</ConfirmSubmit>
+                      </form>
+                    ) : null}
+                    {c.ops_demo ? (
+                      <form action={deleteDemo}>
+                        <input type="hidden" name="company_id" value={c.id} />
+                        <ConfirmSubmit className="btn sm ghost" pendingText="…" confirm={`Delete the "${c.name}" demo and everything in it? This can't be undone.`}>Delete demo</ConfirmSubmit>
                       </form>
                     ) : null}
                     {c.ops_enabled ? (

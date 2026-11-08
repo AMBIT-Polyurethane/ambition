@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  ArrowRight, CalendarRange, Check, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, FileSignature, FlaskConical, Gauge, LifeBuoy, Plus, Receipt, Ruler, SquareKanban, Users,
+  ArrowRight, CalendarRange, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, FileSignature, Flame, FlaskConical, Gauge, Layers, LifeBuoy, Package, Plus, Ruler, Target, TrendingDown, Users,
 } from "lucide-react";
+import { HBar, ProfitBars, Spark, YieldRing } from "@/components/ops/charts";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
 import { loadWorkspace, type Workspace } from "@/lib/ops/server";
@@ -12,7 +13,7 @@ import { CLOSED, stageName } from "@/lib/ops/defaults";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { dateShort, firstName, greeting } from "@/lib/format";
-import { addDays, lineText, rangeText, timeText } from "@/lib/ops/schedule";
+import { lineText, rangeText, timeText } from "@/lib/ops/schedule";
 import { enterWorkspace } from "./workspace-actions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/types";
@@ -40,17 +41,17 @@ export default async function OpsPage({ searchParams }: { searchParams: Promise<
 async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: SupabaseClient; profile: Profile; ws: Workspace; alerts: React.ReactNode }) {
   const role = ws.role;
   const hi = `${greeting()}, ${firstName(profile.full_name, profile.email)}`;
-  const head = (
-    <header className="ops-head">
-      {ws.logoUrl ? <img src={ws.logoUrl} alt="" className="ops-logo" /> : <span className="ops-logo ph">{ws.brand.slice(0, 1)}</span>}
-      <span className="col tight" style={{ minWidth: 0 }}>
-        <span className="eyebrow">{ws.brand}</span>
-        <h1 className="h1" style={{ margin: 0 }}>{hi}</h1>
-      </span>
-    </header>
-  );
 
   if (opsCan.fieldOnly(role)) {
+    const head = (
+      <header className="ops-head">
+        {ws.logoUrl ? <img src={ws.logoUrl} alt="" className="ops-logo" /> : <span className="ops-logo ph">{ws.brand.slice(0, 1)}</span>}
+        <span className="col tight" style={{ minWidth: 0 }}>
+          <span className="eyebrow">{ws.brand}</span>
+          <h1 className="h1" style={{ margin: 0 }}>{hi}</h1>
+        </span>
+      </header>
+    );
     const { data: mine } = await supabase.rpc("ops_my_trips", { p_days: 7 });
     return (
       <main className="shell wide">
@@ -75,8 +76,9 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
 
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
   const co = ws.company.id;
-  const [{ data: leadRows }, { data: tasks }, { count: customers }, { count: team }, { count: products }, { count: invites }, { data: quoteRows }] = await Promise.all([
-    supabase.from("ops_leads").select("id, number, title, stage, next_at, created_at, stage_changed_at, customer:ops_customers(name)").eq("company_id", co).order("created_at", { ascending: false }).limit(400),
+  const [{ data: kpiRaw }, { data: leadRows }, { data: tasks }, { count: customers }, { count: team }, { count: products }, { count: invites }] = await Promise.all([
+    supabase.rpc("ops_kpis"),
+    supabase.from("ops_leads").select("id, number, title, stage, created_at, customer:ops_customers(name)").eq("company_id", co).not("stage", "in", "(won,lost)").order("created_at", { ascending: false }).limit(6),
     supabase
       .from("ops_notes")
       .select("id, body, due_on, lead_id, customer_id, lead:ops_leads(number, title)")
@@ -85,45 +87,26 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
       .is("done_at", null)
       .or(`assigned_to.eq.${profile.id},and(assigned_to.is.null,created_by.eq.${profile.id})`)
       .order("due_on", { ascending: true, nullsFirst: false })
-      .limit(8),
+      .limit(7),
     supabase.from("ops_customers").select("id", { count: "exact", head: true }).eq("company_id", co),
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("company_id", co).not("ops_role", "is", null),
     supabase.from("ops_products").select("id", { count: "exact", head: true }).eq("company_id", co).eq("active", true),
     opsCan.manage(role) ? supabase.from("invites").select("id", { count: "exact", head: true }).eq("company_id", co).is("accepted_at", null).is("cancelled_at", null) : Promise.resolve({ count: 0 }),
-    supabase.from("ops_quotes").select("status, totals, signed_total, signed_at").eq("company_id", co).in("status", ["draft", "sent", "viewed", "signed"]).order("updated_at", { ascending: false }).limit(500),
   ]);
-  const weekEnd = addDays(today, 6);
-  const [{ count: toSchedule }, { count: thisWeek }, { count: woReview }, { count: woOpen }] = opsCan.jobs(role)
-    ? await Promise.all([
-        supabase.from("ops_trips").select("id, job:ops_jobs!inner(status)", { count: "exact", head: true }).eq("company_id", co).eq("status", "unscheduled").eq("job.status", "open"),
-        supabase.from("ops_trips").select("id", { count: "exact", head: true }).eq("company_id", co).in("status", ["scheduled", "in_progress"]).lte("start_date", weekEnd).gte("end_date", today),
-        supabase.from("ops_work_orders").select("id", { count: "exact", head: true }).eq("company_id", co).eq("status", "done"),
-        supabase.from("ops_work_orders").select("id", { count: "exact", head: true }).eq("company_id", co).eq("status", "open"),
-      ])
-    : [{ count: 0 }, { count: 0 }, { count: 0 }, { count: 0 }];
-  type Qr = { status: string; totals: { options?: Record<string, { total: number }> }; signed_total: number | null; signed_at: string | null };
-  const qs = (quoteRows ?? []) as Qr[];
-  const qTop = (q: Qr) => Math.max(0, ...Object.values(q.totals?.options ?? {}).map((o) => Number(o.total) || 0));
-  const outQ = qs.filter((q) => q.status === "sent" || q.status === "viewed");
-  const draftQ = qs.filter((q) => q.status === "draft").length;
-  const signedMonth = qs.filter((q) => q.status === "signed" && q.signed_at && q.signed_at.slice(0, 10) >= today.slice(0, 8) + "01");
-  type L = { id: string; number: number; title: string | null; stage: string; next_at: string | null; created_at: string; stage_changed_at: string; customer: { name: string } | null };
+  const k = (kpiRaw ?? null) as Kpis | null;
+  type L = { id: string; number: number; title: string | null; stage: string; created_at: string; customer: { name: string } | null };
   const leads = (leadRows ?? []) as unknown as L[];
-  const open = leads.filter((l) => !CLOSED.includes(l.stage));
-  const fresh = open.filter((l) => l.stage === "new").length;
-  const due = open.filter((l) => l.next_at && l.next_at <= today).length;
-  const monthStart = today.slice(0, 8) + "01";
-  const wonMonth = leads.filter((l) => l.stage === "won" && l.stage_changed_at.slice(0, 10) >= monthStart).length;
   type Tk = { id: string; body: string; due_on: string | null; lead_id: string | null; customer_id: string | null; lead: { number: number; title: string | null } | null };
+  const taskList = (tasks ?? []) as unknown as Tk[];
 
   // Guided setup (owner and office): what's left before the first quote.
-  const s = ws.settings as typeof ws.settings & { reviewed?: Record<string, boolean> };
+  const s = ws.settings;
   const raw = (ws.company.ops_settings ?? {}) as Record<string, unknown>;
   const reviewed = (raw.reviewed ?? {}) as Record<string, boolean>;
   const steps = opsCan.manage(role)
     ? [
-        { done: !!ws.company.ops_logo_path && !!s.phone, label: "Add your logo and contact info", hint: "They go on proposals, invoices and your lead form", href: "/ops/settings/company" },
-        { done: !!reviewed.products && (products ?? 0) > 0, label: "Check your products and AMBIT costs", hint: "Foam sets and fiberglass are already loaded from your AMBIT invoices", href: "/ops/settings/products" },
+        { done: !!ws.company.ops_logo_path && !!s.phone, label: "Add your logo and contact info", hint: "Your colors come from your logo", href: "/ops/settings/company" },
+        { done: !!reviewed.products && (products ?? 0) > 0, label: "Check your products and AMBIT costs", hint: "Foam sets and fiberglass are loaded from your AMBIT invoices", href: "/ops/settings/products" },
         { done: !!reviewed.labor && s.target_margin !== null && s.floor_margin !== null, label: "Set labor rates and margins", hint: "Defaults are in; add your target and lowest margin", href: "/ops/settings/pricing" },
         { done: (team ?? 0) + (invites ?? 0) > 1, label: "Invite your team", hint: "Office, sales and crews each get their own login", href: "/ops/settings/team" },
         { done: (customers ?? 0) > 0, label: "Bring in your customers", hint: "Upload a spreadsheet or add them as you go", href: "/ops/customers/import" },
@@ -132,92 +115,329 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
     : [];
   const left = steps.filter((x) => !x.done).length;
 
-  const path = [
-    { icon: SquareKanban, title: "Leads", value: `${open.length}`, sub: fresh ? `${fresh} new · ${due} to follow up` : due ? `${due} to follow up today` : "open in your pipeline", href: "/ops/pipeline", live: true },
-    {
-      icon: FileSignature,
-      title: "Quotes",
-      value: outQ.length ? money0(outQ.reduce((a, q) => a + qTop(q), 0)) : draftQ ? `${draftQ}` : signedMonth.length ? money0(signedMonth.reduce((a, q) => a + Number(q.signed_total ?? 0), 0)) : "0",
-      sub: outQ.length
-        ? `${outQ.length} waiting on the customer${draftQ ? ` · ${draftQ} draft${draftQ === 1 ? "" : "s"}` : ""}`
-        : draftQ
-          ? `draft${draftQ === 1 ? "" : "s"} to finish`
-          : signedMonth.length
-            ? `signed this month (${signedMonth.length})`
-            : "Takeoff to a signed proposal",
-      href: "/ops/quotes",
-      live: true,
-    },
-    {
-      icon: CalendarRange,
-      title: "Schedule",
-      value: toSchedule ? `${toSchedule}` : `${thisWeek ?? 0}`,
-      sub: toSchedule ? `trip${toSchedule === 1 ? "" : "s"} to schedule${thisWeek ? ` · ${thisWeek} in the next 7 days` : ""}` : thisWeek ? `trip${thisWeek === 1 ? "" : "s"} in the next 7 days` : "Rigs and crews by day",
-      href: "/ops/schedule",
-      live: opsCan.jobs(role),
-    },
-    {
-      icon: ClipboardCheck,
-      title: "Work orders",
-      value: `${woReview ?? 0}`,
-      sub: woReview ? `finished, to review${woOpen ? ` · ${woOpen} in progress` : ""}` : woOpen ? `${woOpen} in progress` : "Time, sets and lots from the field",
-      href: "/ops/work-orders",
-      live: opsCan.jobs(role),
-    },
-    { icon: Receipt, title: "Invoices", value: "Nov 26", sub: "Deposit to final", live: false },
-    { icon: Gauge, title: "Job costing", value: "Dec 1", sub: "Yield and margin on every job", live: false },
-  ];
+  // ---- the numbers
+  const months = k?.months ?? [];
+  const cur = months[months.length - 1] ?? { m: today.slice(0, 7), revenue: 0, cost: 0, jobs: 0, sold: 0 };
+  const prev = months[months.length - 2] ?? null;
+  const gp = cur.revenue - cur.cost;
+  const gpPct = cur.revenue ? (gp / cur.revenue) * 100 : null;
+  const yr = months.reduce((a, m) => ({ rev: a.rev + m.revenue, cost: a.cost + m.cost, jobs: a.jobs + m.jobs }), { rev: 0, cost: 0, jobs: 0 });
+  const soldDelta = k && k.sold.prev > 0 ? ((k.sold.month - k.sold.prev) / k.sold.prev) * 100 : null;
+  const gpPrevPct = prev && prev.revenue ? ((prev.revenue - prev.cost) / prev.revenue) * 100 : null;
+  const weeks = k && k.backlog.weekly > 0 ? k.backlog.value / k.backlog.weekly : null;
+  const decided = (k?.pipeline.won90 ?? 0) + (k?.pipeline.lost90 ?? 0);
+  const winRate = decided ? ((k?.pipeline.won90 ?? 0) / decided) * 100 : null;
+  const todayTrips = k?.today_trips ?? [];
+  const crewsOut = new Set(todayTrips.map((t) => t.rig ?? t.id)).size;
+  const review = k?.work_orders.review ?? 0;
+  const due = k?.pipeline.due ?? 0;
+  const monthLabel = (m: string) => new Date(`${m}-15T12:00:00`).toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  const stageOrder = ws.settings.stages.filter((x) => !CLOSED.includes(x.key));
+  const stageRows = stageOrder.map((st) => {
+    const r = k?.pipeline.stages.find((x) => x.key === st.key);
+    return { key: st.key, name: st.name, count: r?.count ?? 0, value: Number(r?.value ?? 0) };
+  });
+  const stageMax = Math.max(1, ...stageRows.map((r) => r.value));
+  const kinds = (k?.yield.kinds ?? []).filter((y) => y.target);
+  const chem = k?.chem;
+  const chemRows = chem
+    ? [
+        { key: "oc", name: "Open cell resin", sub: "AMBI-SEAL drums", have: chem.oc, need: chem.oc_need },
+        { key: "cc", name: "Closed cell resin", sub: "AMBI-TITE drums", have: chem.cc, need: chem.cc_need },
+        { key: "iso", name: "ISO (A side)", sub: "Drums, all brands", have: chem.iso, need: chem.oc_need + chem.cc_need },
+      ].filter((r) => r.have > 0 || r.need > 0)
+    : [];
+  const chemShort = chemRows.some((r) => r.have < r.need);
+  const custMax = Math.max(1, ...(k?.customers ?? []).map((c) => Number(c.revenue)));
+  const dayName = new Date(`${today}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  const summary = [
+    crewsOut ? `${crewsOut} crew${crewsOut === 1 ? " is" : "s are"} out on ${todayTrips.length} job${todayTrips.length === 1 ? "" : "s"} today.` : "No crews are scheduled today.",
+    review ? `${review} finished work order${review === 1 ? "" : "s"} need${review === 1 ? "s" : ""} your review` : null,
+    due ? `${due} follow-up${due === 1 ? " is" : "s are"} due` : null,
+  ].filter(Boolean);
+  const summaryText = summary.length > 1 ? `${summary[0]} ${summary.slice(1).join(", and ")}.` : summary[0];
 
   return (
-    <main className="shell wide">
+    <main className="shell wide ops-home">
       {alerts}
-      {head}
+
+      <section className="oh-hero">
+        <div className="oh-hero-main">
+          {ws.logoUrl ? <img src={ws.logoUrl} alt="" className="oh-logo" /> : <span className="oh-logo ph">{ws.brand.slice(0, 1)}</span>}
+          <span className="col tight" style={{ minWidth: 0 }}>
+            <span className="oh-eyebrow">{ws.brand} · {dayName}</span>
+            <h1 className="oh-hi">{hi}</h1>
+            <span className="oh-sum">{summaryText}</span>
+          </span>
+        </div>
+        <div className="oh-actions">
+          <Link href="/ops/leads/new" className="btn sm"><Plus size={15} /> New lead</Link>
+          <Link href="/ops/quotes/new" className="btn sm dark"><FileSignature size={15} /> New quote</Link>
+          <Link href="/ops/schedule" className="btn sm dark"><CalendarRange size={15} /> Schedule</Link>
+        </div>
+        <span className="oh-ambit" aria-hidden="true"><img src="/brand/atom-mark.png" alt="" /> AMBIT Intelligence</span>
+      </section>
 
       {steps.length && left ? (
-        <section className="card ops-setup">
-          <div className="row between" style={{ gap: 12 }}>
+        <section className="card oh-setup">
+          <div className="row between" style={{ gap: 12, flexWrap: "wrap" }}>
             <span className="col tight">
-              <b>Get set up ({steps.length - left} of {steps.length} done)</b>
+              <b>Finish setting up ({steps.length - left} of {steps.length})</b>
               <span className="tiny faint">About 15 minutes. AMBIT products and your AMBIT prices are already in.</span>
             </span>
+            <div className="gbar" aria-hidden="true" style={{ flex: "1 1 200px", maxWidth: 360 }}><div className="fill" style={{ width: `${((steps.length - left) / steps.length) * 100}%` }} /></div>
           </div>
-          <div className="gbar" aria-hidden="true"><div className="fill" style={{ width: `${((steps.length - left) / steps.length) * 100}%` }} /></div>
-          <div className="ops-setup-list">
-            {steps.map((x) => (
-              <Link key={x.label} href={x.href} className={`ops-setup-row${x.done ? " done" : ""}`}>
-                <span className="ops-tick">{x.done ? <Check size={14} strokeWidth={3} /> : null}</span>
+          <div className="oh-setup-list">
+            {steps.filter((x) => !x.done).map((x) => (
+              <Link key={x.label} href={x.href} className="oh-setup-row">
+                <span className="ops-tick" />
                 <span className="grow col tight" style={{ minWidth: 0 }}>
                   <span className="t">{x.label}</span>
-                  {!x.done ? <span className="tiny faint">{x.hint}</span> : null}
+                  <span className="tiny faint">{x.hint}</span>
                 </span>
-                {!x.done ? <ChevronRight size={16} className="faint" /> : null}
+                <ChevronRight size={16} className="faint" />
               </Link>
             ))}
           </div>
         </section>
       ) : null}
 
-      <section className="ops-path" aria-label="Your work, start to finish">
-        {path.map((p, i) => {
-          const I = p.icon;
-          const body = (
-            <>
-              <span className="ops-path-ic"><I size={18} /></span>
-              <span className="col tight" style={{ minWidth: 0 }}>
-                <span className="tiny faint">{p.title}</span>
-                <b className="ops-path-v">{p.value}</b>
-                <span className="tiny faint ellipsis">{p.live ? p.sub : `Coming · ${p.sub}`}</span>
+      {k ? (
+        <>
+          <section className="oh-kpis" aria-label="Key numbers">
+            <Link href="/ops/quotes" className="oh-kpi">
+              <span className="oh-k-l"><FileSignature size={15} /> Sold this month</span>
+              <b className="oh-k-v">{money0(k.sold.month)}</b>
+              <span className="oh-k-s">
+                {soldDelta !== null ? <Delta pct={soldDelta} /> : null}
+                <span>{k.sold.jobs} job{k.sold.jobs === 1 ? "" : "s"} signed{soldDelta !== null ? " · vs same days last month" : ""}</span>
               </span>
-              {i < path.length - 1 ? <ArrowRight size={14} className="ops-path-arrow" aria-hidden="true" /> : null}
-            </>
-          );
-          return p.live && p.href ? (
-            <Link key={p.title} href={p.href} className="ops-path-step live">{body}</Link>
-          ) : (
-            <div key={p.title} className="ops-path-step">{body}</div>
-          );
-        })}
-      </section>
+              <Spark values={months.map((m) => m.sold)} labels={months.map((m) => monthLabel(m.m))} />
+            </Link>
+            <Link href="/ops/work-orders" className="oh-kpi">
+              <span className="oh-k-l"><Gauge size={15} /> Gross profit, finished this month</span>
+              <b className="oh-k-v">{money0(gp)}</b>
+              <span className="oh-k-s">
+                {gpPct !== null ? <span className={`oh-chip ${gpPct >= (s.target_margin ?? 40) ? "ok" : gpPct >= (s.floor_margin ?? 25) ? "warn" : "bad"}`}>{gpPct.toFixed(0)}% margin</span> : null}
+                <span>{money0(cur.revenue)} on {cur.jobs} job{cur.jobs === 1 ? "" : "s"}{gpPrevPct !== null ? ` · last month ${gpPrevPct.toFixed(0)}%` : ""}</span>
+              </span>
+              <Spark values={months.map((m) => m.revenue - m.cost)} labels={months.map((m) => monthLabel(m.m))} />
+            </Link>
+            <Link href="/ops/schedule" className="oh-kpi">
+              <span className="oh-k-l"><Layers size={15} /> Backlog (sold, not done)</span>
+              <b className="oh-k-v">{money0(k.backlog.value)}</b>
+              <span className="oh-k-s">
+                {weeks !== null ? <span className="oh-chip info">{weeks < 1 ? "Under a week" : `~${weeks.toFixed(1)} weeks`} of work</span> : null}
+                <span>{k.backlog.jobs} jobs{k.backlog.unscheduled ? ` · ${k.backlog.unscheduled} not scheduled` : ""}</span>
+              </span>
+              <div className="oh-split" aria-hidden="true">
+                <i style={{ flex: Math.max(0, k.backlog.jobs - k.backlog.unscheduled) }} />
+                <i className="u" style={{ flex: k.backlog.unscheduled }} />
+              </div>
+            </Link>
+            <Link href="/ops/pipeline" className="oh-kpi">
+              <span className="oh-k-l"><Target size={15} /> Win rate, last 90 days</span>
+              <b className="oh-k-v">{winRate !== null ? `${Math.round(winRate)}%` : "–"}</b>
+              <span className="oh-k-s">
+                <span className="oh-chip info">{money0(k.pipeline.quotes_out)} out</span>
+                <span>{k.pipeline.quotes_out_n} quote{k.pipeline.quotes_out_n === 1 ? "" : "s"} waiting · {k.pipeline.won90} won, {k.pipeline.lost90} lost</span>
+              </span>
+              <div className="oh-split" aria-hidden="true">
+                <i style={{ flex: k.pipeline.won90 }} />
+                <i className="l" style={{ flex: k.pipeline.lost90 }} />
+              </div>
+            </Link>
+          </section>
+
+          <div className="oh-grid">
+            <section className="card oh-card oh-profit">
+              <div className="oh-card-h">
+                <span className="col tight">
+                  <b>Revenue and gross profit</b>
+                  <span className="tiny faint">Finished jobs, last 12 months · {money0(yr.rev)} revenue · {yr.rev ? Math.round(((yr.rev - yr.cost) / yr.rev) * 100) : 0}% margin</span>
+                </span>
+                <span className="oh-legend"><span><i className="sw p" />Gross profit</span><span><i className="sw c" />Job cost</span></span>
+              </div>
+              <ProfitBars data={months.map((m) => ({ m: m.m, revenue: Number(m.revenue), cost: Number(m.cost), jobs: m.jobs }))} />
+            </section>
+
+            <section className="card oh-card oh-yield">
+              <div className="oh-card-h">
+                <span className="col tight">
+                  <b>Yield</b>
+                  <span className="tiny faint">Board feet per set against your target, last 90 days</span>
+                </span>
+              </div>
+              {kinds.length ? (
+                <div className="oh-rings">
+                  {kinds.map((y) => (
+                    <YieldRing key={y.kind} pct={(Number(y.actual) / Number(y.target)) * 100}
+                      label={y.kind === "foam_oc" ? "Open cell" : y.kind === "foam_cc" ? "Closed cell" : "Roofing foam"}
+                      sub={`${Number(y.actual).toLocaleString()} of ${Number(y.target).toLocaleString()} bd ft/set`} />
+                  ))}
+                </div>
+              ) : (
+                <span className="small muted">Yield shows up once crews finish work orders with sets and areas.</span>
+              )}
+              {Number(k.yield.waste_dollars) > 0 ? (
+                <Link href="/ops/work-orders" className="oh-waste">
+                  <CircleAlert size={16} />
+                  <span><b>{money0(Number(k.yield.waste_dollars))}</b> in chemical beyond what was sold ({Number(k.yield.waste_sets).toLocaleString()} sets): low yield and overspray.</span>
+                </Link>
+              ) : null}
+              {k.yield.rigs.length ? (
+                <div className="oh-rows">
+                  {k.yield.rigs.map((r) => {
+                    const pct = (Number(r.actual) / Number(r.target)) * 100;
+                    return (
+                      <div key={`${r.rig}-${r.kind}`} className="oh-row">
+                        <i className="dot" style={{ background: r.color ?? "var(--c2)" }} />
+                        <span className="grow ellipsis small">{r.rig} <span className="faint">· {r.kind === "foam_oc" ? "OC" : "CC"}</span></span>
+                        <span className={`oh-chip ${pct >= 98 ? "ok" : pct >= 90 ? "warn" : "bad"}`}>{Math.round(pct)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="card oh-card oh-today">
+              <div className="oh-card-h">
+                <span className="col tight"><b>Today</b><span className="tiny faint">{dayName}</span></span>
+                <Link href="/ops/schedule" className="linkbtn small">Schedule <ArrowRight size={14} /></Link>
+              </div>
+              {todayTrips.length ? (
+                <div className="oh-trips">
+                  {todayTrips.slice(0, 5).map((t) => (
+                    <Link key={t.id} href={`/ops/jobs/${t.job_id}`} className="oh-trip" style={{ ["--rig" as string]: t.color ?? "var(--c1)" }}>
+                      <span className="grow col tight" style={{ minWidth: 0 }}>
+                        <span className="tiny faint ellipsis">{t.rig ?? "No rig"}{t.days > 1 ? ` · day ${t.day} of ${t.days}` : ""}</span>
+                        <b className="ellipsis">{t.customer}</b>
+                        <span className="tiny faint ellipsis">#{t.job_no} · {t.title ?? "Job"}{t.city ? ` · ${t.city}` : ""}</span>
+                      </span>
+                      <span className={`oh-chip ${t.wo_open ? "ok" : "info"}`}>{t.wo_open ? "On site" : "Scheduled"}</span>
+                    </Link>
+                  ))}
+                  {todayTrips.length > 5 ? <Link href="/ops/schedule" className="linkbtn small">+ {todayTrips.length - 5} more today</Link> : null}
+                </div>
+              ) : (
+                <span className="small muted">No crews scheduled today.</span>
+              )}
+              <div className="oh-days" aria-label="Trips over the next two weeks">
+                {(k.week ?? []).map((d, i) => {
+                  const date = new Date(`${String(d.d).slice(0, 10)}T12:00:00`);
+                  const max = Math.max(1, k.rigs || 1, ...(k.week ?? []).map((x) => x.n));
+                  return (
+                    <span key={i} className={`oh-day${i === 0 ? " now" : ""}${[0, 6].includes(date.getDay()) ? " wk" : ""}`} title={`${date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}: ${d.n} trip${d.n === 1 ? "" : "s"}`}>
+                      <i style={{ height: `${Math.min(100, (d.n / max) * 100)}%` }} />
+                      <span>{date.toLocaleDateString("en-US", { weekday: "narrow" })}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="card oh-card oh-pipe">
+              <div className="oh-card-h">
+                <span className="col tight"><b>Pipeline</b><span className="tiny faint">Open leads by step · {k.pipeline.new7} new this week</span></span>
+                <Link href="/ops/pipeline" className="linkbtn small">Leads <ArrowRight size={14} /></Link>
+              </div>
+              <div className="oh-rows">
+                {stageRows.map((r, i) => (
+                  <Link key={r.key} href="/ops/pipeline" className="oh-row stage">
+                    <span className="oh-stage-n">{r.count}</span>
+                    <span className="grow col tight" style={{ minWidth: 0 }}>
+                      <span className="row between small"><span className="ellipsis">{r.name}</span><b>{money0(r.value)}</b></span>
+                      <HBar value={r.value} max={stageMax} color={i >= stageRows.length - 2 ? "var(--c1)" : "var(--c2)"} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+              <div className="oh-foot">
+                <span className={due ? "oh-chip warn" : "oh-chip ok"}>{due ? `${due} follow-up${due === 1 ? "" : "s"} due` : "No follow-ups due"}</span>
+                <span className="tiny faint">{k.pipeline.quotes_out_n} quotes out · {money0(k.pipeline.quotes_out)}</span>
+              </div>
+            </section>
+
+            <section className="card oh-card oh-chem">
+              <div className="oh-card-h">
+                <span className="col tight"><b>Chemical check</b><span className="tiny faint">On the shelf and rigs vs. the next 14 days</span></span>
+                <span className={`oh-chip ${chemShort ? "bad" : "ok"}`}>{chemShort ? "Short" : "Covered"}</span>
+              </div>
+              {chemRows.length ? (
+                <div className="oh-rows">
+                  {chemRows.map((r) => {
+                    const pct = r.need > 0 ? (r.have / r.need) * 100 : 100;
+                    const tone = r.have >= r.need ? "ok" : pct >= 70 ? "warn" : "bad";
+                    return (
+                      <div key={r.key} className="oh-chem-row">
+                        <span className="row between small">
+                          <span>{r.name} <span className="faint">· {r.sub}</span></span>
+                          <b>{fmtNum(r.have)} <span className="faint">/ {fmtNum(r.need)} needed</span></b>
+                        </span>
+                        <span className={`oh-meter ${tone}`}><i style={{ width: `${Math.min(100, pct)}%` }} /></span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <span className="small muted">Count your chemical in Stock and it&apos;s checked against the schedule here.</span>
+              )}
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: "auto" }}>
+                <Link href="/order" className="btn sm ambit"><Package size={15} /> Order from AMBIT</Link>
+                <Link href="/ops/stock" className="btn sm dark">Stock</Link>
+              </div>
+            </section>
+
+            <section className="card oh-card oh-attn">
+              <div className="oh-card-h"><span className="col tight"><b>Needs a look</b><span className="tiny faint">What&apos;s waiting on you</span></span></div>
+              <div className="oh-rows">
+                <Link href="/ops/work-orders" className="oh-row link">
+                  <span className="oh-ic"><ClipboardCheck size={16} /></span>
+                  <span className="grow small">Work orders to review</span>
+                  <span className={`oh-chip ${review ? "warn" : "ok"}`}>{review}</span>
+                </Link>
+                {k.attention.low_yield.slice(0, 3).map((x) => (
+                  <Link key={`${x.job_id}-${x.kind}`} href={`/ops/jobs/${x.job_id}`} className="oh-row link">
+                    <span className="oh-ic bad"><TrendingDown size={16} /></span>
+                    <span className="grow col tight" style={{ minWidth: 0 }}>
+                      <span className="small ellipsis">Low yield · #{x.job_no} {x.customer}</span>
+                      <span className="tiny faint">{x.kind === "foam_oc" ? "Open cell" : "Closed cell"} at {x.pct}% of target</span>
+                    </span>
+                  </Link>
+                ))}
+                {k.attention.hot_quotes.slice(0, 3).map((q) => (
+                  <Link key={q.id} href={`/ops/quotes/${q.id}`} className="oh-row link">
+                    <span className="oh-ic hot"><Flame size={16} /></span>
+                    <span className="grow col tight" style={{ minWidth: 0 }}>
+                      <span className="small ellipsis">Quote #{q.number} · {q.customer}</span>
+                      <span className="tiny faint">Opened {q.views}× · {money0(Number(q.total))} · not signed yet</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            <section className="card oh-card oh-cust">
+              <div className="oh-card-h">
+                <span className="col tight"><b>Top customers</b><span className="tiny faint">Sold, last 12 months</span></span>
+                <Link href="/ops/customers" className="linkbtn small">All <ArrowRight size={14} /></Link>
+              </div>
+              <div className="oh-rows">
+                {(k.customers ?? []).map((c) => (
+                  <Link key={c.id} href={`/ops/customers/${c.id}`} className="oh-row stage">
+                    <span className="grow col tight" style={{ minWidth: 0 }}>
+                      <span className="row between small"><span className="ellipsis">{c.name} <span className="faint">· {c.jobs} job{c.jobs === 1 ? "" : "s"}</span></span><b>{money0(Number(c.revenue))}</b></span>
+                      <HBar value={Number(c.revenue)} max={custMax} color="var(--c2)" />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          </div>
+        </>
+      ) : null}
 
       <div className="ops-two">
         <section className="card col" style={{ gap: 10 }}>
@@ -225,9 +445,9 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
             <b>Your tasks</b>
             <Link href="/ops/leads/new" className="btn sm"><Plus size={15} /> New lead</Link>
           </div>
-          {((tasks ?? []) as unknown as Tk[]).length ? (
+          {taskList.length ? (
             <div className="ops-tasks">
-              {((tasks ?? []) as unknown as Tk[]).map((t) => (
+              {taskList.map((t) => (
                 <Link key={t.id} href={t.lead_id ? `/ops/leads/${t.lead_id}` : t.customer_id ? `/ops/customers/${t.customer_id}` : "/ops"} className="ops-task">
                   <span className={`ops-due${t.due_on && t.due_on < today ? " late" : t.due_on === today ? " today" : ""}`}>{t.due_on ? (t.due_on === today ? "Today" : dateShort(t.due_on).replace(/, \d{4}$/, "")) : "Any time"}</span>
                   <span className="grow col tight" style={{ minWidth: 0 }}>
@@ -244,11 +464,11 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
         <section className="card col" style={{ gap: 10 }}>
           <div className="row between">
             <b>Latest leads</b>
-            <span className="tiny faint">{wonMonth} won this month</span>
+            <Link href="/ops/pipeline" className="linkbtn small">Pipeline <ArrowRight size={14} /></Link>
           </div>
-          {open.length ? (
+          {leads.length ? (
             <div className="ops-tasks">
-              {open.slice(0, 6).map((l) => (
+              {leads.map((l) => (
                 <Link key={l.id} href={`/ops/leads/${l.id}`} className="ops-task">
                   <span className="pill grey">{stageName(ws.settings, l.stage)}</span>
                   <span className="grow col tight" style={{ minWidth: 0 }}>
@@ -266,6 +486,38 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
     </main>
   );
 }
+
+const fmtNum = (n: number) => (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(1));
+
+function Delta({ pct }: { pct: number }) {
+  const up = pct >= 0;
+  return <span className={`oh-chip ${up ? "ok" : "bad"}`}>{up ? "▲" : "▼"} {Math.abs(pct) >= 999 ? "999+" : Math.abs(pct).toFixed(0)}%</span>;
+}
+
+type Kpis = {
+  today: string;
+  sold: { month: number; prev: number; prev_full: number; jobs: number };
+  months: { m: string; revenue: number; cost: number; jobs: number; sold: number }[];
+  backlog: { value: number; jobs: number; unscheduled: number; weekly: number };
+  pipeline: { stages: { key: string; count: number; value: number }[]; won90: number; lost90: number; quotes_out: number; quotes_out_n: number; due: number; new7: number };
+  yield: {
+    kinds: { kind: string; bf: number; sets: number; actual: number; target: number | null }[];
+    rigs: { rig: string; color: string | null; kind: string; actual: number; target: number; sets: number }[];
+    waste_dollars: number;
+    waste_sets: number;
+  };
+  today_trips: { id: string; job_id: string; job_no: number; title: string | null; customer: string; city: string | null; rig: string | null; color: string | null; status: string; day: number; days: number; wo_open: boolean }[];
+  week: { d: string; n: number }[];
+  rigs: number;
+  work_orders: { review: number; open: number };
+  chem: { oc_need: number; cc_need: number; iso: number; oc: number; cc: number };
+  attention: {
+    low_yield: { job_id: string; job_no: number; customer: string; kind: string; pct: number }[];
+    hot_quotes: { id: string; number: number; customer: string; views: number; total: number }[];
+  };
+  customers: { id: string; name: string; kind: string; jobs: number; revenue: number }[];
+};
+
 
 // ------------------------------------------------------------------ AMBIT staff (no workspace open)
 const PLANNED = [

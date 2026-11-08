@@ -111,6 +111,25 @@ export async function createDemo(form: FormData) {
   redirect("/ops?msg=" + encodeURIComponent(`You're in the "${name}" demo workspace.`));
 }
 
+/** Fill an AMBIT demo workspace with a year of sample work (replaces what's in it; demos only). */
+export async function fillDemo(form: FormData) {
+  const { supabase, profile } = await requireAdmin();
+  const { data, error } = await supabase.rpc("admin_ops_demo_fill", { p_company: s(form, "company_id"), p_me: profile.id });
+  if (error) back("err", error.message);
+  const n = (data ?? {}) as { jobs?: number; leads?: number; costed?: number };
+  revalidatePath("/ops", "layout");
+  back("msg", `Sample data loaded: ${n.leads ?? 0} leads, ${n.jobs ?? 0} jobs, ${n.costed ?? 0} fully job-costed.`);
+}
+
+/** Delete an AMBIT demo workspace and everything in it. */
+export async function deleteDemo(form: FormData) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase.rpc("admin_ops_demo_delete", { p_company: s(form, "company_id") });
+  if (error) back("err", error.message);
+  revalidatePath("/ops", "layout");
+  back("msg", "Demo workspace deleted.");
+}
+
 export async function openWorkspace(form: FormData) {
   const { supabase } = await requireAdmin();
   const { error } = await supabase.rpc("ops_open_workspace", { p_company: s(form, "company_id") });

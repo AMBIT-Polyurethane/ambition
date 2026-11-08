@@ -16,8 +16,8 @@ export default async function CompanySettingsPage({ searchParams }: { searchPara
     <SettingsShell title="Company and logo" sp={sp}>
       <section className="card col" style={{ gap: 12 }}>
         <b>Logo</b>
-        <span className="tiny faint">Shown on proposals, invoices, work orders and your website lead form. A PNG with a clear background looks best.</span>
-        <LogoUpload companyId={ws.company.id} url={ws.logoUrl} />
+        <span className="tiny faint">Shown on proposals, invoices, work orders and your website lead form. A PNG with a clear background looks best. Your workspace takes its colors from it.</span>
+        <LogoUpload companyId={ws.company.id} url={ws.logoUrl} theme={((ws.company.ops_settings ?? {}) as { theme?: { primary?: string; secondary?: string; palette?: string[] } }).theme ?? null} />
       </section>
       <form action={saveCompany} className="card col" style={{ gap: 12 }}>
         <b>What customers see</b>
@@ -50,6 +50,7 @@ export default async function CompanySettingsPage({ searchParams }: { searchPara
         <label className="field" style={{ maxWidth: 240 }}>
           <span className="label">Brand color</span>
           <input className="input" type="color" name="color" defaultValue={s.color || "#e33527"} style={{ padding: 6, height: 50 }} />
+          <span className="tiny faint">Starts as your logo&apos;s main color. Used on buttons, charts and proposals.</span>
         </label>
         <Submit className="btn" pendingText="Saving…">Save</Submit>
       </form>

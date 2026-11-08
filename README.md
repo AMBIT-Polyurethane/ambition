@@ -110,6 +110,19 @@ just updated", that the change didn't save, and offers Reload (code that's gone 
 Vercel Skew Protection (Project Settings → Advanced, 12 hours) keeps pages under 12 hours old working across updates.
 
 ### AMBIT-OPS
+- **Colors from the logo** (`0048`, `lib/ops/brand.ts`, `lib/ops/palette.ts`): uploading a logo picks its colors in the
+  browser (hue bins, greys skipped, the most vivid other color as the accent) and saves them with `ops_set_theme`
+  (`ops_settings.theme` + `color`). `app/(app)/ops/layout.tsx` wraps the workspace in `.ops-brand` with CSS variables
+  for dark, light and system: `--b`, `--b-ink` (white or near-black text on it), `--b-text`, `--b2`, chart colors
+  `--c1..3`, and `--red*` remapped so every OPS button follows. AMBIT red stays on `--ambit` (Order from AMBIT, the
+  sidebar); problems use `--danger`, good news `--ok`.
+- **Home dashboard** (`ops_kpis()` in `0048`, one call, ~30 ms): sold, finished-job revenue/cost by month, backlog,
+  pipeline, yield vs target (and chemical used beyond what was sold), today's trips, chemical vs. the next 14 days,
+  attention items, top customers. Charts: `components/ops/charts.tsx` (SVG, hover tooltips).
+- **Demo data** (`admin_ops_demo_fill(company, me)` / `admin_ops_demo_delete`): demos only (`ops_demo`). About 300
+  jobs: 150 fully costed (sets, lots, time, areas = yield), 150 across leads → quotes → scheduled → in progress →
+  to review, 25 builders with repeat jobs, 200 homeowners, 160 lost leads, rigs, crews, stock. example.com emails,
+  555-01xx phones, logs not shared with AMBIT. Admin > AMBIT-OPS has the buttons.
 
 `/ops`: the contractor's own operations software inside AMBIT Intelligence, built as one straight path: CRM (leads
 and customers), quotes, proposals and e-sign (with Takeoff), jobs, the rig board and stock, crew work orders (with
