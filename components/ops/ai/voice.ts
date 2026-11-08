@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { speakable } from "@/lib/ops/ai/speakable";
+import { ALL_FILLERS } from "@/lib/ops/ai/fillers";
+
+export { speakable };
 
 // Voice for AMBIT Intelligence, all inside the browser (nothing extra to install or pay for):
 //  - listening: the browser's speech recognition (Chrome, Edge, Safari on iPhone / iPad / Mac). Where a
@@ -99,10 +103,14 @@ export function useListen(opts: { onText: (text: string) => void; onDone: (text:
     rec.current?.stop();
   }, []);
 
-  const start = useCallback(() => {
+  /** quiet: listening for a follow-up on its own (no complaints if nothing's said or it can't start). */
+  const start = useCallback((quiet = false) => {
     const Ctor = recCtor();
-    if (!Ctor) return o.current.onError("Voice isn't available in this browser. Type instead, or use the mic on your keyboard.");
-    unlockSpeech();
+    if (!Ctor) {
+      if (!quiet) o.current.onError("Voice isn't available in this browser. Type instead, or use the mic on your keyboard.");
+      return;
+    }
+    if (!quiet) unlockAudio();
     try {
       rec.current?.abort();
     } catch {}
@@ -128,7 +136,7 @@ export function useListen(opts: { onText: (text: string) => void; onDone: (text:
       o.current.onText(lastText.current);
     };
     r.onerror = (e) => {
-      if (e.error === "no-speech" || e.error === "aborted") return;
+      if (quiet || e.error === "no-speech" || e.error === "aborted") return;
       o.current.onError(MIC_ERRORS[e.error] ?? "Voice stopped. Try again, or type instead.");
     };
     r.onend = () => {
@@ -142,7 +150,7 @@ export function useListen(opts: { onText: (text: string) => void; onDone: (text:
       r.start();
     } catch {
       setListening(false);
-      o.current.onError("Voice didn't start. Try again, or type instead.");
+      if (!quiet) o.current.onError("Voice didn't start. Try again, or type instead.");
     }
   }, []);
 
@@ -203,33 +211,129 @@ export function unlockSpeech() {
   } catch {}
 }
 
-/** Markdown and source markers out, so it's read the way a person would say it. */
-export function speakable(md: string): string {
-  return md
-    .replace(/⟦[\d,\s]+⟧/g, "")
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/[*_]([^*_]+)[*_]/g, "$1")
-    .replace(/^#{1,6}\s*/gm, "")
-    .replace(/^\s*\|.*\|\s*$/gm, " ")
-    .replace(/^\s*[-*•]\s+/gm, "")
-    .replace(/^\s*(\d+)\.\s+/gm, "")
-    .replace(/(\d)\s*bf\b/gi, "$1 board feet")
-    .replace(/\bbf\/set\b/gi, "board feet per set")
-    .replace(/\s*\n+\s*/g, ". ")
-    .replace(/\.\s*\./g, ".")
-    .replace(/\s{2,}/g, " ")
-    .trim()
-    .slice(0, 1400);
+// ------------------------------------------------------------------ the voice: AMBIT's (server) or the device's
+//
+// With ElevenLabs set up (app/api/ops/voice), answers are spoken in AMBIT's voice: signed words only, played
+// through one shared audio player that a tap "unlocks" (phones only let a page play sound after a tap).
+// Otherwise, or if that fails, the device's own voice reads it. Lines queue: "One sec, checking the
+// schedule." then the answer.
+
+export type Say = { text: string; sig?: string | null };
+type On = { start?: () => void; end?: () => void };
+
+let serverVoice = false;
+export const setServerVoice = (on: boolean) => {
+  serverVoice = on;
+};
+export const usesServerVoice = () => serverVoice;
+
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
+let player: HTMLAudioElement | null = null;
+const audioEl = () => {
+  if (!player && typeof Audio !== "undefined") {
+    player = new Audio();
+    player.preload = "auto";
+  }
+  return player;
+};
+
+/** Call from a tap: lets the page play sound afterwards (iPhone and Android rules). */
+export function unlockAudio() {
+  unlockSpeech();
+  const a = audioEl();
+  if (!a || !a.paused) return;
+  try {
+    a.src = SILENT;
+    a.play().catch(() => {});
+  } catch {}
 }
 
 let speakingNow = false;
 export const isSpeaking = () => speakingNow;
 
-/** Reads text out loud, a sentence at a time (long single reads cut off in some browsers). */
-export function speak(text: string, on?: { start?: () => void; end?: () => void }) {
+type Job = { say: Say; on?: On };
+let queue: Job[] = [];
+let busy = false;
+let current = 0;
+
+function next() {
+  const job = queue.shift();
+  if (!job) {
+    busy = false;
+    speakingNow = false;
+    return;
+  }
+  busy = true;
+  const id = ++current;
+  let done = false;
+  const finish = () => {
+    if (done || id !== current) return;
+    done = true;
+    job.on?.end?.();
+    next();
+  };
+  let fell = false;
+  const device = () => {
+    if (fell || done || id !== current) return;
+    fell = true;
+    deviceSpeak(job.say.text, { start: job.on?.start, end: finish });
+  };
+  const a = audioEl();
+  if (serverVoice && a && (job.say.sig || isFiller(job.say.text))) {
+    let started = false;
+    a.onplaying = () => {
+      if (started || id !== current) return;
+      started = true;
+      speakingNow = true;
+      job.on?.start?.();
+    };
+    a.onended = finish;
+    a.onerror = () => {
+      if (id !== current || done) return;
+      if (!started) device();
+      else finish();
+    };
+    a.src = `/api/ops/voice?t=${encodeURIComponent(job.say.text)}&s=${encodeURIComponent(job.say.sig ?? "")}`;
+    a.play().catch(() => {
+      if (id === current && !started && !done) device();
+    });
+  } else device();
+}
+
+const isFiller = (t: string) => ALL_FILLERS.has(t);
+
+/** Say this after whatever is already being said. */
+export function sayNext(s: Say | string, on?: On) {
+  const say = typeof s === "string" ? { text: s } : s;
+  if (!say.text.trim()) return on?.end?.();
+  queue.push({ say, on });
+  if (!busy) next();
+}
+
+/** Stop anything being said and say this. */
+export function speak(s: Say | string, on?: On) {
+  stopSpeaking();
+  sayNext(s, on);
+}
+
+export function stopSpeaking() {
+  queue = [];
+  current++;
+  busy = false;
+  speakingNow = false;
+  if (player) {
+    player.onended = null;
+    player.onerror = null;
+    player.onplaying = null;
+    try {
+      player.pause();
+    } catch {}
+  }
+  if (canSpeak()) window.speechSynthesis.cancel();
+}
+
+/** The device's own voice, a sentence at a time (long single reads cut off in some browsers). */
+function deviceSpeak(text: string, on?: On) {
   if (!canSpeak()) return on?.end?.();
   const synth = window.speechSynthesis;
   synth.cancel();
@@ -246,21 +350,9 @@ export function speak(text: string, on?: { start?: () => void; end?: () => void 
     u.rate = 1.04;
     u.pitch = 1;
     if (i === parts.length - 1) {
-      u.onend = () => {
-        speakingNow = false;
-        on?.end?.();
-      };
-      u.onerror = () => {
-        speakingNow = false;
-        on?.end?.();
-      };
+      u.onend = () => on?.end?.();
+      u.onerror = () => on?.end?.();
     }
     synth.speak(u);
   });
-}
-
-export function stopSpeaking() {
-  if (!canSpeak()) return;
-  speakingNow = false;
-  window.speechSynthesis.cancel();
 }

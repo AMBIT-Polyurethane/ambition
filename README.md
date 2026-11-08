@@ -135,6 +135,16 @@ Vercel Skew Protection (Project Settings → Advanced, 12 hours) keeps pages und
   recognition where the browser has it, and talking back when the question was spoken (mute in the header).
   Conversations aren't stored; each question counts toward the Ask AMBIT daily limit and cost. `0049` lets OPS
   logins use it (`ai_can_use()`); the Ask AMBIT screen stays as set in Admin.
+- **How it talks** (`lib/ops/ai/prompt.ts` STYLE, modeled on Jeremiah Bryant; v2 from his recorded answers): every
+  answer starts with a short spoken version (`[[SAY]]…[[/SAY]]`, hidden on screen). The assistant route sends it as
+  soon as it's written (`{t:"say"}`), so the voice starts while the rest streams; "one sec, checking the schedule"
+  lines (`lib/ops/ai/fillers.ts`) fill the wait; after a spoken answer it listens for the follow-up (quietly gives
+  up if nothing's said); tapping the atom or the mic cuts it off.
+- **AMBIT's voice** (`app/api/ops/voice`, `lib/ops/ai/voice-server.ts`): ElevenLabs with `ELEVENLABS_API_KEY` and
+  `ELEVENLABS_VOICE_ID` in Vercel (optional `ELEVENLABS_MODEL`, default `eleven_turbo_v2_5`, and `AMBIT_VOICE_LABEL`).
+  It only says words the server wrote and signed (HMAC) or the fixed filler lines, so nobody can make the cloned
+  voice say what they type. Labeled as AI in the panel ("AI voice"). Without the keys, or on any error, the
+  device's own voice reads it.
 - **The guide** (`guide.tsx`, `lib/ops/setup.ts`, `lib/ops/brief.ts`): on OPS Home the atom pops up once a day
   (remembered per device): the setup walkthrough for owners and office managers until setup is done (Show me opens
   each screen, where `GuideCoach` in the OPS layout says what to do and moves on when it's done), then the daily

@@ -5,6 +5,8 @@ import { getWorkspace, requireOps } from "@/lib/ops/server";
 import { opsCan } from "@/lib/ops/roles";
 import { digits } from "@/lib/ops/crm";
 import { setupSteps, type SetupStep } from "@/lib/ops/setup";
+import { signSay } from "@/lib/ops/ai/voice-server";
+import { COACH_DONE, COACH_LAST } from "@/lib/ops/ai/fillers";
 import type { LeadDraft, TaskDraft } from "@/lib/ops/ai/tools";
 
 // What AMBIT Intelligence's cards save when the person taps Save. Saved with their own login, the same
@@ -122,8 +124,14 @@ export async function aiSaveTask(d: TaskDraft): Promise<{ ok: true } | { ok: fal
   return { ok: true };
 }
 
-/** For the guide's coach: which setup steps are done right now. */
-export async function guideSteps(): Promise<SetupStep[]> {
+export type CoachStep = SetupStep & { say: { todo: { text: string; sig: string }; done: { text: string; sig: string } } };
+
+/** For the guide's coach: which setup steps are done right now, and what it says on each (signed for the voice). */
+export async function guideSteps(): Promise<CoachStep[]> {
   const s = await getWorkspace();
-  return s ? setupSteps(s.supabase, s.ws) : [];
+  if (!s) return [];
+  const steps = await setupSteps(s.supabase, s.ws);
+  const left = steps.filter((x) => !x.done).length;
+  const line = (text: string) => ({ text, sig: signSay(text) });
+  return steps.map((x) => ({ ...x, say: { todo: line(`${x.label}. ${x.coach}`), done: line(left ? COACH_DONE : COACH_LAST) } }));
 }

@@ -2,11 +2,16 @@ import { getWorkspace } from "@/lib/ops/server";
 import { aiKeySet, loadAiSettings } from "@/lib/assistant/settings";
 import { runAnswer, type HistoryRow } from "@/lib/assistant/run";
 import { runTool, toolStatus, toolsFor, type AiCard } from "@/lib/ops/ai/tools";
-import { opsSystem, opsWho } from "@/lib/ops/ai/prompt";
+import { SAY_CLOSE, SAY_OPEN, opsSystem, opsWho } from "@/lib/ops/ai/prompt";
+import { signSay } from "@/lib/ops/ai/voice-server";
+import { speakable } from "@/lib/ops/ai/speakable";
 
 // AMBIT Intelligence in AMBIT-OPS (the pulsing atom button). Takes a question and the conversation so
 // far, streams the answer back as lines of JSON:
-//   {t:"status", text}  {t:"delta", text}  {t:"card", card}  {t:"done", body, sources, cards, left}  {t:"error", message}
+//   {t:"status", text}  {t:"delta", text}  {t:"card", card}  {t:"say", text, sig}
+//   {t:"done", body, say, sig, sources, cards, left}  {t:"error", message}
+// The answer starts with a short spoken version between [[SAY]] and [[/SAY]] (lib/ops/ai/prompt.ts). As soon
+// as it's complete it's sent as {t:"say"}, signed, so the voice can start talking while the rest streams.
 // Conversations aren't saved; each question counts toward the person's daily Ask AMBIT limit and cost.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,10 +56,24 @@ export async function POST(request: Request) {
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const emit = (e: Record<string, unknown>) => {
+      const send = (e: Record<string, unknown>) => {
         try {
           controller.enqueue(enc.encode(JSON.stringify(e) + "\n"));
         } catch {}
+      };
+      // Watch the words go by for the spoken part; send it the moment it's complete.
+      let streamed = "";
+      let said: string | null = null;
+      const emit = (e: Record<string, unknown>) => {
+        send(e);
+        if (e.t !== "delta" || said !== null) return;
+        streamed += String(e.text ?? "");
+        const a = streamed.lastIndexOf(SAY_OPEN);
+        const b = a >= 0 ? streamed.indexOf(SAY_CLOSE, a) : -1;
+        if (a >= 0 && b > a) {
+          said = clean(streamed.slice(a + SAY_OPEN.length, b));
+          if (said) send({ t: "say", text: said, sig: signSay(said) });
+        }
       };
       try {
         const a = await runAnswer({
@@ -80,10 +99,14 @@ export async function POST(request: Request) {
           },
         });
         await supabase.rpc("ai_add_cost", { p_cents: a.costCents });
-        emit({ t: "done", body: a.body, sources: a.sources, cards, left });
+        // The spoken part comes out of what's shown; if it was left out, the first sentences are spoken.
+        const m = a.body.match(/\[\[SAY\]\]([\s\S]*?)(?:\[\[\/SAY\]\]|$)/);
+        const body = a.body.replace(/\[\[SAY\]\][\s\S]*?(?:\[\[\/SAY\]\]|$)/g, "").replace(/\[\[\/?SAY\]\]/g, "").trim() || "Done.";
+        const say = said ?? (clean(m?.[1] ?? "") || firstWords(speakable(body)));
+        send({ t: "done", body, say, sig: signSay(say), sources: a.sources, cards, left });
       } catch (e) {
         console.error("AMBIT Intelligence failed", (e as { cause?: unknown })?.cause ?? e);
-        emit({ t: "error", message: (e as Error)?.message || "Something went wrong. Try again in a moment." });
+        send({ t: "error", message: (e as Error)?.message || "Something went wrong. Try again in a moment." });
       }
       controller.close();
     },
@@ -92,4 +115,17 @@ export async function POST(request: Request) {
   return new Response(stream, {
     headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" },
   });
+}
+
+const clean = (t: string) => t.replace(/⟦[\d,\s]+⟧/g, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim().slice(0, 600);
+
+/** About the first two sentences, for answers that came without a spoken part. */
+function firstWords(t: string): string {
+  const parts = t.match(/[^.!?]+[.!?]+/g) ?? [t];
+  let out = "";
+  for (const p of parts) {
+    if ((out + p).length > 260 && out) break;
+    out += p;
+  }
+  return out.trim().slice(0, 400) || "Here you go.";
 }

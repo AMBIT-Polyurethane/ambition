@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AtomOrb, type OrbMood } from "./orb";
 import { onState, openAi } from "./bus";
+import { unlockAudio } from "./voice";
 
 // The pulsing AMBIT Intelligence button. Tap: the panel opens. Press and hold: it opens already
 // listening, like Siri. Two places: the OPS top bar on a computer (between Schedule and Work orders) and
@@ -17,6 +18,8 @@ function useHold() {
   };
   return {
     onPointerDown: () => {
+      // A press counts as a tap, so the answer can be spoken out loud later (phones need that).
+      unlockAudio();
       held.current = false;
       clear();
       timer.current = setTimeout(() => {

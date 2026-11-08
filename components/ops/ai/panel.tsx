@@ -10,7 +10,8 @@ import type { AiCard, LeadDraft, TaskDraft } from "@/lib/ops/ai/tools";
 import type { AiSource } from "@/lib/assistant/config";
 import { AtomOrb, type OrbMood } from "./orb";
 import { onOpenAi, sayState } from "./bus";
-import { canListen, speak, stopSpeaking, unlockSpeech, useListen } from "./voice";
+import { canListen, sayNext, setServerVoice, speak, stopSpeaking, unlockAudio, useListen, type Say } from "./voice";
+import { fillerFor } from "@/lib/ops/ai/fillers";
 
 // The AMBIT Intelligence panel: full screen on a phone, a panel on the right on a computer. Type or
 // talk; answers stream in; records are links; "add a lead" and "remind me" come back as cards that save
@@ -27,13 +28,25 @@ type Msg = {
   error?: string;
   streaming?: boolean;
   voice?: boolean;
+  say?: Say;
 };
+
+/** The spoken part ([[SAY]] … [[/SAY]]) is for the ear only; the screen shows the rest. */
+const visible = (body: string) => body.replace(/\[\[SAY\]\][\s\S]*?(?:\[\[\/SAY\]\]|$)/g, "").replace(/\[\[\/?SAY\]?\]?$/, "").trimStart();
+
+/** A different hello each time, like a person would. */
+function hello(first: string) {
+  const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/Chicago" }));
+  const part = h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening";
+  const lines = [`${part}, ${first}. What do you need?`, `Hey ${first}. What's on your mind?`, `${part}, ${first}. What can I dig up for you?`, `Hey ${first}. Ask me anything about the business.`];
+  return lines[Math.floor(Math.random() * lines.length)];
+}
 
 const MUTE_KEY = "ambit-ai-muted";
 const uid = () => Math.random().toString(36).slice(2, 10);
 const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 699px)").matches;
 
-export function AiPanel({ name, field, canEdit }: { name: string; field: boolean; canEdit: boolean }) {
+export function AiPanel({ name, field, canEdit, voice: aiVoice }: { name: string; field: boolean; canEdit: boolean; voice: { server: boolean; label: string } }) {
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [text, setText] = useState("");
@@ -51,6 +64,17 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
   msgsRef.current = msgs;
   const mutedRef = useRef(false);
   mutedRef.current = muted;
+  const openRef = useRef(false);
+  openRef.current = open;
+  const busyRef = useRef(false);
+  busyRef.current = busy;
+  const followUp = useRef(false);
+  const listenRef = useRef<{ start: (quiet?: boolean) => void; stop: () => void } | null>(null);
+  const [greet, setGreet] = useState("");
+
+  useEffect(() => {
+    setServerVoice(aiVoice.server);
+  }, [aiVoice.server]);
 
   useEffect(() => {
     setMic(canListen());
@@ -73,6 +97,16 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
 
   const patch = useCallback((id: string, f: (m: Msg) => Msg) => setMsgs((all) => all.map((m) => (m.id === id ? f(m) : m))), []);
 
+  // Conversation mode: after it answers a spoken question out loud, it listens for the follow-up.
+  const listenAgain = useCallback(() => {
+    if (!openRef.current || mutedRef.current) return;
+    if (busyRef.current) {
+      followUp.current = true;
+      return;
+    }
+    setTimeout(() => openRef.current && listenRef.current?.start(true), 300);
+  }, []);
+
   const ask = useCallback(
     async (q: string, voice = false) => {
       const question = q.trim();
@@ -81,6 +115,15 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
       setSpeaking(false);
       setNote(null);
       setText("");
+      followUp.current = false;
+      const talk = voice && !mutedRef.current;
+      let fillerSaid = false;
+      let answerSaid = false;
+      const sayAnswer = (sayIt: Say) => {
+        if (!talk || answerSaid || !sayIt.text) return;
+        answerSaid = true;
+        sayNext(sayIt, { start: () => setSpeaking(true), end: () => { setSpeaking(false); listenAgain(); } });
+      };
       const history = msgsRef.current.filter((m) => !m.error && m.body.trim()).slice(-12).map((m) => ({ role: m.role, body: m.body }));
       const a: Msg = { id: uid(), role: "assistant", body: "", status: "Thinking…", streaming: true, cards: [], voice };
       setMsgs((all) => [...all, { id: uid(), role: "user", body: question, voice }, a]);
@@ -112,13 +155,25 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
             const line = buf.slice(0, nl).trim();
             buf = buf.slice(nl + 1);
             if (!line) continue;
-            let e: { t: string; text?: string; card?: AiCard; body?: string; sources?: AiSource[]; cards?: AiCard[]; message?: string };
+            let e: { t: string; text?: string; sig?: string; say?: string; card?: AiCard; body?: string; sources?: AiSource[]; cards?: AiCard[]; message?: string };
             try {
               e = JSON.parse(line);
             } catch {
               continue;
             }
-            if (e.t === "status") patch(a.id, (m) => ({ ...m, status: e.text || "" }));
+            if (e.t === "status") {
+              patch(a.id, (m) => ({ ...m, status: e.text || "" }));
+              // "One sec, pulling up the schedule." while it looks.
+              const f = talk && !fillerSaid && e.text ? fillerFor(e.text) : null;
+              if (f) {
+                fillerSaid = true;
+                sayNext(f, { start: () => setSpeaking(true), end: () => setSpeaking(false) });
+              }
+            } else if (e.t === "say" && e.text) {
+              const sayIt = { text: e.text, sig: e.sig ?? null };
+              patch(a.id, (m) => ({ ...m, say: sayIt }));
+              sayAnswer(sayIt);
+            }
             else if (e.t === "delta") {
               patch(a.id, (m) => ({ ...m, body: m.body + (e.text ?? ""), status: "" }));
               scrollDown();
@@ -127,9 +182,11 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
               patch(a.id, (m) => ({ ...m, cards: [...(m.cards ?? []).filter((x) => x.id !== c.id), c] }));
               scrollDown();
             } else if (e.t === "done") {
-              final = { ...a, body: e.body ?? "", sources: e.sources ?? [], cards: e.cards ?? [], streaming: false, status: "" };
+              const sayIt = { text: e.say ?? "", sig: e.sig ?? null };
+              final = { ...a, body: e.body ?? "", say: sayIt, sources: e.sources ?? [], cards: e.cards ?? [], streaming: false, status: "" };
               const f = final;
               patch(a.id, () => f);
+              sayAnswer(sayIt);
             } else if (e.t === "error") throw new Error(e.message || "Something went wrong.");
           }
         }
@@ -142,15 +199,16 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
         }
       } finally {
         setBusy(false);
+        busyRef.current = false;
         abort.current = null;
         scrollDown();
+        if (followUp.current) {
+          followUp.current = false;
+          listenAgain();
+        }
       }
       const f = final as Msg | null;
       if (!f) return;
-      // Talk back when they talked to it.
-      if (voice && !mutedRef.current && f.body) {
-        speak(f.body, { start: () => setSpeaking(true), end: () => setSpeaking(false) });
-      }
       // "Open the schedule": go there.
       const go = (f.cards ?? []).find((c): c is Extract<AiCard, { kind: "open" }> => c.kind === "open" && c.go);
       if (go) {
@@ -158,7 +216,7 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
         if (isPhone()) setTimeout(() => setOpen(false), 450);
       }
     },
-    [busy, path, patch, router, scrollDown],
+    [busy, path, patch, router, scrollDown, listenAgain],
   );
 
   const listen = useListen({
@@ -168,17 +226,17 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
     },
     onError: (m) => setNote(m),
   });
+  listenRef.current = listen;
 
   // Opened from a button: maybe straight into listening, or with a question ready.
   const askRef = useRef(ask);
   askRef.current = ask;
-  const listenRef = useRef(listen);
-  listenRef.current = listen;
   useEffect(
     () =>
       onOpenAi((o) => {
         setOpen(true);
         setNote(null);
+        setGreet((g) => g || hello(name.split(/\s+/)[0] || "there"));
         if (o.prompt) {
           if (o.send) setTimeout(() => askRef.current(o.prompt!), 60);
           else {
@@ -186,7 +244,7 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
             setTimeout(() => input.current?.focus(), 80);
           }
         } else if (o.listen && canListen()) {
-          setTimeout(() => listenRef.current.start(), 120);
+          setTimeout(() => listenRef.current?.start(), 120);
         } else if (!isPhone()) setTimeout(() => input.current?.focus(), 120);
       }),
     [],
@@ -225,6 +283,7 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
     setMsgs([]);
     setText("");
     setNote(null);
+    setGreet(hello(name.split(/\s+/)[0] || "there"));
   };
 
   const toggleMute = () => {
@@ -241,11 +300,17 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
 
   const micTap = () => {
     if (listen.listening) return listen.stop();
+    // Talking over it: tap the mic and it stops to listen.
     stopSpeaking();
     setSpeaking(false);
-    unlockSpeech();
+    unlockAudio();
     setNote(null);
     listen.start();
+  };
+
+  const hush = () => {
+    stopSpeaking();
+    setSpeaking(false);
   };
 
   const first = name.split(/\s+/)[0] || "there";
@@ -289,10 +354,12 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
       <div className="ix-scrim" onClick={close} />
       <section className="ix-panel" role="dialog" aria-modal="true" aria-label="AMBIT Intelligence">
         <header className="ix-head">
-          <AtomOrb size={34} mood={mood} />
+          <button type="button" className="ix-head-orb" onClick={hush} aria-label={speaking ? "Stop talking" : "AMBIT Intelligence"}>
+            <AtomOrb size={34} mood={mood} />
+          </button>
           <span className="col tight grow" style={{ minWidth: 0 }}>
-            <b className="ix-title">AMBIT Intelligence</b>
-            <span className="ix-sub">{listen.listening ? "Listening…" : busy ? "Working on it…" : speaking ? "Talking…" : "Just ask, or tap the mic"}</span>
+            <b className="ix-title">AMBIT Intelligence {speaking && aiVoice.server ? <span className="ix-ai-pill" title={`This is AI, speaking with ${aiVoice.label}.`}>AI voice</span> : null}</b>
+            <span className="ix-sub">{listen.listening ? "Listening…" : busy ? "Working on it…" : speaking ? "Talking… tap the atom to stop" : "Just ask, or tap the mic"}</span>
           </span>
           <button type="button" className="ix-icon" onClick={toggleMute} aria-label={muted ? "Turn talking back on" : "Mute: don't read answers out loud"} title={muted ? "Muted: answers aren't read out loud" : "When you talk to me, I talk back. Tap to mute."}>
             {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
@@ -311,8 +378,9 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
           {empty ? (
             <div className="ix-hello">
               <AtomOrb size={128} mood={mood} core level={listen.level} />
-              <h2>Hi {first}. What do you need?</h2>
+              <h2>{greet || `Hey ${first}. What do you need?`}</h2>
               <p>Ask about your jobs, schedule, customers and numbers, or anything about AMBIT products.{mic ? " Tap the mic and just talk." : ""}</p>
+              {aiVoice.server ? <p className="ix-voice-note">I&apos;m AI. When I talk, it&apos;s with {aiVoice.label}.</p> : null}
               <div className="ix-chips">
                 {chips.map((c) => (
                   <button
@@ -342,18 +410,18 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
                   </div>
                 ) : (
                   <div key={m.id} className="ix-a">
-                    {m.streaming && !m.body ? (
+                    {m.streaming && !visible(m.body) ? (
                       <div className="ix-working">
                         <AtomOrb size={26} mood="thinking" />
                         <span>{m.status || "Thinking…"}</span>
                       </div>
                     ) : null}
-                    {m.body ? (
+                    {visible(m.body) ? (
                       <div className={`ix-md${m.streaming ? " streaming" : ""}`}>
-                        <Markdown text={m.body} />
+                        <Markdown text={visible(m.body)} />
                       </div>
                     ) : null}
-                    {m.streaming && m.body && m.status ? <div className="ix-working small"><span>{m.status}</span></div> : null}
+                    {m.streaming && visible(m.body) && m.status ? <div className="ix-working small"><span>{m.status}</span></div> : null}
                     {m.error ? <div className="ix-err">{m.error}</div> : null}
                     {(m.cards ?? []).map((c) => (
                       <CardView key={c.id} card={c} onNav={() => isPhone() && setTimeout(() => setOpen(false), 150)} />
@@ -368,7 +436,7 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
                       </div>
                     ) : null}
                     {!m.streaming && m.body ? (
-                      <button type="button" className="ix-read" onClick={() => (speaking ? (stopSpeaking(), setSpeaking(false)) : speak(m.body, { start: () => setSpeaking(true), end: () => setSpeaking(false) }))}>
+                      <button type="button" className="ix-read" onClick={() => (speaking ? (stopSpeaking(), setSpeaking(false)) : speak(m.say?.text ? m.say : visible(m.body), { start: () => setSpeaking(true), end: () => setSpeaking(false) }))}>
                         {speaking ? <Square size={12} /> : <Volume2 size={13} />} {speaking ? "Stop" : "Read it to me"}
                       </button>
                     ) : null}
@@ -411,6 +479,17 @@ export function AiPanel({ name, field, canEdit }: { name: string; field: boolean
                 <button type="button" className="ix-send" onClick={() => ask(text)} aria-label="Send">
                   <ArrowUp size={20} />
                 </button>
+              ) : speaking ? (
+                <>
+                  <button type="button" className="ix-send ghost" onClick={hush} aria-label="Stop talking" title="Stop talking">
+                    <Square size={15} />
+                  </button>
+                  {mic ? (
+                    <button type="button" className="ix-mic" onClick={micTap} aria-label="Interrupt and talk" title="Cut in and talk">
+                      <Mic size={20} />
+                    </button>
+                  ) : null}
+                </>
               ) : mic ? (
                 <button type="button" className="ix-mic" onClick={micTap} aria-label="Talk">
                   <Mic size={20} />

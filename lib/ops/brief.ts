@@ -83,3 +83,13 @@ export function dailyBrief({ k, tasks, first, today, hello }: { k: Kpis | null; 
   const speech = [`${hello}, ${first}.`, lead.replace(/:$/, "."), ...top.map((x) => x.text)].join(" ");
   return { hello: `${hello}, ${first}.`, lead, items: top, speech };
 }
+
+/** What the guide says when it pops up for setup (the screen shows the same words). */
+export function setupLine(first: string, brand: string, steps: { done: boolean; label: string }[]): string {
+  const left = steps.filter((x) => !x.done);
+  const done = steps.length - left.length;
+  if (!left.length) return `You're all set up, ${first}. ${brand} is ready to run on AMBIT-OPS.`;
+  if (done === 0)
+    return `Hey ${first}, I'm AMBIT Intelligence. Let's get ${brand} running in AMBIT-OPS. It's ${left.length} quick steps, about 15 minutes. Tap Show me and I'll take you to each one and tell you exactly what to do.`;
+  return `Welcome back, ${first}. ${done} of ${steps.length} setup steps are done. Next up: ${left[0].label.toLowerCase()}. Tap Show me and I'll walk you through it.`;
+}

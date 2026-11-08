@@ -6,6 +6,7 @@ import { deskAccess } from "@/lib/order-desk";
 import { assistantAccess } from "@/lib/assistant/settings";
 import { opsCan, opsMember, opsRoleLabel } from "@/lib/ops/roles";
 import { AiPanel } from "@/components/ops/ai/panel";
+import { serverVoiceOn, voiceLabel } from "@/lib/ops/ai/voice-server";
 
 export const dynamic = "force-dynamic";
 
@@ -96,7 +97,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         mode={ops ? (opsCan.fieldOnly(profile.ops_role) ? "crew" : "ops") : "default"}
         ai={ops ? "always" : aiAdmin ? "ops" : false}
       />
-      {intel ? <AiPanel name={name} field={ops && opsCan.fieldOnly(profile.ops_role)} canEdit={ops ? opsCan.editCrm(profile.ops_role) : true} /> : null}
+      {intel ? <AiPanel name={name} field={ops && opsCan.fieldOnly(profile.ops_role)} canEdit={ops ? opsCan.editCrm(profile.ops_role) : true} voice={{ server: serverVoiceOn(), label: voiceLabel() }} /> : null}
     </div>
   );
 }

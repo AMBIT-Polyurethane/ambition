@@ -16,7 +16,8 @@ import { dateShort, firstName, greeting } from "@/lib/format";
 import { lineText, rangeText, timeText } from "@/lib/ops/schedule";
 import { setupSteps } from "@/lib/ops/setup";
 import type { Kpis } from "@/lib/ops/kpis";
-import { dailyBrief } from "@/lib/ops/brief";
+import { dailyBrief, setupLine } from "@/lib/ops/brief";
+import { signSay } from "@/lib/ops/ai/voice-server";
 import { Guide, GuideButton } from "@/components/ops/ai/guide";
 import { enterWorkspace } from "./workspace-actions";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -141,6 +142,7 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
   const dayName = new Date(`${today}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
   const brief = dailyBrief({ k, tasks: taskList, first: firstName(profile.full_name, profile.email), today, hello: greeting() });
+  const setupText = setupLine(firstName(profile.full_name, profile.email), ws.brand, steps);
 
   const summary = [
     crewsOut ? `${crewsOut} crew${crewsOut === 1 ? " is" : "s are"} out on ${todayTrips.length} job${todayTrips.length === 1 ? "" : "s"} today.` : "No crews are scheduled today.",
@@ -173,7 +175,16 @@ async function WorkspaceHome({ supabase, profile, ws, alerts }: { supabase: Supa
         <Link href="/profile" className="oh-me" aria-label="Your profile"><UserRound size={18} /></Link>
       </section>
 
-      <Guide userId={profile.id} first={firstName(profile.full_name, profile.email)} brand={ws.brand} today={today} steps={steps} brief={brief} />
+      <Guide
+        userId={profile.id}
+        first={firstName(profile.full_name, profile.email)}
+        brand={ws.brand}
+        today={today}
+        steps={steps}
+        brief={brief}
+        setupSay={{ text: setupText, sig: signSay(setupText) }}
+        briefSay={{ text: brief.speech, sig: signSay(brief.speech) }}
+      />
 
       {steps.length && left ? (
         <section className="card oh-setup">

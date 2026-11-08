@@ -8,10 +8,11 @@ import {
 } from "lucide-react";
 import type { SetupStep } from "@/lib/ops/setup";
 import type { Brief, BriefIcon } from "@/lib/ops/brief";
+import type { CoachStep } from "@/app/(app)/ops/ai-actions";
 import { guideSteps } from "@/app/(app)/ops/ai-actions";
 import { AtomOrb } from "./orb";
 import { openAi } from "./bus";
-import { speak, stopSpeaking } from "./voice";
+import { speak, stopSpeaking, type Say } from "./voice";
 
 // The AMBIT Intelligence guide: the atom pops up and talks people through things.
 //  - First days (owner / office): the setup walkthrough. "Show me" takes them to each screen, where a
@@ -68,7 +69,7 @@ const ICONS: Record<BriefIcon, typeof Flame> = {
   clear: BadgeCheck,
 };
 
-export function Guide({ userId, first, brand, today, steps, brief }: { userId: string; first: string; brand: string; today: string; steps: SetupStep[]; brief: Brief }) {
+export function Guide({ userId, first, today, steps, brief, setupSay, briefSay }: { userId: string; first: string; brand: string; today: string; steps: SetupStep[]; brief: Brief; setupSay: Say; briefSay: Say }) {
   const [mode, setMode] = useState<"setup" | "brief" | null>(null);
   const [talking, setTalking] = useState(false);
   const router = useRouter();
@@ -104,16 +105,11 @@ export function Guide({ userId, first, brand, today, steps, brief }: { userId: s
     return () => window.removeEventListener("keydown", k);
   }, [mode, close]);
 
-  const doneCount = steps.length - left.length;
-  const setupText = !left.length
-    ? `You're all set up, ${first}. ${brand} is ready to run on AMBIT-OPS.`
-    : doneCount === 0
-      ? `Hi ${first}! I'm AMBIT Intelligence. Let's get ${brand} running in AMBIT-OPS. There are ${left.length} quick steps, about 15 minutes. Tap Show me and I'll take you to each one and tell you exactly what to do.`
-      : `Welcome back, ${first}. ${doneCount} of ${steps.length} setup steps are done. Next up: ${left[0].label.toLowerCase()}. Tap Show me and I'll walk you through it.`;
+  const setupText = setupSay.text;
   const text = mode === "setup" ? setupText : `${brief.hello} ${brief.lead}`;
   const typing = useTyping(text, !!mode);
 
-  const talk = (words: string) => {
+  const talk = (words: Say) => {
     if (talking) {
       stopSpeaking();
       setTalking(false);
@@ -172,7 +168,7 @@ export function Guide({ userId, first, brand, today, steps, brief }: { userId: s
               ) : (
                 <button type="button" className="btn" onClick={close}>Let&apos;s go</button>
               )}
-              <button type="button" className="btn ghost" onClick={() => talk(setupText)}>
+              <button type="button" className="btn ghost" onClick={() => talk(setupSay)}>
                 {talking ? <Square size={14} /> : <Volume2 size={16} />} {talking ? "Stop" : "Read it to me"}
               </button>
               <button type="button" className="linkbtn small" onClick={close}>Later</button>
@@ -201,7 +197,7 @@ export function Guide({ userId, first, brand, today, steps, brief }: { userId: s
             </ul>
             <div className="ag-actions">
               <button type="button" className="btn" onClick={close}>Got it</button>
-              <button type="button" className="btn ghost" onClick={() => talk(brief.speech)}>
+              <button type="button" className="btn ghost" onClick={() => talk(briefSay)}>
                 {talking ? <Square size={14} /> : <Volume2 size={16} />} {talking ? "Stop" : "Read it to me"}
               </button>
               <button type="button" className="btn ghost" onClick={() => { close(); setTimeout(() => openAi(), 150); }}>
@@ -230,7 +226,7 @@ export function GuideButton({ mode, className, children }: { mode: "setup" | "br
  */
 export function GuideCoach({ userId }: { userId: string }) {
   const [stepKey, setStepKey] = useState<SetupStep["key"] | null>(null);
-  const [steps, setSteps] = useState<SetupStep[] | null>(null);
+  const [steps, setSteps] = useState<CoachStep[] | null>(null);
   const [small, setSmall] = useState(false);
   const [talking, setTalking] = useState(false);
   const path = usePathname() || "/";
@@ -283,7 +279,7 @@ export function GuideCoach({ userId }: { userId: string }) {
     setTimeout(() => (busy.current = false), 600);
   };
 
-  const words = step.done ? `Nice, that's done. ${steps.filter((s) => !s.done).length ? "On to the next one?" : "That was the last one!"}` : step.coach;
+  const words = step.done ? step.say.done.text : step.coach;
 
   return (
     <div className={`ag-coach${small ? " small" : ""}${step.done ? " done" : ""}`} role="status">
@@ -309,7 +305,7 @@ export function GuideCoach({ userId }: { userId: string }) {
               type="button"
               className="ix-icon sm"
               aria-label={talking ? "Stop" : "Read it to me"}
-              onClick={() => (talking ? (stopSpeaking(), setTalking(false)) : speak(`${step.label}. ${words}`, { start: () => setTalking(true), end: () => setTalking(false) }))}
+              onClick={() => (talking ? (stopSpeaking(), setTalking(false)) : speak(step.done ? step.say.done : step.say.todo, { start: () => setTalking(true), end: () => setTalking(false) }))}
             >
               {talking ? <Square size={13} /> : <Volume2 size={15} />}
             </button>
