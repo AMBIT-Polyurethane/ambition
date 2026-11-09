@@ -420,6 +420,12 @@ before, spot checks per location).
   lot), counts save as typed, `count_submit`, then an admin `count_review`s. Approving adds each difference (counted − what
   the app had when it was counted, so pickups since then still count) to `inventory.on_hand` (+ Last Counted / Counted
   By) or to the lot's `adj_unsynced`, which the sync adds to Adj on FOAM LOTS.
+- **0052** (`0052_count_fixes.sql`): approving is `count_apply` (shared). A count that matches is approved automatically
+  by "AMBIT A.I." (`count_finish`), so Last Counted / Counted By still reach the sheet; old `matched` rows became
+  `approved`. Admins fix a counted number on a `submitted` count with `count_line_fix` ("Edit count" on
+  `/inventory/counts/[id]`; `first_qty`, `fixed_by_name`, `fixed_at` keep the original); if it then matches, it's
+  approved automatically. `/inventory/variances` (`lib/inventory/variances.ts`) is the printable variance report: the
+  latest count of each item / lot per location, listed when it differs and is `submitted` or `rejected`.
 - **Expected deliveries** (`inbound_deliveries` / `inbound_lines`, `/inventory/incoming`): `inbound_receive` adds
   non-lot items to `on_hand`; foam needs a lot #: an existing lot gets `in_unsynced` (→ Shipped In), a new lot is
   inserted with `add_to_sheet` and the sync inserts its FOAM LOTS row at the end of that SKU's block (`addReceivedLots`).

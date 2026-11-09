@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Pencil } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { can, hubAllows } from "@/lib/access";
 import { dateShort, dateTime } from "@/lib/format";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { CountSheet } from "@/components/count-input";
-import { approveCount, rejectCount, submitCount } from "@/app/(app)/inventory/count-actions";
+import { approveCount, fixCount, rejectCount, submitCount } from "@/app/(app)/inventory/count-actions";
 
 export const metadata = { title: "Inventory count" };
 
@@ -24,12 +24,15 @@ type Line = {
   counted_at: string | null;
   note: string | null;
   applied: boolean;
+  first_qty?: number | null;
+  fixed_by_name?: string | null;
+  fixed_at?: string | null;
   product: { category_id: string | null } | null;
 };
 
 const STATUS: Record<string, { label: string; pill: string }> = {
   open: { label: "Counting", pill: "pill warn" },
-  matched: { label: "Matched", pill: "pill ok" },
+  matched: { label: "Approved", pill: "pill ok" },
   submitted: { label: "Waiting for approval", pill: "pill warn" },
   approved: { label: "Approved", pill: "pill ok" },
   rejected: { label: "Not approved", pill: "pill grey" },
@@ -59,6 +62,9 @@ export default async function CountPage({ params, searchParams }: { params: Prom
   const countedLines = lines.filter((l) => l.counted_qty !== null);
   const off = countedLines.filter((l) => Number(l.counted_qty) !== Number(l.system_qty ?? 0));
   const net = off.reduce((a, l) => a + Number(l.counted_qty) - Number(l.system_qty ?? 0), 0);
+  // Admins can fix a counted number while the count waits for approval.
+  const canFix = admin && count.status === "submitted";
+  const auto = count.reviewed_by_name === "AMBIT A.I.";
 
   return (
     <main className="shell">
@@ -69,7 +75,11 @@ export default async function CountPage({ params, searchParams }: { params: Prom
         {branch?.name ?? count.branch_id}
         {count.started_by_name && !spot ? ` · started by ${count.started_by_name}, ${dateTime(count.started_at)}` : ""}
         {count.submitted_at ? ` · sent in by ${count.submitted_by_name ?? ""}, ${dateTime(count.submitted_at)}` : ""}
-        {count.reviewed_at ? ` · ${count.status === "approved" ? "approved" : "reviewed"} by ${count.reviewed_by_name ?? ""}, ${dateTime(count.reviewed_at)}` : ""}
+        {count.reviewed_at
+          ? auto
+            ? ` · approved automatically, ${dateTime(count.reviewed_at)}`
+            : ` · ${count.status === "approved" ? "approved" : "reviewed"} by ${count.reviewed_by_name ?? ""}, ${dateTime(count.reviewed_at)}`
+          : ""}
       </p>
       {count.review_note ? <div className="card small">{count.review_note}</div> : null}
 
@@ -108,6 +118,9 @@ export default async function CountPage({ params, searchParams }: { params: Prom
               <span className="small muted">
                 Approving changes stock by each difference below (TOTAL IN STOCK on the COUNT SHEET, or Adj on FOAM LOTS for spray foam) and records who counted it. Anything picked up since the count is already taken into account.
               </span>
+              <span className="small muted">
+                A number counted wrong (a display item missed, digits swapped)? Tap <b>Edit count</b> next to the item and type the right number first. If it then matches the app, it&apos;s approved automatically.
+              </span>
               <form action={approveCount} className="col" style={{ gap: 8 }}>
                 <input type="hidden" name="id" value={count.id} />
                 <input className="input sm" name="note" maxLength={500} placeholder="Note (optional)" aria-label="Note" />
@@ -141,6 +154,35 @@ export default async function CountPage({ params, searchParams }: { params: Prom
                         <div className="tiny faint">
                           {l.sku}{l.lot_no ? ` · Lot ${l.lot_no}` : ""} · {l.counted_by_name ?? ""}{l.counted_at ? `, ${dateTime(l.counted_at)}` : ""}
                         </div>
+                        {l.first_qty !== null && l.first_qty !== undefined ? (
+                          <div className="tiny" style={{ color: "var(--warn-text, var(--text2))" }}>
+                            Counted {n(l.first_qty)}, fixed to {n(l.counted_qty)} by {l.fixed_by_name ?? "an admin"}{l.fixed_at ? `, ${dateTime(l.fixed_at)}` : ""}
+                            {l.note ? `: ${l.note}` : ""}
+                          </div>
+                        ) : l.note ? (
+                          <div className="tiny faint">{l.note}</div>
+                        ) : null}
+                        {canFix ? (
+                          <details className="fix-count">
+                            <summary className="btn sm dark">
+                              <span className="when-closed"><Pencil size={14} /> Edit count</span>
+                              <span className="when-open">Cancel</span>
+                            </summary>
+                            <form action={fixCount} className="fix-form">
+                              <input type="hidden" name="id" value={count.id} />
+                              <input type="hidden" name="line" value={l.id} />
+                              <label className="col tight">
+                                <span className="tiny faint">Right count{l.unit ? ` (${l.unit})` : ""}</span>
+                                <input className="input sm" name="qty" inputMode="decimal" required defaultValue={n(l.counted_qty)} aria-label={`Right count for ${l.sku}${l.lot_no ? ` lot ${l.lot_no}` : ""}`} style={{ width: 110 }} />
+                              </label>
+                              <label className="col tight grow" style={{ minWidth: 160 }}>
+                                <span className="tiny faint">Why (optional)</span>
+                                <input className="input sm" name="note" maxLength={300} placeholder="Missed the display item" />
+                              </label>
+                              <Submit className="btn sm" pendingText="Saving…">Save</Submit>
+                            </form>
+                          </details>
+                        ) : null}
                       </td>
                       <td className="num">{n(l.system_qty)}</td>
                       <td className="num"><b>{n(l.counted_qty)}</b></td>

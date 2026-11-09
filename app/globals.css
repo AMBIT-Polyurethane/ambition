@@ -1253,6 +1253,9 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .paper-sheet li { display: flex; justify-content: space-between; gap: 10px; }
 .paper-notes { margin: 0; white-space: pre-wrap; font-size: 13.5px; color: #3f3f46; }
 .paper-foot { margin: 8px 0 0; font-size: 11px; color: #71717a; border-top: 1px solid #e4e4e7; padding-top: 10px; }
+/* Variance report (/inventory/variances): keep a big dollar figure on one line. */
+.var-tiles b { white-space: nowrap; font-size: clamp(17px, 4.6vw, 24px); }
+@media print { .var-tiles b { font-size: 20px; } }
 @media (max-width: 700px) { .paper { padding: 22px 18px; } .paper-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 @media print {
@@ -1788,6 +1791,15 @@ button.app { background: none; border: 0; padding: 0; font: inherit; cursor: poi
 .count-table .num { text-align: right; white-space: nowrap; }
 .count-table td.off { font-weight: 800; }
 .count-table td svg { color: var(--ok); }
+/* "Edit count" on a count waiting for approval (admins): opens a small form under the item. */
+.fix-count { margin-top: 8px; }
+.fix-count > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.fix-count > summary::-webkit-details-marker { display: none; }
+.fix-count .when-closed { display: inline-flex; align-items: center; gap: 6px; }
+.fix-count .when-open, .fix-count[open] .when-closed { display: none; }
+.fix-count[open] .when-open { display: inline; }
+.count-table td .fix-count svg { color: inherit; }
+.fix-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--s2, var(--s1)); }
 .in-line { display: flex; align-items: flex-start; gap: 8px; }
 .in-qty { width: 100px; flex: none; }
 .pick-chosen { width: 100%; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--s1); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

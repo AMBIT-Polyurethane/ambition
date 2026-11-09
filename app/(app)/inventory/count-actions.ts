@@ -37,9 +37,37 @@ export async function saveCountLine(lineId: number, qty: number | null, note?: s
   if (qty !== null && (!Number.isFinite(qty) || qty < 0 || qty > 1_000_000)) return { ok: false, error: "Type a number (0 or more)." };
   const { data, error } = await s.supabase.rpc("count_line_save", { p_line: lineId, p_qty: qty, p_note: note ?? null });
   if (error) return { ok: false, error: error.message };
-  const status = String((data as { status?: string } | null)?.status ?? "open");
+  const r = (data ?? {}) as { status?: string; branch?: string };
+  const status = String(r.status ?? "open");
+  // Matched what the app had: approved automatically, so its LAST COUNTED goes onto the sheet now.
+  if (status === "approved" && r.branch) kickSync(r.branch, "count matched");
   if (status !== "open") revalidatePath("/");
   return { ok: true, status };
+}
+
+/** Admin: fix one counted number on a count that's waiting for approval (the "Edit count" button). */
+export async function fixCount(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || s.profile.role !== "admin") return;
+  const id = Number(form.get("id"));
+  const line = Number(form.get("line"));
+  const raw = String(form.get("qty") ?? "").trim();
+  const note = String(form.get("note") ?? "").trim().slice(0, 300);
+  const back = `/inventory/counts/${id}`;
+  if (!/^\d+(\.\d{1,2})?$/.test(raw)) done(back, "err", "Type the right count: a number, 0 or more.");
+  const { data, error } = await s.supabase.rpc("count_line_fix", { p_line: line, p_qty: Number(raw), p_note: note || null });
+  if (error) done(back, "err", error.message);
+  const r = (data ?? {}) as { status?: string; branch?: string; changed?: boolean };
+  if (r.status === "approved" && r.branch) kickSync(r.branch, "count fixed");
+  done(
+    back,
+    "msg",
+    !r.changed
+      ? `It already says ${Number(raw)}, so nothing changed.`
+      : r.status === "approved"
+        ? `Count fixed to ${Number(raw)}. It now matches the app, so it was approved automatically.`
+        : `Count fixed to ${Number(raw)}. It still doesn't match the app: approve it below when it looks right.`,
+  );
 }
 
 /** Start (or carry on with) the quarterly inventory reconciliation for a location. */
@@ -61,10 +89,15 @@ export async function submitCount(form: FormData) {
   const id = Number(form.get("id"));
   const { data, error } = await s.supabase.rpc("count_submit", { p_count: id });
   if (error) done(`/inventory/counts/${id}`, "err", error.message);
+  const matched = data === "matched" || data === "approved";
+  if (data === "approved") {
+    const { data: c } = await s.supabase.from("inventory_counts").select("branch_id").eq("id", id).maybeSingle<{ branch_id: string }>();
+    if (c) kickSync(c.branch_id, "count matched");
+  }
   done(
     `/inventory/counts/${id}`,
     "msg",
-    data === "matched" ? "Sent in. Everything matched what the app had, so nothing needs approving." : "Sent in. An admin will check the differences and approve them.",
+    matched ? "Sent in. Everything matched what the app had, so it was approved automatically." : "Sent in. An admin will check the differences and approve them.",
   );
 }
 

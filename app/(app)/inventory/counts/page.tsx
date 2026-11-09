@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Printer } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { can } from "@/lib/access";
 import { dateShort, dateTime } from "@/lib/format";
@@ -14,7 +14,7 @@ export const metadata = { title: "Inventory counts" };
 
 const STATUS: Record<string, { label: string; pill: string }> = {
   open: { label: "Counting", pill: "pill warn" },
-  matched: { label: "Matched", pill: "pill ok" },
+  matched: { label: "Approved", pill: "pill ok" },
   submitted: { label: "Waiting for approval", pill: "pill warn" },
   approved: { label: "Approved", pill: "pill ok" },
   rejected: { label: "Not approved", pill: "pill grey" },
@@ -42,7 +42,11 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="shell">
-      <TopBar title="Inventory counts" back={`/inventory?b=${branch.id}`} />
+      <TopBar
+        title="Inventory counts"
+        back={`/inventory?b=${branch.id}`}
+        right={<Link href={`/inventory/variances?b=${branch.id}`} className="btn sm dark"><Printer size={16} /> Variance report</Link>}
+      />
       <HubNav profile={profile} active="counts" branch={branch.id} />
       {branches.length > 1 ? (
         <div className="chips">

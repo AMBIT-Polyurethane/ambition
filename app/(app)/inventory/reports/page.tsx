@@ -37,6 +37,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         {REPORTS.map((r) => (
           <Link key={r.key} href={`/inventory/reports?r=${r.key}&b=${pick}`} className={`chip sm${r.key === key ? " on" : ""}`}>{r.label}</Link>
         ))}
+        <Link href={`/inventory/variances?b=${pick}`} className="chip sm">Variances (print)</Link>
       </div>
       {live.length > 1 ? (
         <div className="chips" aria-label="Location">

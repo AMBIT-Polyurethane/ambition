@@ -13,7 +13,7 @@ const unitWord = (u: string | null, n = 2) => (u ? plural(u, n) : "");
 
 /**
  * A spot check: count the item on the shelf (spray foam lot by lot) and save. The app's number isn't shown, so the
- * count is a real one. A count that matches is done; one that doesn't goes to an admin to approve.
+ * count is a real one. A count that matches is approved automatically; one that doesn't goes to an admin to approve.
  */
 export function SpotCheckForm({ lines, day, label }: { lines: Line[]; day: string; label?: string }) {
   const router = useRouter();
@@ -43,10 +43,10 @@ export function SpotCheckForm({ lines, day, label }: { lines: Line[]; day: strin
     router.refresh();
   };
 
-  if (result === "matched" || result === "submitted") {
-    return result === "matched" ? (
+  if (result === "matched" || result === "approved" || result === "submitted") {
+    return result !== "submitted" ? (
       <div className="spot-done ok" role="status">
-        <CircleCheck size={18} /> Matches what the app has. Thanks!
+        <CircleCheck size={18} /> Matches what the app has, so it&apos;s approved. Thanks!
       </div>
     ) : (
       <div className="spot-done warn" role="status">
