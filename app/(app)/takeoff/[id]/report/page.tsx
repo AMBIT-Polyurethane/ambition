@@ -35,7 +35,8 @@ export default async function TakeoffReportPage({ params, searchParams }: { para
       if (!it.height_ft) return `Length: ${base}`;
       return `${base} × ${feetInches(Number(it.height_ft))}${it.deduct_sqft ? ` − ${num(it.deduct_sqft)} sq ft openings` : ""}`;
     }
-    return it.pitch ? `Area × ${num(pitchFactor(it.pitch), 3)} (${num(Number(it.pitch), 1)}/12 pitch)` : "Area";
+    const perim = /slab/i.test(it.name) && tot.perim ? ` · ${num(tot.perim, 1)} ft perimeter` : "";
+    return (it.pitch ? `Area × ${num(pitchFactor(it.pitch), 3)} (${num(Number(it.pitch), 1)}/12 pitch)` : "Area") + perim;
   };
   const qty = (id: string) => {
     const it = items.find((x) => x.id === id)!;

@@ -5,7 +5,8 @@ import { Check, LoaderCircle, RotateCcw, Sparkles, X } from "lucide-react";
 import { prescanSheet, saveScan } from "@/app/(app)/takeoff/prescan-actions";
 import { mergeScans, type ScanResult, type SheetScan } from "@/lib/takeoff/prescan";
 import { defaultAnswers, proposeItems, type Answers, type Proposed } from "@/lib/takeoff/prescan-plan";
-import { MATERIALS, type TItem, type TSheet } from "@/lib/takeoff/calc";
+import { MATERIALS, readScale, type TItem, type TSheet } from "@/lib/takeoff/calc";
+import { TEAM_PITCH, TRACE_TIPS } from "@/lib/takeoff/guide";
 
 type Snap = (s: TSheet) => Promise<{ images: string[]; text: string }>;
 
@@ -98,7 +99,7 @@ export function PrescanDialog({
         {!scan || busy ? (
           <>
             <p className="small muted" style={{ margin: 0 }}>
-              AI reads each sheet for the insulation called out, roof pitches, wall heights, the garage, porches and the attic, then sets up the items to measure. You still trace the shapes, and check what it found.
+              AI reads each sheet for the insulation called out, roof pitches, wall heights, the ceilings (vaulted, tray, room heights), the foundation and floors, the garage, porches and the attic, then sets up the items to measure the way AMBIT measures. You still trace the shapes, and check what it found.
             </p>
             {busy ? (
               <div className="ps-busy"><LoaderCircle size={18} className="spin" /> {busy}</div>
@@ -150,7 +151,10 @@ export function PrescanDialog({
                 <span>Exterior walls: <b>{merged.framing === "unknown" ? "framing not shown" : merged.framing}</b></span>
                 <span>Garage: <b>{merged.garage}{merged.living_over_garage ? ", living space over it" : ""}</b> · Porch: <b>{merged.porch === null ? "not shown" : merged.porch ? "yes" : "no"}</b></span>
                 <span>Attic: <b>{merged.attic === "sealed" ? "sealed (foam at the roof)" : merged.attic === "vented" ? "vented" : merged.attic === "both" ? "part sealed, part vented" : "not shown"}</b>{merged.climate_zone ? ` · Climate zone ${merged.climate_zone}` : ""}</span>
+                <span>Ceilings: <b>{merged.ceilings.length ? merged.ceilings.map((c) => `${c.where || "?"} ${c.kind === "flat" ? "" : c.kind}${c.feet ? ` ${c.feet}'` : ""}`.replace(/\s+/g, " ").trim()).join(", ") : "no notes found"}</b></span>
+                <span>Foundation: <b>{FOUNDATION[merged.foundation] ?? "not shown"}</b>{merged.rim_joist_in ? ` · Rim joist ${merged.rim_joist_in}"` : ""}{merged.floor_over_outdoors ? " · Floor over outdoors (cantilever or porch)" : ""}{merged.hvac_platform ? " · HVAC platform in the attic" : ""}{merged.builder ? ` · Builder: ${merged.builder}` : ""}</span>
               </div>
+              <ScaleCheck scan={scan} sheets={sheets} />
               {merged.notes.length ? <ul className="ps-list tiny">{merged.notes.map((n, i) => <li key={i}>{n}</li>)}</ul> : null}
               <span className="tiny faint">
                 Read {scan.sheets.length} sheet{scan.sheets.length === 1 ? "" : "s"} ({scan.sheets.map((x) => `${x.name ?? "sheet"}: ${KIND_LABEL[x.scan.sheet_kind] ?? ""}`).join(", ")}).{" "}
@@ -168,11 +172,27 @@ export function PrescanDialog({
                 <Q label="Are the porch and garage attics walled off (kept vented)?" value={answers.demising ? "yes" : "no"} options={[["yes", "Yes: add attic demising walls"], ["no", "No: foam the whole roofline"]]} onChange={(v) => set({ demising: v === "yes" })} />
               ) : null}
               <div className="q-row">
-                <label className="field" style={{ maxWidth: 160 }}>
+                <label className="field" style={{ maxWidth: 200 }}>
                   <span className="label">Roof pitch</span>
-                  <select className="select sm" value={answers.pitch ?? ""} onChange={(e) => set({ pitch: e.target.value ? Number(e.target.value) : null })}>
-                    <option value="">Not sure</option>
-                    {[...new Set([...merged.pitches.map((p) => p.rise), 3, 4, 5, 6, 7, 8, 9, 10, 12])].sort((a, b) => a - b).map((r) => <option key={r} value={r}>{r}/12{merged.pitches.some((p) => p.rise === r) ? " (plans)" : ""}</option>)}
+                  <select className="select sm" value={answers.pitch ?? TEAM_PITCH} onChange={(e) => set({ pitch: Number(e.target.value) })}>
+                    {[...new Set([...merged.pitches.map((p) => p.rise), 3, 4, 5, 6, 7, 8, 9, 10, 12])].sort((a, b) => a - b).map((r) => (
+                      <option key={r} value={r}>
+                        {r}/12{merged.pitches.some((p) => p.rise === r) ? " (plans)" : r === TEAM_PITCH ? " = 10/10 (team default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field" style={{ maxWidth: 210 }}>
+                  <span className="label">Foundation</span>
+                  <select className="select sm" value={answers.foundation} onChange={(e) => set({ foundation: e.target.value as Answers["foundation"] })}>
+                    <option value="unknown">Not sure</option>
+                    {Object.entries(FOUNDATION).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                </label>
+                <label className="field" style={{ maxWidth: 120 }}>
+                  <span className="label">Stories</span>
+                  <select className="select sm" value={answers.stories ?? 1} onChange={(e) => set({ stories: Number(e.target.value) })}>
+                    {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
                 </label>
                 <label className="field" style={{ maxWidth: 170 }}>
@@ -214,10 +234,46 @@ export function PrescanDialog({
               <button type="button" className="btn sm dark" onClick={onClose}>Not now</button>
             </div>
             <span className="tiny faint">Then pick each item and trace it on the plan. Check depths and R-values: AI can misread small print.</span>
+            <details className="ps-tips">
+              <summary className="tiny">How AMBIT measures (before you trace)</summary>
+              <ul className="ps-list tiny">{TRACE_TIPS.map((t) => <li key={t}>{t}</li>)}</ul>
+            </details>
           </>
         ) : null}
       </div>
     </div>
+  );
+}
+
+const FOUNDATION: Record<string, string> = { slab: "Slab on grade", crawl_vented: "Vented crawlspace", crawl_sealed: "Encapsulated crawlspace", basement: "Basement" };
+
+/** The scale each sheet is set to, next to what the AI read on it, and the long dimension to check it with. */
+function ScaleCheck({ scan, sheets }: { scan: ScanResult; sheets: TSheet[] }) {
+  const byId = new Map(sheets.map((s) => [s.id, s]));
+  const rows = scan.sheets
+    .map((x) => {
+      const sh = byId.get(x.sheet_id);
+      const read = x.scan.scale_text ? readScale(x.scan.scale_text) : null;
+      const set = sh?.scale_label ?? null;
+      const dim = x.scan.overall_dims?.[0];
+      const name = x.name ?? `Page ${sh?.page ?? "?"}`;
+      if (x.scan.not_to_scale) return { name, tone: "warn", text: "says NOT TO SCALE: measure only with a written dimension" };
+      if (!set && read) return { name, tone: "warn", text: `has no scale set; the plans say ${read.label}` };
+      if (set && read && set.replace(/\s/g, "") !== read.label.replace(/\s/g, "")) return { name, tone: "warn", text: `is set to ${set} but the AI read ${read.label}` };
+      if (dim) return { name, tone: "ok", text: `check the scale: the ${dim.what.toLowerCase() || "overall dimension"} should measure ${dim.feet}'` };
+      return null;
+    })
+    .filter((r): r is { name: string; tone: string; text: string } => Boolean(r))
+    .slice(0, 8);
+  if (!rows.length) return null;
+  return (
+    <ul className="ps-list tiny">
+      {rows.map((r, i) => (
+        <li key={i} className={r.tone === "warn" ? "warn-text" : ""}>
+          <b>{r.name}</b> {r.text}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -235,7 +291,7 @@ function Q({ label, value, options, onChange }: { label: string; value: string |
 }
 
 function describe(it: Proposed["item"]) {
-  const bits = [it.area_code, matLabel(it.material), it.thickness_in ? `${it.thickness_in}"` : null, it.r_value, it.kind === "linear" ? (it.shape === "gable" ? `gable wall, ${it.pitch ?? "?"}/12` : it.height_ft ? `walls ${it.height_ft}' high` : "length") : it.kind === "area" ? (it.pitch ? `area at ${it.pitch}/12 pitch` : "area") : "count"];
+  const bits = [it.area_code, matLabel(it.material), it.thickness_in ? `${it.thickness_in}"` : null, it.r_value, it.kind === "linear" ? (it.shape === "gable" ? `gable wall, ${it.pitch ?? "?"}/12` : it.height_ft ? (it.height_ft < 2 ? `${Math.round(it.height_ft * 1200) / 100}" high` : `walls ${it.height_ft}' high`) : "length") : it.kind === "area" ? (it.pitch ? `area at ${it.pitch}/12 pitch` : "area") : "count"];
   return bits.filter(Boolean).join(" · ");
 }
 

@@ -35,6 +35,7 @@ import {
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createClient } from "@/lib/supabase/client";
 import { DEFAULT_WORK_AREAS, type WorkArea } from "@/lib/ops/defaults";
+import { TEAM_PITCH } from "@/lib/takeoff/guide";
 import { PrescanDialog } from "@/components/takeoff/prescan";
 import type { ScanResult } from "@/lib/takeoff/prescan";
 import {
@@ -138,15 +139,27 @@ const TOOLS: { id: Tool; label: string; key: string; icon: LucideIcon; hint: str
 const TOOL_KIND: Partial<Record<Tool, TItem["kind"]>> = { area: "area", cutout: "area", linear: "linear", count: "count" };
 const toolFor = (it: Pick<TItem, "kind">): Tool => (it.kind === "area" ? "area" : it.kind === "linear" ? "linear" : "count");
 
+// The assemblies in AMBIT's measuring guide (lib/takeoff/guide.ts), with the team's starting heights and its
+// 10/10 (12/12) pitch; change them to what the plans say.
 const PRESETS: { label: string; item: Draft }[] = [
   { label: "Exterior walls", item: { name: "Exterior walls", kind: "linear", material: "open_cell", thickness_in: 5.5, height_ft: 9, area_code: "EW" } },
-  { label: "Attic floor / ceiling", item: { name: "Ceiling, vented attic", kind: "area", material: "blown_fiberglass", area_code: "CL" } },
-  { label: "Roof deck", item: { name: "Roof deck", kind: "area", material: "open_cell", thickness_in: 7, pitch: 6, area_code: "RL" } },
-  { label: "Vaulted ceiling", item: { name: "Vaulted ceiling", kind: "area", material: "closed_cell", thickness_in: 3, pitch: 6, area_code: "RL" } },
+  { label: "Garage partition walls", item: { name: "Garage partition walls", kind: "linear", material: "fiberglass_batts", height_ft: 9, area_code: "EW" } },
   { label: "Knee walls", item: { name: "Knee walls", kind: "linear", material: "open_cell", thickness_in: 5.5, height_ft: 4, area_code: "KW" } },
-  { label: "Rim joist", item: { name: "Rim joist", kind: "linear", material: "closed_cell", thickness_in: 3, height_ft: 1, area_code: "RJ" } },
-  { label: "Garage common wall", item: { name: "Garage common wall", kind: "linear", material: "fiberglass_batts", height_ft: 9, area_code: "EW" } },
-  { label: "Attic demising wall", item: { name: "Attic demising wall", kind: "linear", material: "open_cell", thickness_in: 5.5, shape: "gable", pitch: 6, area_code: "RL" } },
+  { label: "Attic demising wall", item: { name: "Attic demising wall", kind: "linear", material: "open_cell", thickness_in: 5.5, shape: "gable", pitch: TEAM_PITCH, area_code: "RL" } },
+  { label: "Foundation walls", item: { name: "Foundation walls", kind: "linear", material: "closed_cell", thickness_in: 2, height_ft: 8 } },
+  { label: "Rim joist to outdoors", item: { name: "Rim joist to outdoors", kind: "linear", material: "closed_cell", thickness_in: 3, height_ft: 11.25 / 12, area_code: "RJ" } },
+  { label: "Rim joist to attic", item: { name: "Rim joist to attic", kind: "linear", material: "closed_cell", thickness_in: 3, height_ft: 11.25 / 12, area_code: "RJ" } },
+  { label: "Attic ceiling (flat)", item: { name: "Attic ceiling (flat)", kind: "area", material: "blown_fiberglass", area_code: "CL" } },
+  { label: "Under decking", item: { name: "Under decking", kind: "area", material: "fiberglass_batts", area_code: "CL" } },
+  { label: "Vaulted ceiling", item: { name: "Vaulted ceiling", kind: "area", material: "blown_fiberglass", pitch: TEAM_PITCH, area_code: "CL" } },
+  { label: "Cathedral ceiling", item: { name: "Cathedral ceiling", kind: "area", material: "blown_fiberglass", pitch: TEAM_PITCH, area_code: "CL" } },
+  { label: "Sloped ceiling", item: { name: "Sloped ceiling", kind: "area", material: "open_cell", thickness_in: 5.5, pitch: TEAM_PITCH, area_code: "RL" } },
+  { label: "Roof line (sealed attic)", item: { name: "Roof line", kind: "area", material: "open_cell", thickness_in: 7, pitch: TEAM_PITCH, area_code: "RL" } },
+  { label: "Garage roof line", item: { name: "Garage roof line", kind: "area", material: "open_cell", thickness_in: 7, pitch: TEAM_PITCH, area_code: "RL" } },
+  { label: "Garage ceiling", item: { name: "Garage ceiling", kind: "area", material: "blown_fiberglass", area_code: "CL" } },
+  { label: "Slab (area and perimeter)", item: { name: "Slab", kind: "area" } },
+  { label: "Floor over garage", item: { name: "Floor over garage", kind: "area", material: "closed_cell", thickness_in: 3 } },
+  { label: "Floor over outdoors", item: { name: "Floor over outdoors", kind: "area", material: "closed_cell", thickness_in: 3 } },
   { label: "Can lights (count)", item: { name: "Recessed lights", kind: "count", material: "other" } },
 ];
 
@@ -1554,7 +1567,7 @@ function ItemEditor({ draft, used, areas, onCancel, onSave, onDelete }: { draft:
         {!d.id ? (
           <div className="to-presets">
             {PRESETS.map((p) => (
-              <button key={p.label} type="button" className="chip sm" onClick={() => setD((x) => ({ ...x, ...p.item }))}>{p.label}</button>
+              <button key={p.label} type="button" className="chip sm" onClick={() => setD((x) => ({ ...x, material: null, thickness_in: null, r_value: null, height_ft: null, pitch: null, shape: null, area_code: null, ...p.item }))}>{p.label}</button>
             ))}
           </div>
         ) : null}

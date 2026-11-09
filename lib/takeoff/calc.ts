@@ -118,6 +118,8 @@ export type Totals = {
   lf: number | null; // linear items
   count: number | null; // count items
   bf: number | null; // spray foam: square feet x inches
+  /** Area items: the outline's length around (slab perimeter), cutouts left out. */
+  perim: number | null;
   marks: number;
   unscaled: number; // shapes on sheets with no scale (left out)
 };
@@ -130,6 +132,7 @@ export function itemTotals(item: TItem, marks: TMark[], sheets: Map<string, TShe
   let count = 0;
   let unscaled = 0;
   let gable = 0;
+  let perim = 0;
   for (const m of mine) {
     const s = sheets.get(m.sheet_id);
     const size = markSize(m, item.kind, s?.ft_per_pt ? Number(s.ft_per_pt) : null);
@@ -137,13 +140,16 @@ export function itemTotals(item: TItem, marks: TMark[], sheets: Map<string, TShe
       unscaled++;
       continue;
     }
-    if (item.kind === "area") area += m.cutout ? -size : size;
+    if (item.kind === "area") {
+      area += m.cutout ? -size : size;
+      if (!m.cutout && m.points.length > 2) perim += polylineLength([...m.points, m.points[0]]) * Number(s?.ft_per_pt);
+    }
     else if (item.kind === "linear") {
       lf += m.cutout ? -size : size;
       if (item.shape === "gable") gable += gableSqft(size, item.pitch);
     } else count += size;
   }
-  const out: Totals = { sqft: null, lf: null, count: null, bf: null, marks: mine.length, unscaled };
+  const out: Totals = { sqft: null, lf: null, count: null, bf: null, perim: item.kind === "area" ? perim : null, marks: mine.length, unscaled };
   if (item.kind === "area") out.sqft = Math.max(0, area) * pitchFactor(item.pitch);
   if (item.kind === "linear") {
     out.lf = Math.max(0, lf);
@@ -185,6 +191,7 @@ export function subQty(item: TItem, t: Totals): string {
   const bits: string[] = [];
   if (item.kind === "linear" && t.lf !== null && t.sqft !== null)
     bits.push(item.shape === "gable" ? `${num(t.lf, 1)} ft wide, gable at ${num(Number(item.pitch), 1)}/12` : `${num(t.lf, 1)} ft × ${feetInches(Number(item.height_ft))}`);
+  if (item.kind === "area" && t.perim && /slab/i.test(item.name)) bits.push(`${num(t.perim, 1)} ft perimeter`);
   if (t.bf !== null) bits.push(`${num(t.bf)} board ft`);
   if (t.unscaled) bits.push(`${t.unscaled} on sheets with no scale`);
   return bits.join(" · ");

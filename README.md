@@ -278,10 +278,13 @@ see a workspace's takeoffs only with `?ops=1` while inside it). "Quote it" start
 - **AI pre-scan** (`components/takeoff/prescan.tsx`, `app/(app)/takeoff/prescan-actions.ts`, `lib/takeoff/prescan*.ts`):
   each chosen sheet (A sheets first, up to 20) goes to Claude as images (whole page at 1568 px plus halves on big
   sheets) and the PDF's text, with a strict schema: insulation callouts with the exact words, roof pitches, wall
-  heights, framing, garage, porch, attic. `mergeScans` combines them, a few questions follow (garage conditioned?
-  sealed or vented attic? porch/garage attics walled off? pitch, framing, heights) and `proposeItems` lists the items
-  (one exterior-wall item per height, roof deck or ceiling, demising gables, garage wall, floor over garage, knee
-  walls, rim joist). Foam depth from R: open cell R/3.7, closed cell R/6.9, rounded up to ½". The result is saved in
+  heights, framing, garage, porch, attic, ceilings (kind, room, height), foundation, rim depth, floors over outdoors,
+  HVAC platform, builder, and the printed scale / NOT TO SCALE / an overall dimension (shown as a scale check).
+  The reading rules and team defaults are AMBIT's takeoff measuring guide (`lib/takeoff/guide.ts`; the full guide is
+  `supabase/knowledge/takeoff-measuring-guide.md`, and Ask AMBIT has it as "app" knowledge,
+  `supabase/knowledge/takeoff-guide-session-1.sql`). `mergeScans` combines them, a few questions follow (garage
+  conditioned? sealed or vented attic? porch/garage attics walled off? pitch (default 12, the team's "10/10"),
+  foundation, stories, framing, heights) and `proposeItems` lists one item per assembly in the guide. Foam depth from R: open cell R/3.7, closed cell R/6.9, rounded up to ½". The result is saved in
   `takeoffs.ai_scan`. Model from Ask AMBIT settings.
 
 ### Ask AMBIT (AI assistant)
