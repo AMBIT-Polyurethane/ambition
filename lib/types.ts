@@ -236,3 +236,42 @@ export type Course = {
   url: string | null;
   sort: number;
 };
+
+/** A lesson inside a course (migration 0054). */
+export type AcademyLesson = {
+  id: string;
+  course_id: string;
+  number: number;
+  title: string;
+  summary: string | null;
+  minutes: number | null;
+  video_path: string | null;
+  status: "draft" | "live";
+  pass_pct: number;
+  discussion: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** What a student may read about a quiz question: no answer, no explanation. */
+export type AcademyQuestion = { id: string; lesson_id: string; sort: number; prompt: string; choices: string[] };
+
+export type AcademyAttempt = {
+  id: string;
+  lesson_id: string;
+  user_id: string;
+  answers: Record<string, number>;
+  score: number;
+  total: number;
+  passed: boolean;
+  created_at: string;
+};
+
+/** What academy_submit() sends back once a quiz is graded. */
+export type QuizResult = {
+  score: number;
+  total: number;
+  passed: boolean;
+  pass_pct: number;
+  results: { id: string; picked: number | null; answer: number; correct: boolean; explain: string | null }[];
+};

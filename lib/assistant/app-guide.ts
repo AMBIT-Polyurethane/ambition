@@ -258,7 +258,7 @@ Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work o
   {
     who: "all",
     title: "AMBIT Academy",
-    body: `[Academy](/academy) lists AMBIT Academy's building-science courses for AMBIT staff and contractor crews. Lessons, quizzes and certificates are being built; courses marked "Soon" aren't open yet.`,
+    body: `[Academy](/academy) has AMBIT Academy's building-science courses for AMBIT staff and contractor crews. Tap a course to see its lessons and which ones you've passed. Each lesson is a short video (written by Jeremiah Bryant, presented by an AI version of him) and a graded quiz: pick one answer per question, tap "Check my answers" and you see your score, the right answers and why. You pass with 80 percent unless the lesson says otherwise, and you can retake a quiz as often as you like; your best score counts. Courses marked "Soon" aren't open yet; certificates come later. Admins build lessons in Admin > Academy: add a lesson to a course, upload its video, write the quiz (tick the right answer for each question), switch it from Draft to Live, and see everyone's results on the lesson's page.`,
   },
   {
     who: "all",

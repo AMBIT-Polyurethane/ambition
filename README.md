@@ -424,6 +424,19 @@ export JSON/Markdown (`lib/takeoff/teaching.ts`), corrections history, AI call l
 shapes and windows; `takeoffs.is_template`. Model: Opus 5.5 unless `TAKEOFF_AI_MODEL` is set. `TAKEOFF_AI_FAKE=1` (local
 testing only) answers with a stand-in reading (`lib/takeoff/ai-fake.ts`).
 
+### Academy lessons and graded quizzes (0054)
+
+`courses` hold numbered `academy_lessons` (video in the private `academy` bucket, summary, pass mark, crew question;
+`draft` lessons are admin-only). `academy_questions.answer` and `.explain` can't be read by anyone (column grants): students
+read `id, lesson_id, sort, prompt, choices`; `academy_submit(lesson, {question id: choice})` grades on the server, saves an
+`academy_attempts` row (no other way to insert one) and only then returns the answers and explanations. Admins read the key
+with `academy_answer_key(lesson)`. Pages: `/academy` (a course with live lessons opens in-app; otherwise the old external
+link or "Soon"), `/academy/course/[id]` (lessons, best score, progress), `/academy/lesson/[id]` (video with a 6-hour signed
+URL, `components/academy/lesson-quiz.tsx`). Admin: `/admin/academy` (lessons per course, add a lesson),
+`/admin/academy/lesson/[id]` (details, video uploaded straight from the browser to storage then `setLessonVideo`, question
+editor, results per person). Seeds lesson 1 "What Is Heat?" (5 questions) and lesson 2 "Heat Flow 101" (4) in Building
+science fundamentals as drafts. Certificates are next.
+
 ### Home widgets, spot checks, reconciliation, incoming deliveries
 
 `components/home-widgets.tsx` (data in `lib/widgets.ts`, `widgetsFor()` decides who gets what) puts a few cards under

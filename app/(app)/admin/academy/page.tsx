@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { saveCourse } from "@/app/(app)/admin/actions";
-import type { Course } from "@/lib/types";
+import { createLesson } from "@/app/(app)/admin/academy/actions";
+import type { AcademyLesson, Course } from "@/lib/types";
 
 export const metadata = { title: "Academy admin" };
 
@@ -32,32 +34,63 @@ function CourseFields({ c }: { c?: Course }) {
   );
 }
 
+type Row = Course & { academy_lessons?: Pick<AcademyLesson, "id" | "number" | "title" | "status" | "video_path">[] | null };
+
 export default async function AcademyAdminPage() {
   const { supabase } = await requireAdmin();
-  const { data } = await supabase.from("courses").select("*").order("sort");
-  const courses = (data ?? []) as Course[];
+  let { data, error } = await supabase.from("courses").select("*, academy_lessons(id, number, title, status, video_path)").order("sort");
+  const ready = !error; // false until migration 0054 has been run
+  if (error) ({ data } = await supabase.from("courses").select("*").order("sort"));
+  const courses = (data ?? []) as Row[];
   return (
     <main className="shell wide">
       <TopBar title="Academy courses" back="/admin" />
+      {!ready ? <div className="alert err">Lessons and quizzes need update 0054 run in Supabase first.</div> : null}
       <details className="card">
         <summary><b>+ Add a course</b></summary>
         <form action={saveCourse} className="col" style={{ marginTop: 14 }}><CourseFields /><div><Submit className="btn sm">Add course</Submit></div></form>
       </details>
-      <div className="list">
-        {courses.map((c) => (
-          <details key={c.id}>
-            <summary className="item" style={{ minHeight: 56 }}>
-              <div className="grow"><div className="t">{c.title}</div><div className="s">{c.status === "live" ? "Live" : "Coming soon"}</div></div>
-              <span className="small red">Edit</span>
-            </summary>
-            <form action={saveCourse} className="col" style={{ padding: "0 16px 16px" }}>
-              <input type="hidden" name="id" value={c.id} />
-              <CourseFields c={c} />
-              <div><Submit className="btn sm">Save</Submit></div>
-            </form>
-          </details>
-        ))}
-      </div>
+      {courses.map((c) => {
+        const lessons = [...(c.academy_lessons ?? [])].sort((a, b) => a.number - b.number);
+        return (
+          <section key={c.id} className="section">
+            <div className="eyebrow">{c.title}</div>
+            <div className="list">
+              {lessons.map((l) => (
+                <Link key={l.id} href={`/admin/academy/lesson/${l.id}`} className="item">
+                  <div className="ic lesson-num">{l.number}</div>
+                  <div className="grow">
+                    <div className="t">{l.title}</div>
+                    <div className="s">{l.video_path ? "Video uploaded" : "No video yet"}</div>
+                  </div>
+                  {l.status === "live" ? <span className="pill ok">Live</span> : <span className="pill warn">Draft</span>}
+                </Link>
+              ))}
+              {ready ? (
+                <details>
+                  <summary className="item" style={{ minHeight: 52 }}><span className="small red"><b>+ Add a lesson</b></span></summary>
+                  <form action={createLesson} className="row wrap" style={{ padding: "0 16px 16px", alignItems: "flex-end" }}>
+                    <input type="hidden" name="course_id" value={c.id} />
+                    <label className="field grow"><span className="label">Lesson title</span><input className="input sm" name="title" required /></label>
+                    <Submit className="btn sm">Add lesson</Submit>
+                  </form>
+                </details>
+              ) : null}
+              <details>
+                <summary className="item" style={{ minHeight: 52 }}>
+                  <div className="grow"><div className="s">Course details · {c.status === "live" ? "Live" : "Coming soon"}</div></div>
+                  <span className="small red">Edit</span>
+                </summary>
+                <form action={saveCourse} className="col" style={{ padding: "0 16px 16px" }}>
+                  <input type="hidden" name="id" value={c.id} />
+                  <CourseFields c={c} />
+                  <div><Submit className="btn sm">Save</Submit></div>
+                </form>
+              </details>
+            </div>
+          </section>
+        );
+      })}
     </main>
   );
 }
