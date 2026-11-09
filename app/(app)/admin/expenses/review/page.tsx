@@ -21,7 +21,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
   if (!/^[0-9a-f-]{36}$/i.test(uid)) notFound();
 
   const [{ data: who }, data, { data: hist }, { data: staffRows }] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email, job_role, branch_id").eq("id", uid).maybeSingle(),
+    supabase.from("profiles").select("id, full_name, email, job_role, branch_id, demo").eq("id", uid).maybeSingle(),
     loadMonth(supabase, uid, month),
     supabase.from("expense_reports").select("month, status, total").eq("user_id", uid).order("month", { ascending: false }).limit(8),
     supabase.from("profiles").select("id, full_name, email").eq("status", "active").in("role", ["employee", "admin"]).order("full_name"),
@@ -41,8 +41,10 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
 
       <div className="row between wrap" style={{ gap: 10 }}>
         <div className="col" style={{ gap: 2 }}>
-          <b style={{ fontSize: 20 }}>{name}</b>
-          <span className="small muted">{who.email as string}</span>
+          <b style={{ fontSize: 20 }}>
+            {name} {who.demo ? <span className="pill grey" style={{ fontSize: 10, verticalAlign: 3 }}>Demo employee</span> : null}
+          </b>
+          <span className="small muted">{who.demo ? "Made up for the demo: can't sign in, gets no email" : (who.email as string)}</span>
         </div>
         <span className={`pill ${badge.tone}`}>{badge.text}</span>
       </div>
@@ -74,7 +76,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
           <span>
             {[
               lost.length ? `${lost.length} lost ${lost.length === 1 ? "receipt" : "receipts"} (no photo, reason given)` : "",
-              untied.length ? `${untied.length} ${untied.length === 1 ? "meal with guests isn't" : "meals with guests aren't"} tied to a customer` : "",
+              untied.length ? `${untied.length} ${untied.length === 1 ? "meal or outing with guests isn't" : "meals or outings with guests aren't"} tied to a customer` : "",
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -165,7 +167,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
           <div className="row wrap" style={{ gap: 6 }}>
             {((hist ?? []) as Pick<XReport, "month" | "status" | "total">[]).map((h) => (
               <Link key={h.month} href={`/admin/expenses/review?u=${uid}&m=${h.month.slice(0, 7)}`} className={`chip sm${h.month.slice(0, 7) === month ? " on2" : ""}`}>
-                {monthLabel(h.month.slice(0, 7)).split(" ")[0].slice(0, 3)} {h.month.slice(2, 4)} · {money(Number(h.total))} · {reportBadge(h as XReport).text.split(" ")[0]}
+                {monthLabel(h.month.slice(0, 7)).split(" ")[0].slice(0, 3)} {h.month.slice(2, 4)} · {money(Number(h.total))} · {{ approved: "Approved", submitted: "Waiting", returned: "Sent back", sent: "Emailed" }[h.status] ?? h.status}
               </Link>
             ))}
           </div>

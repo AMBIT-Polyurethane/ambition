@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     prfSubmission(id),
     prfFields(),
     prfPricing().catch(() => []),
-    s.supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]),
+    s.supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]).eq("demo", false),
     s.supabase.from("rep_name_links").select("rep_name, profile_id"),
   ]);
   if (!sub) return new NextResponse("Not found", { status: 404 });

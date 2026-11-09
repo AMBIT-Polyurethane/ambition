@@ -34,8 +34,9 @@ export default async function ExpenseDashboardPage({ searchParams }: { searchPar
   const [res, { data: branches }, { data: staff }] = await Promise.all([
     supabase.rpc("expense_kpis", { p_from: from, p_to: to, p_branch: branch, p_user: user }),
     supabase.from("branches").select("id, name").eq("active", true).order("sort"),
-    supabase.from("profiles").select("id, full_name, email").eq("status", "active").in("role", ["employee", "admin"]).order("full_name"),
+    supabase.from("profiles").select("id, full_name, email, demo").or("status.eq.active,demo.eq.true").in("role", ["employee", "admin"]).order("full_name"),
   ]);
+  const anyDemo = ((staff ?? []) as { demo?: boolean }[]).some((x) => x.demo);
   const k = res.data as Kpis | null;
   const label = PERIODS.find(([x]) => x === p)?.[1] ?? "";
   const fmt = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -46,7 +47,7 @@ export default async function ExpenseDashboardPage({ searchParams }: { searchPar
       <div className="col" style={{ gap: 4 }}>
         <DashFilters
           branches={(branches ?? []) as { id: string; name: string }[]}
-          people={((staff ?? []) as { id: string; full_name: string | null; email: string }[]).map((x) => ({ id: x.id, name: x.full_name || x.email }))}
+          people={((staff ?? []) as { id: string; full_name: string | null; email: string; demo?: boolean }[]).map((x) => ({ id: x.id, name: `${x.full_name || x.email}${x.demo ? " (demo)" : ""}` }))}
           from={from}
           to={to}
         />
@@ -55,6 +56,13 @@ export default async function ExpenseDashboardPage({ searchParams }: { searchPar
           {fmt(from)} – {fmt(to)}. Compared with the same number of days before ({fmt(k?.prev_from ?? from)} – {fmt(k?.prev_to ?? from)}).
         </span>
       </div>
+      {anyDemo ? (
+        <div className="alert info small" style={{ margin: 0 }}>
+          <span>
+            Includes demo data (made-up employees). Delete it in <a href="/admin/expenses?tab=setup">Admin → Expense reports → Setup</a> before real employees start.
+          </span>
+        </div>
+      ) : null}
       {res.error || !k ? (
         <div className="alert err small">
           <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />

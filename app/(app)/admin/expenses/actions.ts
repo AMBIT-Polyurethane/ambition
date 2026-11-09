@@ -30,7 +30,7 @@ export async function reviewMonth(userId: string, month: string, approve: boolea
   if (error) return { ok: false, error: error.message };
   const r = data as { name: string; email: string; month: string; status: "approved" | "returned"; by: string; total: number; personal: number };
   let pdf;
-  if (approve) {
+  if (approve && !/\.invalid$/i.test(r.email ?? "")) {
     try {
       const out = await expensePdf(supabase, { id: userId, name: r.name, email: r.email }, month);
       pdf = { filename: out.filename, content: out.pdf, contentType: "application/pdf" };
@@ -38,9 +38,11 @@ export async function reviewMonth(userId: string, month: string, approve: boolea
       pdf = undefined;
     }
   }
-  const res = await mailReviewed({ ...r, total: Number(r.total), personal: Number(r.personal), note: note || null }, await currentOrigin(), [profile.email], pdf);
+  const demo = /\.invalid$/i.test(r.email ?? "");
+  const res = demo ? { status: "demo" as const } : await mailReviewed({ ...r, total: Number(r.total), personal: Number(r.personal), note: note || null }, await currentOrigin(), [profile.email], pdf);
   done();
   const first = r.name.split(" ")[0];
+  if (demo) return { ok: true, msg: `${approve ? `Approved ${first}'s ${monthLabel(month)} (${money(Number(r.total))}).` : `Sent ${first}'s ${monthLabel(month)} back.`} (Demo employee: no email.)` };
   const what = approve ? `Approved ${first}'s ${monthLabel(month)} (${money(Number(r.total))}).` : `Sent ${first}'s ${monthLabel(month)} back.`;
   return { ok: true, msg: res.status === "sent" ? `${what} ${first} got an email${approve ? " with the approved PDF" : ""}.` : `${what} (The email to ${first} didn't go out.)` };
 }
@@ -281,4 +283,26 @@ export async function importJotform(): Promise<Res> {
     ok: true,
     msg: `Brought over ${added} old ${added === 1 ? "receipt" : "receipts"} from Jotform.${nobody.size ? ` ${nobody.size} email ${nobody.size === 1 ? "address doesn't" : "addresses don't"} match a login, so those were left in Jotform: ${[...nobody].slice(0, 6).join(", ")}.` : ""}`,
   };
+}
+
+// ------------------------------------------------------------------ the demo
+
+/** Five made-up employees with about five months of receipts, charges and reports (migration 0051). */
+export async function demoLoad(): Promise<Res> {
+  const { supabase } = await requireExpenseApprover();
+  const { data, error } = await supabase.rpc("expense_demo_fill");
+  if (error) return { ok: false, error: error.message };
+  done();
+  const d = data as { receipts: number; charges: number };
+  return { ok: true, msg: `Demo loaded: 5 made-up employees, ${d.receipts} receipts and ${d.charges} card charges.` };
+}
+
+export async function demoDelete(): Promise<Res> {
+  const { supabase } = await requireExpenseApprover();
+  const { data, error } = await supabase.rpc("expense_demo_clear");
+  if (error) return { ok: false, error: error.message };
+  done();
+  revalidatePath("/admin/expenses/dashboard");
+  const d = data as { people: number; receipts: number; charges: number };
+  return { ok: true, msg: d.people ? `Demo deleted: ${d.people} made-up employees, ${d.receipts} receipts and ${d.charges} card charges are gone.` : "There was no demo to delete." };
 }

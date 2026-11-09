@@ -10,7 +10,7 @@ export async function ownedPriceRequest(id: string) {
   const [sub, fields, staffRes, linksRes] = await Promise.all([
     prfSubmission(id),
     prfFields(),
-    supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]),
+    supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]).eq("demo", false),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
   ]);
   if (!sub) notFound();

@@ -42,7 +42,7 @@ export default async function PriceRequestsPage() {
   let error = "";
   let items: ReturnType<typeof toItems> = [];
   const [{ data: staffRows }, linksRes, reviewsRes] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email, role, status").in("role", ["employee", "admin"]).order("full_name"),
+    supabase.from("profiles").select("id, full_name, email, role, status").in("role", ["employee", "admin"]).eq("demo", false).order("full_name"),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
     supabase.from("prf_reviews").select("submission_id"),
   ]);

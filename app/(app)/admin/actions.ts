@@ -185,7 +185,7 @@ export async function importCompanies(rows: Record<string, string>[]): Promise<I
   };
   const { data: existing } = await supabase.from("companies").select("id, name, account_no, qb_id");
   // Sales rep column: an AMBIT staff member's name or email (a first name works if only one person has it).
-  const { data: staff } = await supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]);
+  const { data: staff } = await supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]).eq("demo", false);
   const repFor = (v: string | undefined) => {
     const t = (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
     if (!t) return undefined;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { fetchJotformFile } from "@/lib/forms";
 import { shrinkImage } from "@/lib/image-shrink";
+import { demoReceiptJpeg, isDemoPhoto } from "@/lib/expense-demo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,10 +21,20 @@ export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const id = sp.get("r") ?? "";
   if (!/^[0-9a-f-]{36}$/i.test(id)) return new NextResponse("Receipt not found", { status: 404 });
-  const { data: r } = await supabase.from("expense_receipts").select("photos").eq("id", id).maybeSingle();
+  const { data: r } = await supabase.from("expense_receipts").select("id, vendor, bought_on, amount, tip, category, paid_with, card_last4, attendees, photos").eq("id", id).maybeSingle();
   if (!r) return new NextResponse("Receipt not found", { status: 404 });
   const key = ((r.photos as string[]) ?? [])[Math.max(0, Number(sp.get("i")) || 0)];
   if (!key) return new NextResponse("No photo on this receipt", { status: 404 });
+
+  // The expense demo's made-up receipts are drawn on the spot.
+  if (isDemoPhoto(key)) {
+    const { data: ch } = await supabase.from("expense_charges").select("amount").eq("receipt_id", id).maybeSingle();
+    const jpg = await demoReceiptJpeg(
+      { ...(r as never as Parameters<typeof demoReceiptJpeg>[0]), amount: Number(r.amount), tip: r.tip === null ? null : Number(r.tip) },
+      { chargedMore: Boolean(ch && Number(ch.amount) > Number(r.amount) + 0.004), width: Math.min(1400, Math.max(80, Number(sp.get("w")) || 900)) },
+    );
+    return new NextResponse(new Uint8Array(jpg), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff" } });
+  }
 
   let body: Buffer | null = null;
   let type = "";

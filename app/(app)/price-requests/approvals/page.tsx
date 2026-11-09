@@ -34,7 +34,7 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
   }
 
   const [{ data: staffRows }, linksRes, reviewsRes] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]),
+    supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]).eq("demo", false),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
     supabase.from("prf_reviews").select("submission_id, approved_by_name, approved_at"),
   ]);

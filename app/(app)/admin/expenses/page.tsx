@@ -8,7 +8,7 @@ import { chargeLabel, isMonth, monthLabel, monthSpan, reportBadge, shiftMonth, t
 import { plaidEnv, plaidReady } from "@/lib/plaid";
 import { serviceReady } from "@/lib/supabase/service";
 import { todayCentral } from "@/lib/sale";
-import { importJotform, matchNow, plaidDisconnect, plaidSyncNow, undoUpload } from "@/app/(app)/admin/expenses/actions";
+import { demoDelete, demoLoad, importJotform, matchNow, plaidDisconnect, plaidSyncNow, undoUpload } from "@/app/(app)/admin/expenses/actions";
 import { ActBtn, ApproversForm, CardRow, ChargeTools, NewCard, PlaidConnect, UploadStatement, type Person } from "@/components/expenses/admin-bits";
 
 export const metadata = { title: "Expense reports" };
@@ -27,10 +27,15 @@ export default async function AdminExpensesPage({ searchParams }: { searchParams
   // Early in a month, last month is the one being finished and approved.
   const month = isMonth(sp.m) && sp.m <= now ? sp.m : Number(todayCentral().slice(8, 10)) <= 10 ? shiftMonth(now, -1) : now;
 
-  const { data: staffRows } = await supabase.from("profiles").select("id, full_name, email, expense_approver").eq("status", "active").in("role", ["employee", "admin"]).order("full_name");
+  const [{ data: staffRows }, { data: demoRows }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, email, expense_approver").eq("status", "active").in("role", ["employee", "admin"]).order("full_name"),
+    // The expense demo's made-up employees (migration 0051): shown wherever expenses are, marked Demo.
+    supabase.from("profiles").select("id, full_name").eq("demo", true).order("full_name"),
+  ]);
   const staff = ((staffRows ?? []) as { id: string; full_name: string | null; email: string; expense_approver: boolean }[]).map((p) => ({ id: p.id, name: p.full_name || p.email, email: p.email, approver: p.expense_approver }));
-  const people: Person[] = staff.map((p) => ({ id: p.id, name: p.name }));
-  const nameOf = new Map(staff.map((p) => [p.id, p.name]));
+  const demo = ((demoRows ?? []) as { id: string; full_name: string | null }[]).map((p) => ({ id: p.id, name: `${p.full_name ?? "Demo"} (demo)` }));
+  const people: Person[] = [...staff.map((p) => ({ id: p.id, name: p.name })), ...demo];
+  const nameOf = new Map(people.map((p) => [p.id, p.name]));
 
   return (
     <main className="shell wide">
@@ -63,6 +68,13 @@ export default async function AdminExpensesPage({ searchParams }: { searchParams
         <div className="alert info small">You&apos;re not an expense approver, so reports and the dashboard aren&apos;t shown. Add yourself below if you should be.</div>
       )}
 
+      {approver && demo.length ? (
+        <div className="alert info small" style={{ margin: 0 }}>
+          <span>
+            <b>Demo data is loaded:</b> {demo.length} made-up employees marked &quot;(demo)&quot; with about five months of receipts, card charges and reports, tied to real customers. They can&apos;t sign in and never get email. Delete it in <Link href="/admin/expenses?tab=setup">Setup</Link> before real employees start.
+          </span>
+        </div>
+      ) : null}
       {tab === "reports" ? <Reports month={month} now={now} nameOf={nameOf} /> : null}
       {tab === "bank" ? <Bank people={people} nameOf={nameOf} /> : null}
       {tab === "setup" ? (
@@ -75,6 +87,27 @@ export default async function AdminExpensesPage({ searchParams }: { searchParams
             <ApproversForm people={staff} chosen={staff.filter((p) => p.approver).map((p) => p.id)} canEdit={admin} />
           </section>
           {approver ? <JotformImport /> : null}
+          {approver ? (
+            <section className="card col" style={{ gap: 10 }}>
+              <div className="col" style={{ gap: 4 }}>
+                <b>Demo data</b>
+                <span className="small muted">
+                  {demo.length
+                    ? `Loaded: ${demo.map((d) => d.name.replace(" (demo)", "")).join(", ")} (made up). Delete it before real employees start, so the dashboard shows only real spending.`
+                    : "Five made-up employees with about five months of receipts, Chase charges and monthly reports, tied to your customers, to show how expenses and the dashboard work. They can't sign in and never get email."}
+                </span>
+              </div>
+              {demo.length ? (
+                <ActBtn action={demoDelete} className="btn sm dark" confirm="Yes, delete all demo data">
+                  Delete demo data
+                </ActBtn>
+              ) : (
+                <ActBtn action={demoLoad} className="btn sm">
+                  Load demo data
+                </ActBtn>
+              )}
+            </section>
+          ) : null}
         </>
       ) : null}
     </main>

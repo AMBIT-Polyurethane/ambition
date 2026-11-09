@@ -3,6 +3,7 @@ import type { Answer, Submission } from "@/lib/jotform";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CHARGE_COLS, REPORT_COLS, RECEIPT_COLS, addDays, chargeLabel, isMonth, monthSpan, monthView, type XCharge, type XReceipt, type XReport } from "@/lib/expense-kinds";
 import { expensePdfName, renderExpensePdf, type PdfLine } from "@/lib/expense-doc/pdf";
+import { demoReceiptJpeg, isDemoPhoto } from "@/lib/expense-demo";
 
 export * from "@/lib/expense-kinds";
 
@@ -159,6 +160,11 @@ export async function expensePdf(supabase: SupabaseClient, who: { id: string; na
     byCategory: view.totals.byCategory,
     status,
     loadPhoto: async (key) => {
+      if (isDemoPhoto(key)) {
+        const r = view.receipts.find((x) => `demo:${x.id}` === key);
+        const c = r ? view.chargeFor.get(r.id) : undefined;
+        return r ? demoReceiptJpeg(r, { chargedMore: Boolean(c && Number(c.amount) > Number(r.amount) + 0.004), width: 1000 }) : null;
+      }
       const { data } = await supabase.storage.from("receipts").download(key);
       return data ? Buffer.from(await data.arrayBuffer()) : null;
     },

@@ -23,6 +23,7 @@ function clean(list: (string | null | undefined)[] | undefined): string[] {
   for (const raw of list ?? []) {
     const e = (raw ?? "").trim();
     if (!e || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) continue;
+    if (/\.invalid$/i.test(e)) continue; // made-up addresses (the expense demo's employees) never get mail
     const k = e.toLowerCase();
     if (seen.has(k)) continue;
     seen.add(k);

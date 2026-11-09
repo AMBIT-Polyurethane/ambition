@@ -28,7 +28,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const q = searchSafe(sp.q);
   const { supabase, profile: me } = await requireAdmin();
 
-  let query = supabase.from("profiles").select("*, company:companies!company_id(id, name, account_no, default_branch_id)").order("created_at", { ascending: false }).limit(300);
+  // The expense demo's made-up employees (migration 0051) aren't accounts anyone manages.
+  let query = supabase.from("profiles").select("*, company:companies!company_id(id, name, account_no, default_branch_id)").eq("demo", false).order("created_at", { ascending: false }).limit(300);
   if (tab === "pending") query = query.eq("status", "pending");
   else if (tab === "disabled") query = query.eq("status", "disabled");
   else if (tab === "customer") query = query.eq("status", "active").eq("role", "customer");
