@@ -113,3 +113,84 @@ export async function fillForm<T>(opts: {
   return { data: use.input as T, usage: res.usage };
 }
 
+
+/** Claude stopped or refused: `kind` says which, so the screen can explain it. */
+export class ClaudeStop extends Error {
+  constructor(public kind: "refusal" | "cut_off" | "oversized" | "empty", message: string, public fit?: { w: number; h: number }) {
+    super(message);
+  }
+}
+
+/**
+ * Like fillForm, for long, careful answers (a plan sheet's geometry): streamed (so a long answer isn't cut
+ * off by the request timing out), with a large token limit and an effort level. Images are never shrunk by
+ * the API (the coordinates would shift): an image that's too big comes back as ClaudeStop "oversized" with
+ * the largest size that fits, when the API says it.
+ */
+export async function streamForm<T>(opts: {
+  model: string;
+  maxTokens: number;
+  system: string | Anthropic.Messages.TextBlockParam[];
+  content: Anthropic.Messages.ContentBlockParam[];
+  schema: Record<string, unknown>;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Ask the API to refuse (not shrink) a too-big image. Not needed for a picture every model takes as it is. */
+  guardImages?: boolean;
+}): Promise<{ data: T; usage: Anthropic.Messages.Usage; ms: number }> {
+  const api = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 14 * 60_000 });
+  const t0 = Date.now();
+  // What this model accepts is learned as we go: a request it turns down is asked again without that part.
+  const opt = { effort: opts.effort ?? null, guard: opts.guardImages !== false, form: "schema" as "schema" | "tool" };
+  const call = async () => {
+    const content = opts.content.map((b) => (b.type === "image" && opt.guard ? { ...b, transformations: { oversized_image: "error" as const } } : b));
+    const stream = api.messages.stream({
+      model: opts.model,
+      max_tokens: opts.maxTokens,
+      system:
+        opt.form === "tool"
+          ? [...(typeof opts.system === "string" ? [{ type: "text" as const, text: opts.system }] : opts.system), { type: "text" as const, text: "Give your answer only by calling the answer tool, once." }]
+          : opts.system,
+      messages: [{ role: "user", content }],
+      ...(opt.form === "tool" ? { tools: [{ name: "answer", description: "Your complete answer.", input_schema: opts.schema as Anthropic.Messages.Tool.InputSchema }], tool_choice: { type: "auto" as const } } : {}),
+      output_config: { ...(opt.form === "schema" ? { format: { type: "json_schema" as const, schema: closed(opts.schema) as Record<string, unknown> } } : {}), ...(opt.effort ? { effort: opt.effort } : {}) },
+    });
+    return stream.finalMessage();
+  };
+  let res: Anthropic.Messages.Message | null = null;
+  for (let attempt = 0; attempt < 4 && !res; attempt++) {
+    try {
+      res = await call();
+    } catch (e) {
+      const status = (e as { status?: number })?.status;
+      const msg = String((e as Error)?.message ?? e);
+      if (status !== 400) throw e;
+      if (opt.guard && /transformations|oversized_image/i.test(msg) && /not permitted|unknown|unexpected|unrecognized|not allowed|extra input/i.test(msg)) {
+        // This model can't refuse instead of shrinking: draw the picture at a size every model takes as it is.
+        throw new ClaudeStop("oversized", "The plan picture was bigger than the AI takes.");
+      } else if (/image|dimension|pixel|oversiz/i.test(msg)) {
+        // "... 2400x1600 ... largest dimensions that fit: 1568x1045": the last pair is what fits.
+        const pairs = [...msg.matchAll(/(\d{3,5})\s*[x×]\s*(\d{3,5})/g)].map((m) => ({ w: Number(m[1]), h: Number(m[2]) }));
+        throw new ClaudeStop("oversized", "The plan picture was bigger than the AI takes.", pairs.length ? pairs[pairs.length - 1] : undefined);
+      } else if (/effort/i.test(msg) && opt.effort) opt.effort = null;
+      else if (/schema|output_config|json|structured|format/i.test(msg) && opt.form === "schema") {
+        console.warn("structured output not accepted; using a tool instead:", msg.slice(0, 300));
+        opt.form = "tool";
+      } else throw e;
+    }
+  }
+  if (!res) throw new ClaudeStop("empty", "The AI didn't answer. Try again.");
+  if (res.stop_reason === "refusal") throw new ClaudeStop("refusal", "The AI declined to read this sheet.");
+  if (res.stop_reason === "max_tokens") throw new ClaudeStop("cut_off", "The AI's answer was cut off (too long for one sheet). Try splitting the sheet or reading it again.");
+  if (opt.form === "tool") {
+    const use = res.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use" && b.name === "answer");
+    if (!use) throw new ClaudeStop("empty", "The AI didn't answer. Try again.");
+    return { data: use.input as T, usage: res.usage, ms: Date.now() - t0 };
+  }
+  const text = res.content
+    .filter((b): b is Anthropic.Messages.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+  if (!text) throw new ClaudeStop("empty", "The AI didn't answer. Try again.");
+  return { data: JSON.parse(text) as T, usage: res.usage, ms: Date.now() - t0 };
+}

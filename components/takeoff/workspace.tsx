@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   CircleDot,
   CircleHelp,
+  Crosshair,
   Eye,
   EyeOff,
   FileSignature,
@@ -38,6 +39,10 @@ import { DEFAULT_WORK_AREAS, type WorkArea } from "@/lib/ops/defaults";
 import { TEAM_PITCH } from "@/lib/takeoff/guide";
 import { PrescanDialog } from "@/components/takeoff/prescan";
 import type { ScanResult } from "@/lib/takeoff/prescan";
+import { AiReadDialog, AiSheetCard, AlertsTab, WindowsTab, type RunState } from "@/components/takeoff/ai-panel";
+import { checkAlert, readSheetAi, reconcileAi, setTakeoffBuilder, type ReadInput } from "@/app/(app)/takeoff/ai-actions";
+import { planApply, type ApplyPlan, type ComponentRow, type SheetWithAi } from "@/lib/takeoff/ai-apply";
+import type { SheetAi, TakeoffAi } from "@/lib/takeoff/ai-read";
 import {
   COLORS,
   MATERIALS,
@@ -74,6 +79,8 @@ export type TakeoffInfo = {
   lead_id?: string | null;
   ops_customer_id?: string | null;
   ai_scan?: unknown;
+  builder?: string | null;
+  ai_read?: TakeoffAi | null;
 };
 
 type Tool = "select" | "pan" | "scale" | "area" | "linear" | "count" | "cutout";
@@ -89,11 +96,15 @@ type ItemFields = Partial<Omit<TItem, "id">>;
 type Change =
   | { t: "addMark"; mark: TMark }
   | { t: "delMark"; mark: TMark }
+  | { t: "addMarks"; marks: TMark[] }
+  | { t: "delMarks"; marks: TMark[] }
   | { t: "movePts"; id: string; before: Pt[]; after: Pt[] }
   | { t: "addItem"; item: TItem; marks: TMark[] }
   | { t: "delItem"; item: TItem; marks: TMark[] }
   | { t: "editItem"; id: string; before: ItemFields; after: ItemFields }
-  | { t: "scale"; before: SheetScale[]; after: SheetScale[] };
+  | { t: "scale"; before: SheetScale[]; after: SheetScale[] }
+  /** AI shapes accepted (ai: false) or put back to unchecked. */
+  | { t: "flagMarks"; ids: string[]; before: boolean; after: boolean };
 type Step = { label: string; changes: Change[] };
 const HISTORY = 60;
 
@@ -103,6 +114,10 @@ function invert(c: Change): Change {
       return { t: "delMark", mark: c.mark };
     case "delMark":
       return { t: "addMark", mark: c.mark };
+    case "addMarks":
+      return { t: "delMarks", marks: c.marks };
+    case "delMarks":
+      return { t: "addMarks", marks: c.marks };
     case "movePts":
       return { t: "movePts", id: c.id, before: c.after, after: c.before };
     case "addItem":
@@ -113,6 +128,8 @@ function invert(c: Change): Change {
       return { t: "editItem", id: c.id, before: c.after, after: c.before };
     case "scale":
       return { t: "scale", before: c.after, after: c.before };
+    case "flagMarks":
+      return { t: "flagMarks", ids: c.ids, before: c.after, after: c.before };
   }
 }
 
@@ -198,7 +215,18 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; sheets: TSheet[]; items: TItem[]; marks: TMark[]; workAreas?: WorkArea[]; ops?: boolean }) {
+export function TakeoffWorkspace(props: {
+  takeoff: TakeoffInfo;
+  files: TFile[];
+  sheets: SheetWithAi[];
+  items: TItem[];
+  marks: TMark[];
+  components?: ComponentRow[];
+  workAreas?: WorkArea[];
+  ops?: boolean;
+  /** AMBIT staff (sees AMBIT's own rules). */
+  staff?: boolean;
+}) {
   const t = props.takeoff;
   const supabase = useMemo(() => createClient(), []);
   const [files, setFiles] = useState(props.files);
@@ -225,6 +253,16 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
   const [dropping, setDropping] = useState(false);
   const [sheetQ, setSheetQ] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
+  // The teachable AI
+  const [aiRead, setAiRead] = useState<TakeoffAi | null>(t.ai_read ?? null);
+  const [comps, setComps] = useState<ComponentRow[]>(props.components ?? []);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiRun, setAiRun] = useState<RunState | null>(null);
+  const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [tab, setTab] = useState<"items" | "windows" | "alerts">("items");
+  const [solo, setSolo] = useState<string | null>(null);
+  const [builder, setBuilder] = useState(t.builder ?? "");
 
   const vpRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -395,8 +433,10 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     sort: it.sort ?? 0,
     area_code: it.area_code ?? null,
     shape: it.shape ?? null,
+    assembly: it.assembly ?? null,
+    ai: it.ai ?? false,
   });
-  const markRow = (m: TMark) => ({ id: m.id, takeoff_id: t.id, item_id: m.item_id, sheet_id: m.sheet_id, points: m.points, cutout: m.cutout });
+  const markRow = (m: TMark) => ({ id: m.id, takeoff_id: t.id, item_id: m.item_id, sheet_id: m.sheet_id, points: m.points, cutout: m.cutout, ai: m.ai ?? false, ref: m.ref ?? false, note: m.note ?? null });
 
   /** Makes one change: on screen right away, then saved. False if it didn't save (the screen is put back). */
   const run = async (c: Change): Promise<boolean> => {
@@ -415,6 +455,24 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
         if (error) setMarks((m) => [...m, c.mark]);
         break;
       }
+      case "addMarks": {
+        const ids = new Set(c.marks.map((x) => x.id));
+        setMarks((m) => [...m.filter((x) => !ids.has(x.id)), ...c.marks]);
+        for (let i = 0; i < c.marks.length && !error; i += 300) ({ error } = await supabase.from("takeoff_marks").insert(c.marks.slice(i, i + 300).map(markRow)));
+        if (error) {
+          setMarks((m) => m.filter((x) => !ids.has(x.id)));
+          await supabase.from("takeoff_marks").delete().in("id", [...ids]);
+        }
+        break;
+      }
+      case "delMarks": {
+        const ids = new Set(c.marks.map((x) => x.id));
+        setMarks((m) => m.filter((x) => !ids.has(x.id)));
+        setSelMark((sm) => (sm && ids.has(sm) ? null : sm));
+        for (let i = 0; i < c.marks.length && !error; i += 300) ({ error } = await supabase.from("takeoff_marks").delete().in("id", c.marks.slice(i, i + 300).map((x) => x.id)));
+        if (error) setMarks((m) => [...m.filter((x) => !ids.has(x.id)), ...c.marks]);
+        break;
+      }
       case "movePts": {
         setMarks((m) => m.map((x) => (x.id === c.id ? { ...x, points: c.after } : x)));
         ({ error } = await supabase.from("takeoff_marks").update({ points: c.after }).eq("id", c.id));
@@ -425,7 +483,7 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
         setItems((l) => [...l.filter((x) => x.id !== c.item.id), c.item].sort((a, b) => a.sort - b.sort));
         setMarks((m) => [...m.filter((x) => !c.marks.some((y) => y.id === x.id)), ...c.marks]);
         ({ error } = await supabase.from("takeoff_items").insert(itemRow(c.item)));
-        if (!error && c.marks.length) ({ error } = await supabase.from("takeoff_marks").insert(c.marks.map(markRow)));
+        for (let i = 0; i < c.marks.length && !error; i += 300) ({ error } = await supabase.from("takeoff_marks").insert(c.marks.slice(i, i + 300).map(markRow)));
         if (error) {
           setItems((l) => l.filter((x) => x.id !== c.item.id));
           setMarks((m) => m.filter((x) => x.item_id !== c.item.id));
@@ -448,6 +506,13 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
         setItems((l) => l.map((x) => (x.id === c.id ? { ...x, ...c.after } : x)));
         ({ error } = await supabase.from("takeoff_items").update(c.after).eq("id", c.id));
         if (error) setItems((l) => l.map((x) => (x.id === c.id ? { ...x, ...c.before } : x)));
+        break;
+      }
+      case "flagMarks": {
+        const ids = new Set(c.ids);
+        setMarks((m) => m.map((x) => (ids.has(x.id) ? { ...x, ai: c.after } : x)));
+        for (let i = 0; i < c.ids.length && !error; i += 300) ({ error } = await supabase.from("takeoff_marks").update({ ai: c.after }).in("id", c.ids.slice(i, i + 300)));
+        if (error) setMarks((m) => m.map((x) => (ids.has(x.id) ? { ...x, ai: c.before } : x)));
         break;
       }
       case "scale": {
@@ -595,7 +660,9 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
       return;
     }
     const after = m.points.filter((_, i) => i !== index);
-    void commit({ label: "removed a corner", changes: [{ t: "movePts", id: m.id, before: m.points, after }] });
+    const changes: Change[] = [{ t: "movePts", id: m.id, before: m.points, after }];
+    if (m.ai) changes.push({ t: "flagMarks", ids: [m.id], before: true, after: false });
+    void commit({ label: "removed a corner", changes });
   };
 
   const finishVertex = () => {
@@ -606,7 +673,10 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     if (!m) return;
     if (!d.moved && !d.inserted) return;
     const after = m.points.map((p) => [round2(p[0]), round2(p[1])] as Pt);
-    void commit({ label: d.inserted ? "added a corner" : "moved a corner", changes: [{ t: "movePts", id: m.id, before: d.before, after }] });
+    // Editing an AI shape counts as checking it.
+    const changes: Change[] = [{ t: "movePts", id: m.id, before: d.before, after }];
+    if (m.ai) changes.push({ t: "flagMarks", ids: [m.id], before: true, after: false });
+    void commit({ label: d.inserted ? "added a corner" : "moved a corner", changes });
   };
 
   const pickTool = (id: Tool) => {
@@ -981,6 +1051,218 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
     }
   };
 
+  // ---------------------------------------------------------------- the teachable AI
+  // The AI answers in pixels of the picture it's shown, so the picture is never shrunk by the API: it starts
+  // at this size, and if the model takes less, the server says what fits and the sheet is drawn again at that.
+  const aiLimit = useRef<{ edge: number; pixels: number }>({ edge: 2576, pixels: 3_750_000 });
+  useEffect(() => {
+    try {
+      const v = JSON.parse(window.localStorage.getItem("to-ai-img") ?? "null") as { edge?: number; pixels?: number } | null;
+      if (v?.edge && v.pixels) aiLimit.current = { edge: v.edge, pixels: v.pixels };
+    } catch {
+      // first time
+    }
+  }, []);
+  const live = useRef({ items, marks, comps, sheets });
+  live.current = { items, marks, comps, sheets };
+
+  /** The sheet as one picture for the AI (exactly `exact` pixels for a correction), with its PDF text. */
+  const renderForAi = async (sh: SheetWithAi, exact?: { w: number; h: number }) => {
+    const doc = await loadDoc(sh.file_id);
+    const page = await doc.getPage(sh.page);
+    const base = page.getViewport({ scale: 1 });
+    const L = aiLimit.current;
+    const scale = exact ? exact.w / base.width : Math.min(L.edge / Math.max(base.width, base.height), Math.sqrt(L.pixels / (base.width * base.height)));
+    const vp = page.getViewport({ scale });
+    const c = document.createElement("canvas");
+    c.width = exact ? exact.w : Math.floor(vp.width);
+    c.height = exact ? exact.h : Math.floor(vp.height);
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvas: c, viewport: vp }).promise;
+    // Uploads to the server are capped at about 4 MB: a busy (scanned) sheet is compressed more.
+    let image = c.toDataURL("image/jpeg", 0.86);
+    for (const q of [0.7, 0.55, 0.4]) if (image.length > 3_700_000) image = c.toDataURL("image/jpeg", q);
+    let text = "";
+    try {
+      const tc = await page.getTextContent();
+      text = (tc.items as TextItem[]).map((i) => i.str ?? "").join(" ");
+    } catch {
+      // a scanned sheet has no text
+    }
+    page.cleanup();
+    return { image, px_per_pt: c.width / base.width, text };
+  };
+
+  /** Reads one sheet (with a correction, at the same picture size as before). */
+  const readOne = async (sh: SheetWithAi, correction?: ReadInput["correction"]) => {
+    const exact = correction && sh.ai ? { w: sh.ai.w, h: sh.ai.h } : undefined;
+    let r = await readSheetAi(t.id, { sheet_id: sh.id, ...(await renderForAi(sh, exact)), correction: correction ?? null });
+    if (!r.ok && /bigger than the AI takes/i.test(r.error) && !exact) {
+      const fit = r.resize ?? { w: 1568, h: 733 };
+      aiLimit.current = { edge: Math.max(fit.w, fit.h), pixels: r.resize ? fit.w * fit.h : 1_150_000 };
+      try {
+        window.localStorage.setItem("to-ai-img", JSON.stringify(aiLimit.current));
+      } catch {
+        // fine
+      }
+      r = await readSheetAi(t.id, { sheet_id: sh.id, ...(await renderForAi(sh)), correction: null });
+    }
+    return r;
+  };
+
+  type Work = { items: TItem[]; marks: TMark[]; comps: ComponentRow[]; sheets: SheetWithAi[] };
+  /** Puts a sheet's reading on the takeoff (one undo step); returns the takeoff as it is after. */
+  const applyAi = async (sh: SheetWithAi, ai: SheetAi, work: Work): Promise<{ work: Work; plan: ApplyPlan }> => {
+    const plan = planApply({ sheet: sh, ai, sheets: work.sheets, items: work.items, marks: work.marks, components: work.comps, newId: () => crypto.randomUUID() });
+    const changes: Change[] = [];
+    if (plan.delMarks.length) changes.push({ t: "delMarks", marks: plan.delMarks });
+    for (const x of plan.newItems) changes.push({ t: "addItem", item: x.item, marks: x.marks });
+    if (plan.addMarks.length) changes.push({ t: "addMarks", marks: plan.addMarks });
+    for (const x of plan.delItems) changes.push({ t: "delItem", item: x.item, marks: x.marks });
+    if (changes.length) await commit({ label: `AI reading of ${sh.name || `page ${sh.page}`}`, changes });
+    // Windows and doors on this sheet: the AI's are replaced (not part of undo).
+    await supabase.from("takeoff_components").delete().eq("sheet_id", sh.id).eq("ai", true);
+    if (plan.components.length) {
+      const { error } = await supabase.from("takeoff_components").insert(plan.components.map((c) => ({ ...c, takeoff_id: t.id })));
+      if (error) flash("err", `Windows and doors didn't save: ${error.message}`);
+    }
+    setComps((l) => [...l.filter((c) => !(c.sheet_id === sh.id && c.ai)), ...plan.components]);
+    const gone = new Set(plan.delMarks.map((m) => m.id));
+    const goneItems = new Set(plan.delItems.map((x) => x.item.id));
+    return {
+      plan,
+      work: {
+        items: [...work.items.filter((i) => !goneItems.has(i.id)), ...plan.newItems.map((x) => x.item)],
+        marks: [...work.marks.filter((m) => !gone.has(m.id)), ...plan.addMarks, ...plan.newItems.flatMap((x) => x.marks)],
+        comps: [...work.comps.filter((c) => !(c.sheet_id === sh.id && c.ai)), ...plan.components],
+        sheets: work.sheets.map((x) => (x.id === sh.id ? { ...x, ai } : x)),
+      },
+    };
+  };
+
+  const recheck = async () => {
+    setChecking(true);
+    const rec = await reconcileAi(t.id);
+    setChecking(false);
+    if (rec.ok) setAiRead(rec.ai);
+    else flash("err", rec.error);
+    return rec.ok;
+  };
+
+  /** "Read plan set with AI": four sheets at a time, then each applied, then the cross-sheet check. */
+  const runAi = async (ids: string[], b: string) => {
+    if (b !== builder) {
+      setBuilder(b);
+      await setTakeoffBuilder(t.id, b);
+    }
+    const list = sheets.filter((s) => ids.includes(s.id));
+    const st: RunState = { phase: "reading", sheets: Object.fromEntries(list.map((s) => [s.id, { state: "waiting" as const }])), cost: 0 };
+    const show = () => setAiRun({ ...st, sheets: { ...st.sheets } });
+    show();
+    const got = new Map<string, SheetAi>();
+    let next = 0;
+    const worker = async () => {
+      while (next < list.length) {
+        const sh = list[next++];
+        st.sheets[sh.id] = { state: "reading" };
+        show();
+        try {
+          const r = await readOne(sh);
+          if (r.ok) {
+            got.set(sh.id, r.ai);
+            st.cost += r.ai.cost_cents;
+            st.sheets[sh.id] = { state: "done", msg: `${r.ai.read.assemblies.length} shapes · ${r.ai.read.components.length} windows & doors` };
+          } else st.sheets[sh.id] = { state: "error", msg: r.error };
+        } catch (e) {
+          st.sheets[sh.id] = { state: "error", msg: e instanceof Error ? e.message : "Didn't read." };
+        }
+        show();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker));
+    let work: Work = { ...live.current, sheets: live.current.sheets.map((x) => (got.has(x.id) ? { ...x, ai: got.get(x.id)! } : x)) };
+    for (const sh of list) {
+      const ai = got.get(sh.id);
+      if (ai) work = (await applyAi(sh, ai, work)).work;
+    }
+    setSheets((l) => l.map((x) => (got.has(x.id) ? { ...x, ai: got.get(x.id)! } : x)));
+    if (got.size) {
+      st.phase = "checking";
+      show();
+      await recheck();
+      if (!sheetId || !got.has(sheetId)) setSheetId(list.find((s) => got.has(s.id))?.id ?? sheetId);
+    }
+    st.phase = "done";
+    show();
+  };
+
+  const acceptSheet = () => {
+    const ids = marks.filter((m) => m.sheet_id === sheetId && m.ai).map((m) => m.id);
+    if (ids.length) void commit({ label: `accepted ${ids.length} AI shapes`, changes: [{ t: "flagMarks", ids, before: true, after: false }] }).then((ok) => ok && flash("ok", `${ids.length} shape${ids.length === 1 ? "" : "s"} accepted.`));
+  };
+
+  const discardSheet = async () => {
+    const del = marks.filter((m) => m.sheet_id === sheetId && m.ai);
+    if (!del.length) return;
+    const gone = new Set(del.map((m) => m.id));
+    const left = new Set(marks.filter((m) => !gone.has(m.id)).map((m) => m.item_id));
+    const empty = items.filter((i) => i.ai && !left.has(i.id));
+    const ok = await commit({ label: `discarded ${del.length} AI shapes`, changes: [{ t: "delMarks", marks: del }, ...empty.map((item) => ({ t: "delItem" as const, item, marks: [] as TMark[] }))] });
+    if (!ok) return;
+    await supabase.from("takeoff_components").delete().eq("sheet_id", sheetId!).eq("ai", true);
+    setComps((l) => l.filter((c) => !(c.sheet_id === sheetId && c.ai)));
+    flash("info", "AI shapes on this sheet removed. Undo brings them back.");
+  };
+
+  /** Reads the sheet on screen again, with a correction or without. */
+  const fixSheet = async (correction: ReadInput["correction"] | null) => {
+    if (!sheet) return;
+    setAiBusy(correction ? "Fixing it…" : "Reading it again…");
+    try {
+      const r = await readOne(sheet, correction ?? undefined);
+      if (!r.ok) {
+        flash("err", r.error);
+        return;
+      }
+      if (correction?.remember === "builder" && correction.builder && !builder) setBuilder(correction.builder);
+      const { plan } = await applyAi(sheet, r.ai, live.current);
+      setSheets((l) => l.map((x) => (x.id === sheet.id ? { ...x, ai: r.ai } : x)));
+      flash(
+        "ok",
+        `${correction ? "Fixed" : "Read again"}: ${plan.counts.shapes} shape${plan.counts.shapes === 1 ? "" : "s"}${plan.counts.skipped ? ` (${plan.counts.skipped} you'd already checked kept)` : ""}.${r.rule ? " Remembered as a rule." : ""}`,
+      );
+      setAiBusy("Checking the sheets against each other…");
+      await recheck();
+    } finally {
+      setAiBusy(null);
+    }
+  };
+
+  const toggleAlert = async (key: string, on: boolean) => {
+    setAiRead((a) => (a ? { ...a, checked: on ? [...a.checked, key] : a.checked.filter((k) => k !== key) } : a));
+    const r = await checkAlert(t.id, key, on);
+    if (!r.ok) flash("err", "Didn't save.");
+  };
+
+  /** Window and door area out of the exterior walls (shared by how long each wall item is). */
+  const deductOpenings = async (sqft: number) => {
+    const walls = items.filter((i) => i.kind === "linear" && i.shape !== "gable" && (i.assembly === "exterior_walls" || (!i.assembly && /^exterior wall/i.test(i.name))));
+    const lens = walls.map((i) => totals.get(i.id)?.lf ?? 0);
+    const sum = lens.reduce((a, b) => a + b, 0);
+    if (!walls.length || !sum) return flash("info", "Measure the exterior walls first.");
+    const changes: Change[] = walls.map((it, i) => ({ t: "editItem", id: it.id, before: { deduct_sqft: it.deduct_sqft }, after: { deduct_sqft: Math.round((sqft * lens[i]) / sum) } }));
+    if (await commit({ label: "windows and doors out of the walls", changes })) flash("ok", `${num(sqft)} sq ft of openings taken out of the exterior walls.`);
+  };
+
+  const goSheetNamed = (name: string) => {
+    const n = name.trim().toLowerCase();
+    const hit = sheets.find((s) => (s.name ?? "").toLowerCase() === n || (s.ai?.read.sheet_number ?? "").toLowerCase() === n) ?? sheets.find((s) => (s.name ?? "").toLowerCase().includes(n));
+    if (hit) setSheetId(hit.id);
+    else flash("info", `No sheet named ${name}.`);
+  };
+
   // ---------------------------------------------------------------- what's on screen
   const totals = useMemo(() => new Map(items.map((i) => [i.id, itemTotals(i, marks, sheetMap)])), [items, marks, sheetMap]);
   const here = useMemo(() => new Map(items.map((i) => [i.id, itemTotals(i, marks, sheetMap, sheetId ?? undefined)])), [items, marks, sheetMap, sheetId]);
@@ -1124,6 +1406,10 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                             {s.ft_per_pt ? s.scale_label || "Scale set" : "No scale"}
                             {n ? ` · ${n} shape${n === 1 ? "" : "s"}` : ""}
                           </span>
+                          {s.ai ? (() => {
+                            const todo = marks.filter((m) => m.sheet_id === s.id && m.ai).length;
+                            return <span className={`tiny ${todo ? "ai-text" : "faint"}`}><Sparkles size={10} /> {todo ? `${todo} to check` : "AI read"}</span>;
+                          })() : null}
                         </span>
                       </button>
                       <button type="button" className="to-x" onClick={() => setRenaming(s.id)} aria-label={`Rename ${s.name ?? `page ${s.page}`}`}>
@@ -1221,8 +1507,10 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                 </defs>
                 {sheetMarks.map((m) => {
                   const it = itemMap.get(m.item_id);
-                  if (!it || it.hidden) return null;
+                  if (!it || it.hidden || (solo && it.id !== solo)) return null;
                   const sel = m.id === selMark;
+                  // AI shapes nobody checked yet are dashed; reference shapes (elevations) dotted and faint.
+                  const dash = m.ref ? `${2 / z} ${4 / z}` : m.ai ? `${9 / z} ${5 / z}` : undefined;
                   const act = it.id === itemId;
                   const pick = (e: React.PointerEvent) => {
                     if (tool !== "select") return;
@@ -1243,10 +1531,11 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                         key={m.id}
                         points={pts}
                         fill={m.cutout ? "url(#to-hatch)" : it.color}
-                        fillOpacity={m.cutout ? 1 : sel ? 0.42 : act ? 0.3 : 0.2}
+                        fillOpacity={m.cutout ? 1 : m.ref ? 0.05 : sel ? 0.42 : act ? 0.3 : m.ai ? 0.14 : 0.2}
                         stroke={m.cutout ? "#18181b" : it.color}
+                        strokeOpacity={m.ref ? 0.6 : 1}
                         strokeWidth={(sel ? 4 : act ? 2.5 : 1.8) / z}
-                        strokeDasharray={m.cutout ? `${6 / z} ${4 / z}` : undefined}
+                        strokeDasharray={m.cutout ? `${6 / z} ${4 / z}` : dash}
                         strokeLinejoin="round"
                         onPointerDown={pick}
                         style={{ pointerEvents: pe }}
@@ -1259,10 +1548,11 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                       points={pts}
                       fill="none"
                       stroke={it.color}
-                      strokeOpacity={sel ? 1 : 0.82}
-                      strokeWidth={(sel ? 8 : act ? 6 : 5) / z}
+                      strokeOpacity={sel ? 1 : m.ref ? 0.45 : 0.82}
+                      strokeWidth={(sel ? 8 : act ? 6 : m.ref ? 3 : 5) / z}
+                      strokeDasharray={dash}
                       strokeLinejoin="round"
-                      strokeLinecap="round"
+                      strokeLinecap={dash ? "butt" : "round"}
                       onPointerDown={pick}
                       style={{ pointerEvents: pe }}
                     />
@@ -1273,7 +1563,7 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                   if (tool !== "select" || !selMark) return null;
                   const m = sheetMarks.find((x) => x.id === selMark);
                   const it = m ? itemMap.get(m.item_id) : null;
-                  if (!m || !it || it.hidden) return null;
+                  if (!m || !it || it.hidden || (solo && it.id !== solo)) return null;
                   const closedShape = it.kind === "area";
                   const sides = it.kind === "count" ? 0 : closedShape ? m.points.length : m.points.length - 1;
                   return (
@@ -1316,7 +1606,7 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                 {labels
                   ? sheetMarks.map((m) => {
                       const it = itemMap.get(m.item_id);
-                      if (!it || it.hidden || (it.id !== itemId && m.id !== selMark)) return null;
+                      if (!it || it.hidden || (solo && it.id !== solo) || (it.id !== itemId && m.id !== selMark)) return null;
                       const l = markLabel(m, it);
                       if (!l) return null;
                       return (
@@ -1325,6 +1615,17 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                         </text>
                       );
                     })
+                  : null}
+                {!solo
+                  ? comps
+                      .filter((c) => c.sheet_id === sheetId && c.x !== null && c.y !== null)
+                      .map((c) => (
+                        <g key={c.id} className={`to-comp ${c.kind}`} transform={`translate(${c.x} ${c.y})`}>
+                          <circle r={10 / z} strokeWidth={2 / z} />
+                          <text fontSize={8.5 / z} textAnchor="middle" dominantBaseline="central">{c.label}</text>
+                          <title>{`${c.kind.replace("_", " ")} ${c.code ?? ""}${c.side && c.side !== "unknown" ? ` · ${c.side}` : ""}${c.note ? ` · ${c.note}` : ""}`}</title>
+                        </g>
+                      ))
                   : null}
                 {draft.length ? (
                   <g className="to-draft">
@@ -1379,6 +1680,12 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
               <button type="button" className="linkbtn" onClick={() => setScaleDlg({ dist: null })}>pick the scale</button>
             </div>
           ) : null}
+          {solo && itemMap.get(solo) ? (
+            <div className="to-solo" role="status">
+              <Crosshair size={15} /> Showing only <b>{itemMap.get(solo)!.name}</b>
+              <button type="button" className="linkbtn" onClick={() => setSolo(null)}>Show everything</button>
+            </div>
+          ) : null}
           {dropping ? <div className="to-dropzone">Drop PDFs to add them</div> : null}
         </div>
 
@@ -1403,11 +1710,54 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
 
       {/* ------------------------------------------------ items */}
       <aside className="to-items" aria-label="Measured items">
+        <div className="to-ai-top">
+          <button
+            type="button"
+            className="to-ai-read"
+            onClick={() => {
+              if (!aiRun || aiRun.phase === "done") setAiRun(null);
+              setAiOpen(true);
+            }}
+            disabled={!sheets.length}
+          >
+            {aiRun && aiRun.phase !== "done" ? <LoaderCircle size={16} className="spin" /> : <Sparkles size={16} />}
+            {aiRun && aiRun.phase !== "done" ? (aiRun.phase === "checking" ? "Checking the sheets…" : "Reading the plans…") : "Read plan set with AI"}
+          </button>
+        </div>
+        <div className="to-tabs" role="tablist" aria-label="Panel">
+          {(
+            [
+              ["items", "Items", items.length],
+              ["windows", "Windows", comps.filter((c) => c.kind !== "opening").length],
+              ["alerts", "Alerts", aiRead ? aiRead.reconcile.discrepancies.filter((d) => !aiRead.checked.includes(d.key)).length : 0],
+            ] as const
+          ).map(([k, label, n]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} className={`to-tab${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>
+              {label} {n ? <i className={k === "alerts" ? "warn" : ""}>{n}</i> : null}
+            </button>
+          ))}
+        </div>
+        {tab === "windows" ? (
+          <div className="to-item-list" style={{ paddingTop: 10 }}>
+            <WindowsTab
+              comps={comps}
+              reconcile={aiRead?.reconcile ?? null}
+              sheetName={(id) => sheetMap.get(id ?? "")?.name ?? "sheet"}
+              onDeduct={(sq) => void deductOpenings(sq)}
+              onSheet={(id) => setSheetId(id)}
+            />
+          </div>
+        ) : tab === "alerts" ? (
+          <div className="to-item-list" style={{ paddingTop: 10 }}>
+            <AlertsTab ai={aiRead} onCheck={(k, on) => void toggleAlert(k, on)} onSheetName={goSheetNamed} busy={checking} onRecheck={() => void recheck()} />
+          </div>
+        ) : (
+        <>
         <div className="to-panel-head">
           <span className="eyebrow">Items · {items.length}</span>
           <span className="row" style={{ gap: 6 }}>
-            <button type="button" className="to-mini ai" onClick={() => setScanOpen(true)} disabled={!sheets.length} title="AI reads the plans and sets up the items">
-              <Sparkles size={14} /> AI pre-scan
+            <button type="button" className="to-mini ai" onClick={() => setScanOpen(true)} disabled={!sheets.length} title="AI reads the notes and sets up the items to trace (no shapes)">
+              <Sparkles size={14} /> Quick scan
             </button>
             <button type="button" className="to-mini" onClick={() => setEditor({ kind: "area", color: COLORS[items.length % COLORS.length] })}>
               <Plus size={14} /> New item
@@ -1415,6 +1765,34 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
           </span>
         </div>
         <div className="to-item-list">
+          {sheet?.ai ? (
+            <AiSheetCard
+              key={`${sheet.id}-${sheet.ai.at}`}
+              sheet={sheet}
+              unchecked={sheetMarks.filter((m) => m.ai).length}
+              windows={comps.filter((c) => c.sheet_id === sheet.id).length}
+              alerts={aiRead ? aiRead.reconcile.discrepancies.filter((d) => !aiRead.checked.includes(d.key) && d.sheets.some((x) => [sheet.name, sheet.ai?.read.sheet_number].filter(Boolean).map((y) => y!.toLowerCase()).includes(x.toLowerCase()))).length : 0}
+              builder={builder}
+              busy={aiBusy}
+              staff={Boolean(props.staff)}
+              onAccept={acceptSheet}
+              onDiscard={() => void discardSheet()}
+              onCorrect={(text, remember, b) => void fixSheet({ text, remember, builder: b || null })}
+              onReread={() => void fixSheet(null)}
+              scaleCheck={(() => {
+                const dc = sheet.ai.read.dimension_check;
+                if (!dc) return null;
+                const distPt = Math.hypot(dc.x2 - dc.x1, dc.y2 - dc.y1) / sheet.ai.px_per_pt;
+                if (distPt < 20) return null;
+                return {
+                  written: dc.feet,
+                  quote: dc.quote,
+                  measured: sheet.ft_per_pt ? distPt * sheet.ft_per_pt : null,
+                  onUse: () => applyScale(dc.feet / distPt, `From ${dc.quote || `${dc.feet} ft`} (AI)`, "calibrated", "this"),
+                };
+              })()}
+            />
+          ) : null}
           {items.length === 0 ? (
             <div className="to-hint">
               {sheets.length ? (
@@ -1453,9 +1831,23 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
                     <span className="qty">{mainQty(it, tot)}</span>
                     {subQty(it, tot) ? <span className="tiny faint">{subQty(it, tot)}</span> : null}
                     {sheet && h.marks && h.marks !== tot.marks ? <span className="tiny faint">This sheet: {mainQty(it, h)}</span> : null}
+                    {(() => {
+                      const todo = marks.filter((m) => m.item_id === it.id && m.ai && !m.ref).length;
+                      const refs = marks.filter((m) => m.item_id === it.id && m.ref).length;
+                      return todo || refs ? (
+                        <span className="tiny ai-text">
+                          {todo ? `${todo} AI shape${todo === 1 ? "" : "s"} to check` : ""}
+                          {todo && refs ? " · " : ""}
+                          {refs ? <span className="faint">{refs} for reference (not counted)</span> : null}
+                        </span>
+                      ) : null;
+                    })()}
                   </span>
                 </button>
                 <div className="to-item-actions">
+                  <button type="button" onClick={() => setSolo((v) => (v === it.id ? null : it.id))} aria-label={`Show only ${it.name}`} aria-pressed={solo === it.id} title={solo === it.id ? "Show everything" : "Show only this (solo)"} className={solo === it.id ? "on" : ""}>
+                    <Crosshair size={15} />
+                  </button>
                   <button type="button" onClick={() => void toggleHidden(it)} aria-label={`${it.hidden ? "Show" : "Hide"} ${it.name}`} title={it.hidden ? "Show" : "Hide"}>
                     {it.hidden ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
@@ -1467,6 +1859,8 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
             );
           })}
         </div>
+        </>
+        )}
         <div className="to-sum">
           <div><b>{num(foamBf("open_cell"))}</b><span>open-cell board ft</span></div>
           <div><b>{num(foamBf("closed_cell"))}</b><span>closed-cell board ft</span></div>
@@ -1499,6 +1893,16 @@ export function TakeoffWorkspace(props: { takeoff: TakeoffInfo; files: TFile[]; 
             <li><kbd>F</kbd> fit the sheet · scroll to zoom</li>
           </ul>
         </div>
+      ) : null}
+
+      {aiOpen ? (
+        <AiReadDialog
+          sheets={sheets}
+          builder={builder}
+          run={aiRun}
+          onStart={(ids, b) => void runAi(ids, b)}
+          onClose={() => setAiOpen(false)}
+        />
       ) : null}
 
       {scanOpen ? (

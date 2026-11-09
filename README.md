@@ -402,6 +402,28 @@ Project Settings → API Keys → Secret keys), redeploy, and in the app Admin �
 `CRON_SECRET` (Vercel sends it with the timer; then nobody else can start a sync). Needs
 `supabase/migrations/0018_inventory.sql`.
 
+### Teachable takeoff AI (0053)
+
+From the Teachable Takeoff AI blueprint (Nov 9, 2026). `components/takeoff/workspace.tsx` "Read plan set with AI" renders each
+sheet to one picture (long edge up to 2576 px / 3.75 MP, smaller if the model says so; `aiLimit`, kept in localStorage) and
+calls `readSheetAi` (`app/(app)/takeoff/ai-actions.ts`) four at a time: one streamed structured-output call per sheet
+(`streamForm` in `lib/ai/claude.ts`: high effort, 32k tokens, images sent with `transformations.oversized_image = "error"` so
+the API never shrinks them; a picture under 1568 px / 1.15 MP needs no guard). Prompt and schema: `lib/takeoff/ai-prompts.ts`
+(`analysis` first, then sheet kind, level, scale + `dimension_check`, `assemblies` with pixel points from the 18-assembly enum
+in `lib/takeoff/assemblies.ts`, windows/doors, facts, notes). The team's rules (`takeoff_ai_rules` via `takeoff_rules_for`)
+are appended to every prompt. `cleanRead` (`lib/takeoff/ai-read.ts`) checks the answer; it's saved on `takeoff_sheets.ai`
+with the picture's exact size. `lib/takeoff/ai-apply.ts` turns it into items and shapes (one undo step): counted from floor
+plans (slab/foundation walls from the foundation plan or the lowest floor plan; roof lines from a roof plan when one has
+them), everything else `ref` (dotted, never counted); new shapes are `ai` (dashed) until accepted or edited; re-reading
+replaces only unchecked AI shapes and skips ones matching a person's. `reconcileAi` is the text-only cross-sheet check
+(`takeoffs.ai_read`: discrepancies with "Checked it", merged windows, heights, pitches). Corrections re-read the sheet at
+the same picture size with the previous JSON (minus analysis) and the correction; "remember" inserts a rule (all plans or
+the builder). `/takeoff/rules`: list, edit, switch off, delete, add, import (`parseTeachingImport`, PRO-Rate's export),
+export JSON/Markdown (`lib/takeoff/teaching.ts`), corrections history, AI call log (`takeoff_ai_calls`; full answer at
+`/takeoff/rules/call?id=`). Templates: `copyTakeoff` (`lib/takeoff/copy.ts`) copies files (storage copy), sheets, items,
+shapes and windows; `takeoffs.is_template`. Model: Opus 5.5 unless `TAKEOFF_AI_MODEL` is set. `TAKEOFF_AI_FAKE=1` (local
+testing only) answers with a stand-in reading (`lib/takeoff/ai-fake.ts`).
+
 ### Home widgets, spot checks, reconciliation, incoming deliveries
 
 `components/home-widgets.tsx` (data in `lib/widgets.ts`, `widgetsFor()` decides who gets what) puts a few cards under

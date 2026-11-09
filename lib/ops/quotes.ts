@@ -239,7 +239,7 @@ export async function linesFromTakeoff(supabase: SupabaseClient, takeoffId: stri
   const [{ data: s }, { data: i }, { data: m }] = await Promise.all([
     supabase.from("takeoff_sheets").select("*").eq("takeoff_id", takeoffId),
     supabase.from("takeoff_items").select("*").eq("takeoff_id", takeoffId).order("sort").order("created_at"),
-    supabase.from("takeoff_marks").select("id, item_id, sheet_id, points, cutout").eq("takeoff_id", takeoffId).range(0, 19999),
+    supabase.from("takeoff_marks").select("id, item_id, sheet_id, points, cutout, ai, ref, note").eq("takeoff_id", takeoffId).range(0, 19999),
   ]);
   const sheets = new Map(((s ?? []) as TSheet[]).map((x) => [x.id, { ...x, ft_per_pt: n(x.ft_per_pt) }]));
   const marks = (m ?? []) as TMark[];

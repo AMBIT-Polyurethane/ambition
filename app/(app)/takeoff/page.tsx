@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { CircleAlert, CircleCheck, Plus, Ruler } from "lucide-react";
+import { BookOpen, CircleAlert, CircleCheck, Copy, Plus, Ruler } from "lucide-react";
 import { requireTakeoff } from "@/lib/takeoff/access";
 import { TopBar } from "@/components/ui";
-import { Submit } from "@/components/forms";
+import { ConfirmSubmit, Submit } from "@/components/forms";
 import { dateShort } from "@/lib/format";
-import { createTakeoff } from "./actions";
+import { createTakeoff, deleteTemplate } from "./actions";
 import { STATUS_TEXT } from "@/lib/takeoff/calc";
 
 export const metadata = { title: "Takeoff" };
@@ -44,28 +44,37 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
     .order("updated_at", { ascending: false })
     .limit(300);
   query = inWs ? query.eq("ops_company_id", ws!.company.id) : query.is("ops_company_id", null);
+  query = query.eq("is_template", false);
   if (f !== "all") query = query.eq("status", f);
   if (q) {
     const like = `%${q.replace(/[\\%_,()]/g, " ")}%`;
     query = query.or(`name.ilike.${like},customer.ilike.${like},address.ilike.${like}`);
   }
-  const [{ data, error }, { data: companies }] = await Promise.all([
+  let tq = supabase.from("takeoffs").select("id, template_name, name, updated_at, takeoff_sheets(count), takeoff_items(count)").eq("is_template", true).order("template_name").limit(200);
+  tq = inWs ? tq.eq("ops_company_id", ws!.company.id) : tq.is("ops_company_id", null);
+  const [{ data, error }, { data: companies }, { data: tpl }] = await Promise.all([
     query,
     inWs
       ? supabase.from("ops_customers").select("name").eq("company_id", ws!.company.id).order("name").limit(2000)
       : supabase.from("companies").select("name").eq("active", true).order("name").limit(2000),
+    tq,
   ]);
+  const templates = (tpl ?? []) as unknown as { id: string; template_name: string | null; name: string; updated_at: string; takeoff_sheets: { count: number }[]; takeoff_items: { count: number }[] }[];
   const rows = (data ?? []) as unknown as Row[];
   const today = new Date().toISOString().slice(0, 10);
 
   return (
     <main className="shell wide">
-      <TopBar title={inWs ? "Takeoffs" : "Takeoff"} back={inWs ? "/ops/quotes" : "/ops"} />
+      <TopBar
+        title={inWs ? "Takeoffs" : "Takeoff"}
+        back={inWs ? "/ops/quotes" : "/ops"}
+        right={<Link href={`/takeoff/rules${inWs && staff ? "?ops=1" : ""}`} className="btn sm dark"><BookOpen size={15} /> AI rules</Link>}
+      />
       {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
       {sp.err ? <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div> : null}
       {error ? <div className="alert warn small">Run supabase/migrations/0019_takeoff.sql in Supabase first (SQL Editor).</div> : null}
 
-      <details className="card to-new" open={rows.length === 0 && !q && f === "all"}>
+      <details className="card to-new" id="new" open={(rows.length === 0 && !q && f === "all") || Boolean(sp.template)}>
         <summary>
           <span className="to-new-ic" aria-hidden="true"><Plus size={20} /></span>
           <span className="grow col tight">
@@ -94,7 +103,16 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
             <span className="label">Bid due</span>
             <input className="input" type="date" name="due" />
           </label>
-          <Submit className="btn">Create and add plans</Submit>
+          {templates.length ? (
+            <label className="field">
+              <span className="label">Start from</span>
+              <select className="select" name="template" defaultValue={sp.template ?? ""}>
+                <option value="">Blank: add the plans</option>
+                {templates.map((x) => <option key={x.id} value={x.id}>Template: {x.template_name || x.name}</option>)}
+              </select>
+            </label>
+          ) : null}
+          <Submit className="btn">Create</Submit>
         </form>
       </details>
 
@@ -113,6 +131,32 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
           </Link>
         ))}
       </div>
+
+      {templates.length ? (
+        <details className="card">
+          <summary style={{ cursor: "pointer", fontWeight: 800 }}><Copy size={16} style={{ verticalAlign: -3, marginRight: 6 }} />Templates · {templates.length}</summary>
+          <p className="tiny faint" style={{ margin: "6px 0 10px" }}>
+            Plans built over and over. A new takeoff started from one copies its plans, shapes and quantities (no AI needed): check it and adjust. Save one from a
+            takeoff&apos;s Report page.
+          </p>
+          <div className="list">
+            {templates.map((x) => (
+              <div key={x.id} className="item">
+                <div className="grow col tight" style={{ minWidth: 0 }}>
+                  <b className="ellipsis">{x.template_name || x.name}</b>
+                  <span className="tiny faint">{x.takeoff_sheets[0]?.count ?? 0} sheets · {x.takeoff_items[0]?.count ?? 0} items · saved {dateShort(x.updated_at)}</span>
+                </div>
+                <Link href={`/takeoff?template=${x.id}${inWs && staff ? "&ops=1" : ""}#new`} className="btn sm">Use</Link>
+                <Link href={`/takeoff/${x.id}`} className="btn sm dark">Open</Link>
+                <form action={deleteTemplate}>
+                  <input type="hidden" name="id" value={x.id} />
+                  <ConfirmSubmit className="btn sm dark" pendingText="…" confirm={`Delete the template "${x.template_name || x.name}"? Takeoffs started from it stay.`}>Delete</ConfirmSubmit>
+                </form>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       {rows.length === 0 ? (
         <div className="card muted small center">{q || f !== "all" ? "No takeoffs match." : "No takeoffs yet. Start one above."}</div>

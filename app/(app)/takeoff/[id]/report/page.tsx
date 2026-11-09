@@ -7,7 +7,7 @@ import { PrintButton } from "@/components/print-button";
 import { dateShort } from "@/lib/format";
 import { loadReport } from "@/lib/takeoff/load";
 import { STATUS_TEXT, assembly, feetInches, isFoam, num, pitchFactor } from "@/lib/takeoff/calc";
-import { deleteTakeoff, updateTakeoff } from "../../actions";
+import { deleteTakeoff, saveTemplate, updateTakeoff } from "../../actions";
 
 export const metadata = { title: "Takeoff report" };
 export const dynamic = "force-dynamic";
@@ -183,6 +183,14 @@ export default async function TakeoffReportPage({ params, searchParams }: { para
           </label>
           <label className="field" style={{ gridColumn: "1 / -1" }}><span className="label">Notes (printed on the report)</span><textarea className="textarea" name="notes" defaultValue={t.notes ?? ""} rows={3} maxLength={2000} placeholder="Assumptions, things to check, what's not included" /></label>
           <Submit className="btn sm">Save</Submit>
+        </form>
+        <form action={saveTemplate} className="row" style={{ gap: 10, marginTop: 18, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+          <input type="hidden" name="id" value={t.id} />
+          <label className="field grow" style={{ minWidth: 220 }}>
+            <span className="label">Save as a template (for a plan that&apos;s built over and over)</span>
+            <input className="input" name="template_name" defaultValue={t.name} required maxLength={120} placeholder="The plan's name, e.g. Magnolia 2034" />
+          </label>
+          <Submit className="btn sm dark" pendingText="Saving…">Save as template</Submit>
         </form>
         <form action={deleteTakeoff} className="row" style={{ gap: 10, marginTop: 18, flexWrap: "wrap", borderTop: "1px solid var(--line)", paddingTop: 14 }}>
           <input type="hidden" name="id" value={t.id} />

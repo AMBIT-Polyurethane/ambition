@@ -34,7 +34,7 @@ export async function loadReport(supabase: SupabaseClient, id: string): Promise<
   const [{ data: s }, { data: i }, { data: m }] = await Promise.all([
     supabase.from("takeoff_sheets").select("*").eq("takeoff_id", id).order("sort").order("page"),
     supabase.from("takeoff_items").select("*").eq("takeoff_id", id).order("sort").order("created_at"),
-    supabase.from("takeoff_marks").select("id, item_id, sheet_id, points, cutout").eq("takeoff_id", id).range(0, 19999),
+    supabase.from("takeoff_marks").select("id, item_id, sheet_id, points, cutout, ai, ref, note").eq("takeoff_id", id).range(0, 19999),
   ]);
   const sheets = ((s ?? []) as TSheet[]).map((x) => ({ ...x, width_pt: n(x.width_pt), height_pt: n(x.height_pt), ft_per_pt: n(x.ft_per_pt) }));
   const items = ((i ?? []) as TItem[]).map((x) => ({ ...x, thickness_in: n(x.thickness_in), height_ft: n(x.height_ft), pitch: n(x.pitch), deduct_sqft: Number(x.deduct_sqft ?? 0) }));

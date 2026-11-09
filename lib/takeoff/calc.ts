@@ -33,9 +33,17 @@ export type TItem = {
   area_code?: string | null;
   /** Linear items: "gable" = a triangle wall under the roof (attic demising wall), sized from its pitch. */
   shape?: "gable" | null;
+  /** Which assembly it is (lib/takeoff/assemblies.ts), when known. */
+  assembly?: string | null;
+  /** Set up by the AI. */
+  ai?: boolean;
 };
 
-export type TMark = { id: string; item_id: string; sheet_id: string; points: Pt[]; cutout: boolean };
+/**
+ * One shape on a sheet. `ai`: drawn by the AI and not checked yet (dashed until someone accepts or edits it).
+ * `ref`: for reference only (an elevation or section): drawn, never counted.
+ */
+export type TMark = { id: string; item_id: string; sheet_id: string; points: Pt[]; cutout: boolean; ai?: boolean; ref?: boolean; note?: string | null };
 
 export const STATUS_TEXT: Record<string, { label: string; cls: string }> = {
   in_progress: { label: "In progress", cls: "pill warn" },
@@ -126,7 +134,8 @@ export type Totals = {
 
 /** Totals for one item, over every sheet or just one. */
 export function itemTotals(item: TItem, marks: TMark[], sheets: Map<string, TSheet>, onlySheet?: string): Totals {
-  const mine = marks.filter((m) => m.item_id === item.id && (!onlySheet || m.sheet_id === onlySheet));
+  // Reference shapes (elevations) are never counted.
+  const mine = marks.filter((m) => m.item_id === item.id && !m.ref && (!onlySheet || m.sheet_id === onlySheet));
   let area = 0;
   let lf = 0;
   let count = 0;
