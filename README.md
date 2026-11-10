@@ -440,7 +440,8 @@ substrate prep, also as a draft. 0056: a lesson can have a Spanish version (`lan
 lesson; own video, quiz and results). Course and lesson pages show an English / Español switch (`components/academy/lang-switch.tsx`)
 that saves `profiles.academy_lang` through `academy_set_lang()`; with Spanish picked, English lesson links open the Spanish
 version. Student-facing wording is in `lib/academy-i18n.ts`. A lesson counts as passed in either language. Admins use
-"Add a Spanish version" (`createTranslation`). Seeds the Spanish lesson 1 "¿Qué es el calor?" as a draft. Certificates are next.
+"Add a Spanish version" (`createTranslation`). Seeds the Spanish lesson 1 "¿Qué es el calor?" as a draft. 0057 adds segments 1 and 2:
+Building science lessons 3 to 8 and Moisture lessons 2 to 5, each with a 5-question quiz, as drafts. Certificates are next.
 
 ### Home widgets, spot checks, reconciliation, incoming deliveries
 
