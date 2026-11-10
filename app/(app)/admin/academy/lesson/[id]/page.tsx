@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { TopBar } from "@/components/ui";
-import { ConfirmSubmit } from "@/components/forms";
+import { ConfirmSubmit, Submit } from "@/components/forms";
 import { LessonForm, QuestionForm, VideoUpload, type QuestionDraft } from "@/components/academy/admin";
-import { deleteLesson, deleteQuestion } from "@/app/(app)/admin/academy/actions";
+import { createTranslation, deleteLesson, deleteQuestion } from "@/app/(app)/admin/academy/actions";
 import type { AcademyLesson, AcademyQuestion, Course } from "@/lib/types";
 
 export const metadata = { title: "Edit lesson" };
@@ -21,7 +21,7 @@ export default async function LessonAdminPage({ params }: { params: Promise<{ id
   const { supabase } = await requireAdmin();
   const { data: lesson } = await supabase.from("academy_lessons").select("*").eq("id", id).maybeSingle<AcademyLesson>();
   if (!lesson) notFound();
-  const [{ data: course }, { data: qs }, { data: key }, { data: tries }] = await Promise.all([
+  const [{ data: course }, { data: qs }, { data: key }, { data: tries }, { data: sibs }] = await Promise.all([
     supabase.from("courses").select("*").eq("id", lesson.course_id).maybeSingle<Course>(),
     supabase.from("academy_questions").select("id, lesson_id, sort, prompt, choices").eq("lesson_id", id).order("sort").order("id"),
     supabase.rpc("academy_answer_key", { p_lesson: id }),
@@ -31,7 +31,13 @@ export default async function LessonAdminPage({ params }: { params: Promise<{ id
       .eq("lesson_id", id)
       .order("created_at", { ascending: false })
       .limit(1000),
+    supabase.from("academy_lessons").select("*").eq("course_id", lesson.course_id),
   ]);
+  // Spanish versions (0056): the English lesson links to its Spanish one and back.
+  const course_lessons = (sibs ?? []) as AcademyLesson[];
+  const canTranslate = "lang" in lesson;
+  const english = lesson.translation_of ? course_lessons.find((l) => l.id === lesson.translation_of) ?? null : null;
+  const spanish = !lesson.translation_of ? course_lessons.find((l) => l.translation_of === lesson.id && l.lang === "es") ?? null : null;
   const keys = new Map(((key ?? []) as { id: string; answer: number; explain: string | null }[]).map((k) => [k.id, k]));
   const questions: QuestionDraft[] = ((qs ?? []) as AcademyQuestion[]).map((q) => ({
     id: q.id, sort: q.sort, prompt: q.prompt, choices: q.choices, answer: keys.get(q.id)?.answer ?? 0, explain: keys.get(q.id)?.explain ?? null,
@@ -57,7 +63,35 @@ export default async function LessonAdminPage({ params }: { params: Promise<{ id
         right={<Link className="btn sm dark" href={`/academy/lesson/${lesson.id}`}>Preview</Link>} />
       {course ? <div className="eyebrow">{course.title}</div> : null}
 
+      {english ? (
+        <div className="card small">
+          Spanish version of <Link href={`/admin/academy/lesson/${english.id}`}><b>Lesson {english.number}: {english.title}</b></Link>. Students see an English / Español switch on the lesson once both are live.
+        </div>
+      ) : null}
+
       <LessonForm lesson={lesson} />
+
+      {canTranslate && !lesson.translation_of ? (
+        <section className="section">
+          <div className="eyebrow">Spanish version</div>
+          {spanish ? (
+            <Link href={`/admin/academy/lesson/${spanish.id}`} className="item card">
+              <div className="ic lesson-num" style={{ fontSize: 12 }}>ES</div>
+              <div className="grow">
+                <div className="t">{spanish.title}</div>
+                <div className="s">{spanish.video_path ? "Video uploaded" : "No video yet"} · its own quiz and results</div>
+              </div>
+              {spanish.status === "live" ? <span className="pill ok">Live</span> : <span className="pill warn">Draft</span>}
+            </Link>
+          ) : (
+            <form action={createTranslation} className="card row wrap" style={{ alignItems: "center" }}>
+              <input type="hidden" name="id" value={lesson.id} />
+              <div className="grow small muted">Add a Spanish version with its own video and quiz. Students get an English / Español switch on this lesson.</div>
+              <Submit className="btn sm">Add a Spanish version</Submit>
+            </form>
+          )}
+        </section>
+      ) : null}
 
       <section className="section">
         <div className="eyebrow">Video</div>

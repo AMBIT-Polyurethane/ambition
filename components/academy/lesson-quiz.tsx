@@ -4,13 +4,15 @@ import { useState, useTransition } from "react";
 import { CircleCheck, CircleX, RotateCcw } from "lucide-react";
 import { submitQuiz } from "@/app/(app)/academy/actions";
 import type { AcademyQuestion, QuizResult } from "@/lib/types";
+import { academyText, type AcademyLang } from "@/lib/academy-i18n";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
 /** The graded quiz under a lesson: pick one answer per question, then see the score, the right answers and why. */
-export function LessonQuiz({ lessonId, questions, passPct, nextHref }: {
-  lessonId: string; questions: AcademyQuestion[]; passPct: number; nextHref?: string | null;
+export function LessonQuiz({ lessonId, questions, passPct, nextHref, lang = "en" }: {
+  lessonId: string; questions: AcademyQuestion[]; passPct: number; nextHref?: string | null; lang?: AcademyLang;
 }) {
+  const t = academyText(lang);
   const [picks, setPicks] = useState<Record<string, number>>({});
   const [result, setResult] = useState<QuizResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export function LessonQuiz({ lessonId, questions, passPct, nextHref }: {
             </div>
             {r ? (
               <p className={`small quiz-why ${r.correct ? "ok" : "bad"}`}>
-                <b>{r.correct ? "Right." : "Not quite."}</b> {r.explain}
+                <b>{r.correct ? t.right : t.notQuite}</b> {r.explain}
               </p>
             ) : null}
           </fieldset>
@@ -71,15 +73,15 @@ export function LessonQuiz({ lessonId, questions, passPct, nextHref }: {
       {result ? (
         <div id="quiz-score" className={`card quiz-score ${result.passed ? "pass" : "fail"}`}>
           <div className="quiz-big">{result.score} / {result.total}</div>
-          <div className="t">{result.passed ? "Passed. Nice work." : `Not yet. You need ${Math.ceil((passPct * result.total) / 100)} of ${result.total} to pass.`}</div>
+          <div className="t">{result.passed ? t.passedNice : t.notYet(Math.ceil((passPct * result.total) / 100), result.total)}</div>
           <div className="row wrap" style={{ justifyContent: "center" }}>
-            <button type="button" className="btn dark sm" onClick={retake}><RotateCcw size={15} /> Take it again</button>
-            {result.passed && nextHref ? <a className="btn sm" href={nextHref}>Next lesson</a> : null}
+            <button type="button" className="btn dark sm" onClick={retake}><RotateCcw size={15} /> {t.again}</button>
+            {result.passed && nextHref ? <a className="btn sm" href={nextHref}>{t.next}</a> : null}
           </div>
         </div>
       ) : (
         <button type="button" className="btn block" disabled={answered < questions.length || pending} onClick={submit}>
-          {pending ? "Grading…" : answered < questions.length ? `${answered} of ${questions.length} answered` : "Check my answers"}
+          {pending ? t.grading : answered < questions.length ? t.answered(answered, questions.length) : t.check}
         </button>
       )}
     </div>

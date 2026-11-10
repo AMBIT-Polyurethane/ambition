@@ -9,14 +9,14 @@ export const metadata = { title: "AMBIT Academy" };
 
 const ICONS = ["book", "drum", "layers", "headset", "shield", "academy"];
 
-type Row = Course & { academy_lessons?: { id: string; status: string }[] | null };
+type Row = Course & { academy_lessons?: { id: string; status: string; translation_of?: string | null; lang?: string }[] | null };
 
 export default async function AcademyPage() {
   const { supabase, profile } = await requireActive();
   const admin = profile.role === "admin";
   // Lessons come with each course (only live ones for students; admins also get drafts). Before migration 0054
   // the embed fails, so fall back to the plain course list.
-  let { data, error } = await supabase.from("courses").select("*, academy_lessons(id, status)").order("sort");
+  let { data, error } = await supabase.from("courses").select("*, academy_lessons(*)").order("sort");
   if (error) ({ data } = await supabase.from("courses").select("*").order("sort"));
   const courses = (data ?? []) as Row[];
 
@@ -34,12 +34,13 @@ export default async function AcademyPage() {
         <div className="eyebrow">Courses</div>
         <div className="list">
           {courses.map((c, i) => {
-            const lessons = c.academy_lessons ?? [];
+            const lessons = (c.academy_lessons ?? []).filter((l) => !l.translation_of);
+            const spanish = (c.academy_lessons ?? []).some((l) => l.translation_of && l.lang === "es");
             const live = lessons.filter((l) => l.status === "live").length;
             const inApp = live > 0 || (admin && lessons.length > 0);
             const external = !inApp && c.status === "live" && c.url;
             const count = inApp ? (admin ? lessons.length : live) : c.lessons;
-            const meta = [count ? `${count} lesson${count === 1 ? "" : "s"}` : null, c.minutes ? `${c.minutes} min` : null].filter(Boolean).join(" · ");
+            const meta = [count ? `${count} lesson${count === 1 ? "" : "s"}` : null, c.minutes ? `${c.minutes} min` : null, inApp && spanish ? "English · Español" : null].filter(Boolean).join(" · ");
             const inner = (
               <>
                 <div className="ic"><Icon name={ICONS[i % ICONS.length]} /></div>

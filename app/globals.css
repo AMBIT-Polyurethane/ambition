@@ -3137,3 +3137,6 @@ html.ix-lock, html.ix-lock body { overflow: hidden; }
 .quiz-score.pass { border-color: var(--ok); }
 .quiz-score.pass .quiz-big { color: var(--ok); }
 .quiz-score.fail .quiz-big { color: var(--red-text); }
+
+/* Academy: English / Español switch (0056) */
+.lang-switch { align-self: flex-start; width: 220px; }

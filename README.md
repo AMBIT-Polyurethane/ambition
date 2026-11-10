@@ -436,7 +436,11 @@ URL, `components/academy/lesson-quiz.tsx`). Admin: `/admin/academy` (lessons per
 `/admin/academy/lesson/[id]` (details, video uploaded straight from the browser to storage then `setLessonVideo`, question
 editor, results per person). Seeds lesson 1 "What Is Heat?" (5 questions) and lesson 2 "Heat Flow 101" (4) in Building
 science fundamentals as drafts. 0055 adds Moisture lesson 1 "The Dew Point" (5 questions) to Moisture, dew point &
-substrate prep, also as a draft. Certificates are next.
+substrate prep, also as a draft. 0056: a lesson can have a Spanish version (`lang = 'es'`, `translation_of` = the English
+lesson; own video, quiz and results). Course and lesson pages show an English / Español switch (`components/academy/lang-switch.tsx`)
+that saves `profiles.academy_lang` through `academy_set_lang()`; with Spanish picked, English lesson links open the Spanish
+version. Student-facing wording is in `lib/academy-i18n.ts`. A lesson counts as passed in either language. Admins use
+"Add a Spanish version" (`createTranslation`). Seeds the Spanish lesson 1 "¿Qué es el calor?" as a draft. Certificates are next.
 
 ### Home widgets, spot checks, reconciliation, incoming deliveries
 

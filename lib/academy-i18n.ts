@@ -1,0 +1,68 @@
+/** Wording for the student-facing Academy screens, in English and Spanish (migration 0056). */
+export type AcademyLang = "en" | "es";
+
+export const asLang = (v: unknown): AcademyLang => (v === "es" ? "es" : "en");
+
+const T = {
+  en: {
+    lesson: (n: number) => `Lesson ${n}`,
+    min: (n: number) => `${n} min`,
+    quizMeta: (q: number, pct: number) => `${q}-question quiz, pass with ${pct}%`,
+    draft: "Draft: only admins see this",
+    noVideoAdmin: "No video yet. Upload it in Admin > Academy.",
+    noVideo: "The video for this lesson is coming soon.",
+    passedLesson: "You passed this lesson",
+    notPassed: "Not passed yet",
+    bestScore: (s: number, t: number) => `best score ${s} of ${t}`,
+    tries: (n: number) => `${n} tries`,
+    quiz: "Quiz",
+    crew: "For your crew",
+    crewNote: "Talk it over with your classmates or at your next crew meeting.",
+    nextLesson: (n: number) => `Next: lesson ${n}`,
+    lessonsPassed: (p: number, n: number) => `${p} of ${n} lessons passed`,
+    best: (s: number, t: number) => `best ${s}/${t}`,
+    notTaken: "quiz not taken",
+    noLessons: "Lessons for this course are coming soon.",
+    // quiz
+    right: "Right.",
+    notQuite: "Not quite.",
+    passedNice: "Passed. Nice work.",
+    notYet: (need: number, total: number) => `Not yet. You need ${need} of ${total} to pass.`,
+    again: "Take it again",
+    next: "Next lesson",
+    grading: "Grading…",
+    answered: (a: number, n: number) => `${a} of ${n} answered`,
+    check: "Check my answers",
+  },
+  es: {
+    lesson: (n: number) => `Lección ${n}`,
+    min: (n: number) => `${n} min`,
+    quizMeta: (q: number, pct: number) => `cuestionario de ${q} preguntas, apruebas con ${pct}%`,
+    draft: "Borrador: solo los administradores lo ven",
+    noVideoAdmin: "Todavía no hay video. Súbelo en Admin > Academy.",
+    noVideo: "El video de esta lección estará disponible pronto.",
+    passedLesson: "Aprobaste esta lección",
+    notPassed: "Todavía no aprobada",
+    bestScore: (s: number, t: number) => `mejor puntaje ${s} de ${t}`,
+    tries: (n: number) => `${n} intentos`,
+    quiz: "Cuestionario",
+    crew: "Para tu cuadrilla",
+    crewNote: "Coméntalo con tus compañeros o en la próxima junta de la cuadrilla.",
+    nextLesson: (n: number) => `Siguiente: lección ${n}`,
+    lessonsPassed: (p: number, n: number) => `${p} de ${n} lecciones aprobadas`,
+    best: (s: number, t: number) => `mejor ${s}/${t}`,
+    notTaken: "cuestionario sin hacer",
+    noLessons: "Las lecciones de este curso estarán disponibles pronto.",
+    right: "Correcto.",
+    notQuite: "No exactamente.",
+    passedNice: "¡Aprobaste! Buen trabajo.",
+    notYet: (need: number, total: number) => `Todavía no. Necesitas ${need} de ${total} para aprobar.`,
+    again: "Hacerlo otra vez",
+    next: "Siguiente lección",
+    grading: "Calificando…",
+    answered: (a: number, n: number) => `${a} de ${n} contestadas`,
+    check: "Revisar mis respuestas",
+  },
+} as const;
+
+export const academyText = (lang: AcademyLang) => T[lang];

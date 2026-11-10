@@ -54,6 +54,8 @@ export type Profile = {
   notify_credit?: boolean;
   /** Approves expense reports and sees the expense dashboard (0050, Admin > Expense reports). */
   expense_approver?: boolean;
+  /** The language they picked for Academy lessons (0056); null means English. */
+  academy_lang?: "en" | "es" | null;
 };
 
 export type Branch = {
@@ -251,6 +253,9 @@ export type AcademyLesson = {
   discussion: string | null;
   created_at: string;
   updated_at: string;
+  /** 0056: "es" for a Spanish version, which points at its English lesson through translation_of. */
+  lang?: "en" | "es";
+  translation_of?: string | null;
 };
 
 /** What a student may read about a quiz question: no answer, no explanation. */

@@ -66,11 +66,33 @@ export async function saveLesson(_: unknown, form: FormData): Promise<{ ok?: str
 export async function deleteLesson(form: FormData) {
   const { supabase } = await requireAdmin();
   const id = s(form, "id");
-  const { data: l } = await supabase.from("academy_lessons").select("video_path, course_id").eq("id", id).maybeSingle<{ video_path: string | null; course_id: string }>();
+  const { data: l } = await supabase.from("academy_lessons").select("*").eq("id", id).maybeSingle<{ video_path: string | null; course_id: string; translation_of?: string | null }>();
+  // Deleting a lesson also deletes its Spanish version (0056), so clear that version's video too.
+  const { data: tr } = await supabase.from("academy_lessons").select("*").eq("course_id", l?.course_id ?? "").order("number");
+  const videos = [l?.video_path, ...((tr ?? []) as { translation_of?: string | null; video_path: string | null }[]).filter((v) => v.translation_of === id).map((v) => v.video_path)]
+    .filter((v): v is string => Boolean(v));
   await supabase.from("academy_lessons").delete().eq("id", id);
-  if (l?.video_path) await supabase.storage.from("academy").remove([l.video_path]);
+  if (videos.length) await supabase.storage.from("academy").remove(videos);
   touch(id, l?.course_id);
-  redirect("/admin/academy");
+  redirect(l?.translation_of ? `/admin/academy/lesson/${l.translation_of}` : "/admin/academy");
+}
+
+/** Starts the Spanish version of a lesson: same course, number and pass mark; its own title, video and quiz. */
+export async function createTranslation(form: FormData) {
+  const { supabase } = await requireAdmin();
+  const id = s(form, "id");
+  const { data: base } = await supabase.from("academy_lessons").select("*").eq("id", id).maybeSingle<{ id: string; course_id: string; number: number; title: string; minutes: number | null; pass_pct: number; translation_of?: string | null }>();
+  if (!base || base.translation_of) return;
+  const { data: have } = await supabase.from("academy_lessons").select("id").eq("translation_of", id).eq("lang", "es").maybeSingle<{ id: string }>();
+  if (have) redirect(`/admin/academy/lesson/${have.id}`);
+  const { data, error } = await supabase
+    .from("academy_lessons")
+    .insert({ course_id: base.course_id, number: base.number, title: `${base.title} (español)`, minutes: base.minutes, pass_pct: base.pass_pct, lang: "es", translation_of: base.id })
+    .select("id")
+    .single<{ id: string }>();
+  if (error || !data) throw new Error(error?.message ?? "Couldn't add the Spanish version.");
+  touch(data.id, base.course_id);
+  redirect(`/admin/academy/lesson/${data.id}`);
 }
 
 /** After the browser uploads a video straight to storage, point the lesson at it (and remove the old one). */

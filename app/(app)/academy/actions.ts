@@ -15,3 +15,12 @@ export async function submitQuiz(lessonId: string, answers: Record<string, numbe
   revalidatePath("/academy");
   return { result: data as QuizResult };
 }
+
+/** Remembers the language someone wants their Academy lessons in. */
+export async function setAcademyLang(lang: "en" | "es"): Promise<{ error?: string }> {
+  const { supabase } = await requireActive();
+  const { error } = await supabase.rpc("academy_set_lang", { p_lang: lang === "es" ? "es" : "en" });
+  if (error) return { error: error.message };
+  revalidatePath("/academy", "layout");
+  return {};
+}
