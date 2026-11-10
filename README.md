@@ -435,7 +435,8 @@ link or "Soon"), `/academy/course/[id]` (lessons, best score, progress), `/acade
 URL, `components/academy/lesson-quiz.tsx`). Admin: `/admin/academy` (lessons per course, add a lesson),
 `/admin/academy/lesson/[id]` (details, video uploaded straight from the browser to storage then `setLessonVideo`, question
 editor, results per person). Seeds lesson 1 "What Is Heat?" (5 questions) and lesson 2 "Heat Flow 101" (4) in Building
-science fundamentals as drafts. Certificates are next.
+science fundamentals as drafts. 0055 adds Moisture lesson 1 "The Dew Point" (5 questions) to Moisture, dew point &
+substrate prep, also as a draft. Certificates are next.
 
 ### Home widgets, spot checks, reconciliation, incoming deliveries
 
