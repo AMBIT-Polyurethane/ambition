@@ -256,6 +256,8 @@ export type AcademyLesson = {
   /** 0056: "es" for a Spanish version, which points at its English lesson through translation_of. */
   lang?: "en" | "es";
   translation_of?: string | null;
+  /** 0058: optional light-mode copy of the video, shown to people using the app in Light mode. */
+  video_path_light?: string | null;
 };
 
 /** What a student may read about a quiz question: no answer, no explanation. */

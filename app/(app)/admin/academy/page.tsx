@@ -64,7 +64,7 @@ export default async function AcademyAdminPage() {
                     <div className="ic lesson-num">{l.number}</div>
                     <div className="grow">
                       <div className="t">{l.title}</div>
-                      <div className="s">{l.video_path ? "Video uploaded" : "No video yet"}</div>
+                      <div className="s">{l.video_path ? (l.video_path_light ? "Video uploaded · light version too" : "Video uploaded") : "No video yet"}</div>
                     </div>
                     {l.status === "live" ? <span className="pill ok">Live</span> : <span className="pill warn">Draft</span>}
                   </Link>
@@ -73,7 +73,7 @@ export default async function AcademyAdminPage() {
                       <div className="ic lesson-num" style={{ fontSize: 12 }}>ES</div>
                       <div className="grow">
                         <div className="t">{v.title}</div>
-                        <div className="s">Spanish version · {v.video_path ? "Video uploaded" : "No video yet"}</div>
+                        <div className="s">Spanish version · {v.video_path ? (v.video_path_light ? "Video uploaded · light version too" : "Video uploaded") : "No video yet"}</div>
                       </div>
                       {v.status === "live" ? <span className="pill ok">Live</span> : <span className="pill warn">Draft</span>}
                     </Link>

@@ -441,7 +441,10 @@ lesson; own video, quiz and results). Course and lesson pages show an English / 
 that saves `profiles.academy_lang` through `academy_set_lang()`; with Spanish picked, English lesson links open the Spanish
 version. Student-facing wording is in `lib/academy-i18n.ts`. A lesson counts as passed in either language. Admins use
 "Add a Spanish version" (`createTranslation`). Seeds the Spanish lesson 1 "¿Qué es el calor?" as a draft. 0057 adds segments 1 and 2:
-Building science lessons 3 to 8 and Moisture lessons 2 to 5, each with a 5-question quiz, as drafts. Certificates are next.
+Building science lessons 3 to 8 and Moisture lessons 2 to 5, each with a 5-question quiz, as drafts. Certificates are next. 0058: a lesson can
+have a light-mode copy of its video (`video_path_light`, uploaded under "Light-mode video" on the admin lesson page). The
+player (`components/academy/lesson-video.tsx`) plays it for people using the app in Light mode (Appearance Light, or Auto
+on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place, keeping the spot, if the look changes.
 
 ### Home widgets, spot checks, reconciliation, incoming deliveries
 

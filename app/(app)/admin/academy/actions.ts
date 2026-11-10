@@ -96,13 +96,17 @@ export async function createTranslation(form: FormData) {
 }
 
 /** After the browser uploads a video straight to storage, point the lesson at it (and remove the old one). */
-export async function setLessonVideo(lessonId: string, path: string | null): Promise<{ error?: string }> {
+/** look "light": the light-mode copy (0058), shown to people using the app in Light mode. */
+export async function setLessonVideo(lessonId: string, path: string | null, look: "dark" | "light" = "dark"): Promise<{ error?: string }> {
   const { supabase } = await requireAdmin();
   if (path && !path.startsWith(`${lessonId}/`)) return { error: "That file isn't this lesson's." };
-  const { data: l } = await supabase.from("academy_lessons").select("video_path, course_id").eq("id", lessonId).maybeSingle<{ video_path: string | null; course_id: string }>();
-  const { error } = await supabase.from("academy_lessons").update({ video_path: path, updated_at: new Date().toISOString() }).eq("id", lessonId);
+  const col = look === "light" ? "video_path_light" : "video_path";
+  const { data: l, error: readErr } = await supabase.from("academy_lessons").select(`${col}, course_id`).eq("id", lessonId).maybeSingle<Record<string, string | null>>();
+  if (readErr && look === "light") return { error: "Light-mode videos need update 0058 run in Supabase first." };
+  const { error } = await supabase.from("academy_lessons").update({ [col]: path, updated_at: new Date().toISOString() }).eq("id", lessonId);
   if (error) return { error: error.message };
-  if (l?.video_path && l.video_path !== path) await supabase.storage.from("academy").remove([l.video_path]);
+  const old = l?.[col] ?? null;
+  if (old && old !== path) await supabase.storage.from("academy").remove([old]);
   touch(lessonId, l?.course_id);
   return {};
 }

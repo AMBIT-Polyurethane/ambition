@@ -3109,6 +3109,7 @@ html.ix-lock, html.ix-lock body { overflow: hidden; }
 /* ---------- Academy lessons and quizzes (0054) ---------- */
 .lesson-video { width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius); background: #000; display: block; }
 .lesson-video.empty-video { display: grid; place-items: center; background: var(--s1); }
+.lesson-video.light-look { background: #f1f0ec; }
 .item .ic.lesson-num { font-weight: 800; font-size: 16px; color: var(--red-text); }
 .progress { height: 6px; border-radius: 99px; background: var(--s2); overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--red); border-radius: 99px; }

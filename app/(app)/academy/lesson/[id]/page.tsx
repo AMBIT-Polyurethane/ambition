@@ -5,6 +5,8 @@ import { requireActive } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { LessonQuiz } from "@/components/academy/lesson-quiz";
 import { LangSwitch } from "@/components/academy/lang-switch";
+import { LessonVideo } from "@/components/academy/lesson-video";
+import { getTheme } from "@/lib/theme-server";
 import { academyText, asLang } from "@/lib/academy-i18n";
 import type { AcademyAttempt, AcademyLesson, AcademyQuestion, Course } from "@/lib/types";
 
@@ -42,7 +44,9 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
   const nextBase = all.find((l) => !l.translation_of && l.number > lesson.number && (l.status === "live" || admin));
   const nextEs = nextBase && lang === "es" ? all.find((l) => l.translation_of === nextBase.id && l.lang === "es") : null;
   const next = nextEs ?? nextBase ?? null;
-  const video = lesson.video_path ? (await supabase.storage.from("academy").createSignedUrl(lesson.video_path, 60 * 60 * 6)).data?.signedUrl ?? null : null;
+  const sign = async (path: string | null | undefined) => (path ? (await supabase.storage.from("academy").createSignedUrl(path, 60 * 60 * 6)).data?.signedUrl ?? null : null);
+  // The main video, and its light-mode copy when there is one (0058); the player shows the one that matches the app's look.
+  const [video, videoLight, theme] = await Promise.all([sign(lesson.video_path), sign(lesson.video_path_light), getTheme()]);
 
   return (
     <main className="shell">
@@ -58,7 +62,7 @@ export default async function LessonPage({ params }: { params: Promise<{ id: str
       </div>
 
       {video ? (
-        <video className="lesson-video" src={video} controls playsInline preload="metadata" />
+        <LessonVideo dark={video} light={videoLight} theme={theme} />
       ) : (
         <div className="card lesson-video empty-video">
           <span className="muted small">{admin ? t.noVideoAdmin : t.noVideo}</span>

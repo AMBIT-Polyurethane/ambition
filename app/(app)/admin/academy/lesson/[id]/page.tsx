@@ -43,6 +43,9 @@ export default async function LessonAdminPage({ params }: { params: Promise<{ id
     id: q.id, sort: q.sort, prompt: q.prompt, choices: q.choices, answer: keys.get(q.id)?.answer ?? 0, explain: keys.get(q.id)?.explain ?? null,
   }));
   const video = lesson.video_path ? (await supabase.storage.from("academy").createSignedUrl(lesson.video_path, 60 * 60)).data?.signedUrl ?? null : null;
+  // Light-mode copy (0058): only once the column exists.
+  const canLight = "video_path_light" in lesson;
+  const videoLight = lesson.video_path_light ? (await supabase.storage.from("academy").createSignedUrl(lesson.video_path_light, 60 * 60)).data?.signedUrl ?? null : null;
 
   // One row per person: best score, how many tries, last try.
   const people = new Map<string, { name: string; company: string; best: Try; tries: number; last: string }>();
@@ -94,12 +97,27 @@ export default async function LessonAdminPage({ params }: { params: Promise<{ id
       ) : null}
 
       <section className="section">
-        <div className="eyebrow">Video</div>
+        <div className="eyebrow">{canLight ? "Video · dark (the main one)" : "Video"}</div>
         <div className="card col">
           {video ? <video className="lesson-video" src={video} controls playsInline preload="metadata" /> : <div className="small muted">No video yet.</div>}
           <VideoUpload lessonId={lesson.id} hasVideo={Boolean(video)} />
         </div>
       </section>
+
+      {canLight ? (
+        <section className="section">
+          <div className="eyebrow">Light-mode video (optional)</div>
+          <div className="card col">
+            <div className="small muted">
+              The same lesson with a white background. People who use the app in Light mode (Profile → Appearance → Light, or Auto on a phone or computer set to light) see this one; everyone else sees the main video. Without it, everyone sees the main video.
+            </div>
+            {videoLight ? <video className="lesson-video light-look" src={videoLight} controls playsInline preload="metadata" /> : <div className="small muted">No light-mode video yet.</div>}
+            <VideoUpload lessonId={lesson.id} hasVideo={Boolean(videoLight)} look="light" />
+          </div>
+        </section>
+      ) : (
+        <div className="alert small">Light-mode videos need update 0058 run in Supabase first.</div>
+      )}
 
       <section className="section">
         <div className="eyebrow">Quiz · {questions.length} question{questions.length === 1 ? "" : "s"} · pass with {lesson.pass_pct}%</div>

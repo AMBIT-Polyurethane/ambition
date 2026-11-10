@@ -33,8 +33,10 @@ export function LessonForm({ lesson }: { lesson: AcademyLesson }) {
   );
 }
 
-/** Uploads the video straight from the browser to storage (videos are too big to pass through the app's server). */
-export function VideoUpload({ lessonId, hasVideo }: { lessonId: string; hasVideo: boolean }) {
+/** Uploads the video straight from the browser to storage (videos are too big to pass through the app's server).
+ *  look "light": the light-mode copy of the lesson (0058). */
+export function VideoUpload({ lessonId, hasVideo, look = "dark" }: { lessonId: string; hasVideo: boolean; look?: "dark" | "light" }) {
+  const light = look === "light";
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -47,7 +49,7 @@ export function VideoUpload({ lessonId, hasVideo }: { lessonId: string; hasVideo
     const mb = Math.round(file.size / 1048576);
     setBusy(`Uploading ${file.name} (${mb} MB). Keep this page open; a 50 MB video takes about a minute on good internet.`);
     const ext = file.name.toLowerCase().endsWith(".mov") ? "mov" : "mp4";
-    const path = `${lessonId}/${crypto.randomUUID()}.${ext}`;
+    const path = `${lessonId}/${light ? "light-" : ""}${crypto.randomUUID()}.${ext}`;
     const up = await supabase.storage.from("academy").upload(path, file, { contentType: file.type || (ext === "mov" ? "video/quicktime" : "video/mp4"), upsert: false });
     if (up.error) {
       setBusy(null);
@@ -57,7 +59,7 @@ export function VideoUpload({ lessonId, hasVideo }: { lessonId: string; hasVideo
         : `The upload didn't work: ${up.error.message}`);
       return;
     }
-    const r = await setLessonVideo(lessonId, path);
+    const r = await setLessonVideo(lessonId, path, look);
     setBusy(null);
     if (r.error) {
       await supabase.storage.from("academy").remove([path]);
@@ -69,9 +71,11 @@ export function VideoUpload({ lessonId, hasVideo }: { lessonId: string; hasVideo
   };
 
   const remove = async () => {
-    if (!window.confirm("Remove this lesson's video? Students will see \"coming soon\" until you upload another.")) return;
+    if (!window.confirm(light
+      ? "Remove the light-mode video? Everyone will see the main video again."
+      : "Remove this lesson's video? Students will see \"coming soon\" until you upload another.")) return;
     setBusy("Removing…");
-    const r = await setLessonVideo(lessonId, null);
+    const r = await setLessonVideo(lessonId, null, look);
     setBusy(null);
     if (r.error) setError(r.error);
     else router.refresh();
@@ -81,10 +85,10 @@ export function VideoUpload({ lessonId, hasVideo }: { lessonId: string; hasVideo
     <div className="col tight">
       <div className="row wrap">
         <label className="btn sm dark" style={{ cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1 }}>
-          <Upload size={15} /> {hasVideo ? "Replace video" : "Upload video"}
+          <Upload size={15} /> {light ? (hasVideo ? "Replace light-mode video" : "Upload light-mode video") : hasVideo ? "Replace video" : "Upload video"}
           <input ref={input} type="file" accept="video/mp4,video/quicktime,.mp4,.mov" hidden disabled={Boolean(busy)} onChange={(e) => pick(e.target.files?.[0])} />
         </label>
-        {hasVideo ? <button type="button" className="btn sm ghost" disabled={Boolean(busy)} onClick={remove}>Remove video</button> : null}
+        {hasVideo ? <button type="button" className="btn sm ghost" disabled={Boolean(busy)} onClick={remove}>{light ? "Remove light-mode video" : "Remove video"}</button> : null}
       </div>
       {busy ? <div className="small muted">{busy}</div> : null}
       {error ? <div className="alert err" role="alert">{error}</div> : null}
