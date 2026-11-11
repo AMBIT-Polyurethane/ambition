@@ -174,7 +174,9 @@ export async function cancelIncoming(form: FormData) {
   const s = await receivers();
   if (!s) return;
   const id = Number(form.get("id"));
+  const { data: d } = await s.supabase.from("inbound_deliveries").select("branch_id, status").eq("id", id).maybeSingle<{ branch_id: string; status: string }>();
   const { error } = await s.supabase.rpc("inbound_cancel", { p_id: id });
   if (error) done(`/inventory/incoming/${id}`, "err", error.message);
-  done(`/inventory/incoming`, "msg", "Delivery cancelled.");
+  // Back to that location's Receiving list (not the first location).
+  done(d ? `/inventory/incoming?b=${d.branch_id}` : `/inventory/incoming`, "msg", d?.status === "expected" ? "Delivery cancelled." : "Report cancelled. Nothing changed in stock.");
 }
