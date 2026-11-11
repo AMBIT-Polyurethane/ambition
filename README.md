@@ -571,8 +571,15 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   Admin → Products → Categories), `sales_goals` (person × group, monthly dollars; Admin → Sales goals,
   `admin_set_sales_goals`). `sales_goal_board(month, person)` returns each person's sales by group for the month (orders
   placed that month, not cancelled, priced lines only): sales reps by `orders.sales_rep_id`, warehouse managers
-  (`job_role = warehouse`) by `orders.branch_id`. Home: "Your sales goals" (reps, warehouse) and "Sales goals"
-  (admins); `/sales-goals` has the month-by-month table.
+  (`job_role = warehouse`) by `orders.branch_id`. Home: "Your sales goals" (reps, warehouse) and, for admins, two
+  trackers: "Sales staff goals" (`job_role = sales_rep`) and "Warehouse goals" (everyone else on the board;
+  `teamOf()` in `lib/sales-goals.ts`); `/sales-goals?t=sales|warehouse` has the month-by-month tables.
+- **A person's sales list**: `/sales-goals/[id]` (a name on the trackers, Admin → Sales goals, or "All your
+  sales" on a rep's own card). Customer, date of sale and total for every order credited to them, newest first,
+  using the same rules as the board (`personSales()` in `lib/sales-goals-server.ts`: rep by `sales_rep_id`,
+  warehouse by `branch_id`, not cancelled, priced lines only, Central-time days). Date filter presets and From / To
+  in `lib/sales-range.ts` and `components/range-filter.tsx` (all in the link: `?r=last_month`, `?from=…&to=…`).
+  Admins open anyone's; others only their own. No database change (orders are readable by all staff).
 
 Home "Jump back in" checks remembered orders with `openOrders()` and drops deleted, cancelled and completed ones.
 

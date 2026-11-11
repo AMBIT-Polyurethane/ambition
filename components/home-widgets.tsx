@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowDownRight, ArrowUpRight, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, FileCheck, Landmark, OctagonAlert, Truck, UserCheck, UserCog } from "lucide-react";
 import { money, qtyText } from "@/lib/format";
@@ -21,7 +21,7 @@ import {
 } from "@/lib/widgets";
 import { SpotCheckForm } from "@/components/count-input";
 import { GoalCardBody, TeamGoals } from "@/components/goal-views";
-import { monthGone, sum } from "@/lib/sales-goals";
+import { TEAM_LABEL, monthGone, sum, teamOf, type GoalTeam } from "@/lib/sales-goals";
 import { goalBoard } from "@/lib/sales-goals-server";
 import { WeekCalendar } from "@/components/week-calendar";
 import type { Profile } from "@/lib/types";
@@ -182,6 +182,10 @@ async function GoalsWidget({ db, profile, due }: { db: Db; profile: Profile; due
   return (
     <Card title={`Your sales goals · ${month}`} href="/sales-goals" link="Details">
       <GoalCardBody p={me} gone={monthGone(board.month, todayCentral())} compact />
+      <Link href={`/sales-goals/${me.id}`} className="wg-row">
+        <span className="grow">All your sales, any dates</span>
+        <ChevronRight size={15} />
+      </Link>
       {due?.length ? (
         <Link href="/orders/due" className="wg-row warn">
           <b>{due.length}</b>
@@ -196,26 +200,33 @@ async function GoalsWidget({ db, profile, due }: { db: Db; profile: Profile; due
   );
 }
 
-/** Admin: every rep's and warehouse manager's month against their goal. */
-async function TeamGoalsWidget({ db }: { db: Db }) {
-  const board = await goalBoard(db);
-  if (!board || !board.people.length) {
+/** This month's board, asked for once per page load even though two cards show it. */
+const boardNow = cache((db: Db) => goalBoard(db));
+
+/** Admin: one tracker's month (Sales staff or Warehouse), each person a bar against their whole goal; a name opens their sales. */
+async function TeamGoalsWidget({ db, team }: { db: Db; team: GoalTeam }) {
+  const board = await boardNow(db);
+  const people = (board?.people ?? []).filter((p) => teamOf(p) === team);
+  const title = `${TEAM_LABEL[team]} goals`;
+  if (!board || !people.length) {
     return (
-      <Card title="Sales goals" href="/admin/sales-goals" link="Set goals">
-        <p className="small muted" style={{ margin: 0 }}>No sales reps or warehouse managers yet.</p>
+      <Card title={title} href="/admin/sales-goals" link="Set goals">
+        <p className="small muted" style={{ margin: 0 }}>
+          {team === "sales" ? "No sales staff yet (Sales rep job role in Admin → Accounts)." : "No warehouse staff on the tracker yet."}
+        </p>
       </Card>
     );
   }
-  const set = board.people.some((p) => sum(p.goals) > 0);
+  const set = people.some((p) => sum(p.goals) > 0);
   return (
-    <Card title="Sales goals" href="/sales-goals" link="All groups">
+    <Card title={title} href={`/sales-goals?t=${team}`} link="All groups">
       {set ? null : (
         <Link href="/admin/sales-goals" className="wg-row warn">
           <span className="grow">No goals set yet: set them in Admin → Sales goals</span>
           <ChevronRight size={15} />
         </Link>
       )}
-      <TeamGoals people={board.people} gone={monthGone(board.month, todayCentral())} href={(p) => `/sales-goals?p=${p.id}`} />
+      <TeamGoals people={people} gone={monthGone(board.month, todayCentral())} href={(p) => `/sales-goals/${p.id}`} />
     </Card>
   );
 }
@@ -364,7 +375,8 @@ export async function roleCards({ db, profile, known, skip }: { db: Db; profile:
     out.push(card("calendar", "This week", () => (branch ? <CalendarWidget db={db} branch={branch} branchName={branchName} canAdd={w.spot || profile.role === "admin"} /> : null)));
   if (w.admin) {
     out.push(card("waiting", "Waiting on you", () => <WaitingWidget db={db} known={known} />));
-    out.push(card("teamgoals", "Sales goals", () => <TeamGoalsWidget db={db} />));
+    out.push(card("teamgoals", "Sales staff goals", () => <TeamGoalsWidget db={db} team="sales" />));
+    out.push(card("whgoals", "Warehouse goals", () => <TeamGoalsWidget db={db} team="warehouse" />));
     out.push(card("sales", "Sales", () => <SalesWidget db={db} />));
     out.push(card("movement", "Inventory movement", () => <MovementWidget db={db} />));
   }

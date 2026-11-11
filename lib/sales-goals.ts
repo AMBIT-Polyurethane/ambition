@@ -28,6 +28,14 @@ export type GoalPerson = {
 };
 export type GoalBoard = { month: string; people: GoalPerson[] };
 
+/**
+ * The two trackers. Sales staff are the people with the Sales rep job role (Admin → Accounts); everyone else on the
+ * board (warehouse managers, CRMs, anyone else given goals) is on the Warehouse tracker.
+ */
+export type GoalTeam = "sales" | "warehouse";
+export const teamOf = (p: Pick<GoalPerson, "job_role">): GoalTeam => (p.job_role === "sales_rep" ? "sales" : "warehouse");
+export const TEAM_LABEL: Record<GoalTeam, string> = { sales: "Sales staff", warehouse: "Warehouse" };
+
 export const sum = (r: Partial<Record<string, number>>) => Object.values(r).reduce<number>((a, v) => a + Number(v ?? 0), 0);
 
 /** Where the month is (0..1), in Central time: day 15 of 30 → 0.5. A past month is 1. */

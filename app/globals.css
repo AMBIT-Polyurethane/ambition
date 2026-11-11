@@ -3141,3 +3141,55 @@ html.ix-lock, html.ix-lock body { overflow: hidden; }
 
 /* Academy: English / Español switch (0056) */
 .lang-switch { align-self: flex-start; width: 220px; }
+
+/* ---- One person's sales (Sales goals → a name): totals, date filter, customer / date / total list ---- */
+.shell.sales-page { max-width: 820px; gap: 16px; }
+.sales-bar { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
+.range-pick { position: relative; flex: none; max-width: 100%; }
+.range-btn { text-transform: none; letter-spacing: 0; font-size: 13.5px; font-weight: 700; gap: 8px; max-width: 100%; }
+.range-btn.on { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
+.range-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: min(372px, calc(100vw - 40px)); display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--s1); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35); }
+.range-title { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.range-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.range-custom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; padding-top: 12px; border-top: 1px solid var(--line); }
+.range-custom .field { gap: 4px; min-width: 0; }
+.range-custom .input { width: 100%; min-width: 0; }
+.sales-sum { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px 18px; flex-wrap: wrap; }
+.sales-sum .up { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.sales-big { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.sales-facts { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 13.5px; color: var(--text2); }
+.sales-facts b { color: var(--text); font-variant-numeric: tabular-nums; }
+.sales-list { display: flex; flex-direction: column; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.sl-head, .sl-row { display: grid; grid-template-columns: minmax(0, 1fr) 124px 136px 16px; align-items: center; gap: 12px; padding: 0 16px; }
+.sl-head { min-height: 38px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); }
+.sl-row { min-height: 60px; padding-top: 10px; padding-bottom: 10px; color: var(--text); border-top: 1px solid var(--line); }
+a.sl-row:hover { background: var(--s2); color: var(--text); }
+.sl-cust { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sl-cust b { font-size: 14.5px; font-weight: 700; }
+.sl-date { font-size: 13.5px; color: var(--text2); white-space: nowrap; }
+.sl-total { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-weight: 700; font-size: 14.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sales-list .num { text-align: right; }
+.sl-go { color: var(--text3); }
+.sl-total .pill { font-size: 10px; padding: 2px 7px; letter-spacing: 0.04em; }
+@media (max-width: 560px) {
+  .sl-head { display: none; }
+  .sl-row:first-of-type { border-top: 0; }
+  .sl-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "cust total" "date total"; row-gap: 2px; padding: 12px 14px; }
+  .sl-cust { grid-area: cust; }
+  .sl-date { grid-area: date; font-size: 12.5px; }
+  .sl-total { grid-area: total; }
+  .sl-go { display: none; }
+  .range-pick { flex: 1 1 100%; }
+  .range-btn { width: 100%; justify-content: flex-start; }
+  .range-btn svg:last-child { margin-left: auto; }
+  .range-menu { left: 0; right: auto; width: 100%; }
+  .range-custom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .range-custom .btn { grid-column: 1 / -1; }
+}
+
+/* ---- Sales goals: the Sales staff / Warehouse trackers ---- */
+.goal-tabs { max-width: 420px; }
+.goal-tabs a { height: 40px; display: grid; place-items: center; border-radius: 9px; color: var(--text2); font-size: 13px; font-weight: 700; }
+.goal-tabs a.on { background: var(--red); color: #fff; }
+.goal-tabs .n { opacity: 0.75; font-weight: 600; margin-left: 4px; }
+.goal-sec-h { margin: 6px 0 -4px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text2); }

@@ -3,7 +3,7 @@ import { CircleAlert, CircleCheck } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { roleLabel } from "@/lib/access";
 import { money } from "@/lib/format";
-import { GOAL_GROUPS, sum } from "@/lib/sales-goals";
+import { GOAL_GROUPS, TEAM_LABEL, sum, teamOf, type GoalTeam } from "@/lib/sales-goals";
 import { goalBoard } from "@/lib/sales-goals-server";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -56,43 +56,52 @@ export default async function SalesGoalsAdmin({ searchParams }: { searchParams: 
 
       {people.length === 0 ? <div className="card small muted">No sales reps or warehouse managers yet. Give someone that job role in Admin → Accounts.</div> : null}
 
-      <div className="goal-admin">
-        {people.map((p) => {
-          const total = sum(p.goals);
-          return (
-            <form key={p.id} id={`p-${p.id}`} action={saveGoals} className="card col goal-form" style={{ gap: 12 }}>
-              <input type="hidden" name="person" value={p.id} />
-              <input type="hidden" name="name" value={p.name} />
-              <div className="row between" style={{ gap: 8, alignItems: "flex-start" }}>
-                <div className="col" style={{ gap: 2 }}>
-                  <b>{p.name}</b>
-                  <span className="tiny faint">
-                    {roleLabel(p.job_role) ?? "Staff"} ·{" "}
-                    {p.basis === "branch"
-                      ? `every order from ${branchName.get(p.branch_id ?? "") ?? "their location (set a branch in Admin → Accounts)"}`
-                      : `${customers.get(p.id) ?? 0} ${customers.get(p.id) === 1 ? "customer" : "customers"} assigned`}
-                  </span>
-                </div>
-                <span className="small" style={{ whiteSpace: "nowrap" }}>
-                  {total ? <>Monthly goal <b>{whole(total)}</b></> : <span className="faint">No goals yet</span>}
-                </span>
-              </div>
-              <div className="goal-grid">
-                {GOAL_GROUPS.map((g) => (
-                  <label key={g.key} className="field">
-                    <span className="label">{g.label}</span>
-                    <span className="price-in">
-                      <span aria-hidden="true">$</span>
-                      <input className="input sm" name={`g_${g.key}`} inputMode="decimal" defaultValue={p.goals[g.key] ? String(Math.round(Number(p.goals[g.key]))) : ""} placeholder="None" />
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <div><Submit className="btn sm" pendingText="Saving…">Save goals</Submit></div>
-            </form>
-          );
-        })}
-      </div>
+      {(["sales", "warehouse"] as GoalTeam[]).map((team) => {
+        const group = people.filter((p) => teamOf(p) === team);
+        if (!group.length) return null;
+        return (
+          <section key={team} className="col" style={{ gap: 12 }} aria-label={TEAM_LABEL[team]}>
+            <h2 className="goal-sec-h">{TEAM_LABEL[team]}</h2>
+            <div className="goal-admin">
+              {group.map((p) => {
+                const total = sum(p.goals);
+                return (
+                  <form key={p.id} id={`p-${p.id}`} action={saveGoals} className="card col goal-form" style={{ gap: 12 }}>
+                    <input type="hidden" name="person" value={p.id} />
+                    <input type="hidden" name="name" value={p.name} />
+                    <div className="row between" style={{ gap: 8, alignItems: "flex-start" }}>
+                      <div className="col" style={{ gap: 2 }}>
+                        <Link href={`/sales-goals/${p.id}`}><b>{p.name}</b></Link>
+                        <span className="tiny faint">
+                          {roleLabel(p.job_role) ?? "Staff"} ·{" "}
+                          {p.basis === "branch"
+                            ? `every order from ${branchName.get(p.branch_id ?? "") ?? "their location (set a branch in Admin → Accounts)"}`
+                            : `${customers.get(p.id) ?? 0} ${customers.get(p.id) === 1 ? "customer" : "customers"} assigned`}
+                        </span>
+                      </div>
+                      <span className="small" style={{ whiteSpace: "nowrap" }}>
+                        {total ? <>Monthly goal <b>{whole(total)}</b></> : <span className="faint">No goals yet</span>}
+                      </span>
+                    </div>
+                    <div className="goal-grid">
+                      {GOAL_GROUPS.map((g) => (
+                        <label key={g.key} className="field">
+                          <span className="label">{g.label}</span>
+                          <span className="price-in">
+                            <span aria-hidden="true">$</span>
+                            <input className="input sm" name={`g_${g.key}`} inputMode="decimal" defaultValue={p.goals[g.key] ? String(Math.round(Number(p.goals[g.key]))) : ""} placeholder="None" />
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <div><Submit className="btn sm" pendingText="Saving…">Save goals</Submit></div>
+                  </form>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
 
       {others.length ? (
         <form action="/admin/sales-goals" className="row" style={{ gap: 8, flexWrap: "wrap" }}>
