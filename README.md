@@ -580,6 +580,11 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   warehouse by `branch_id`, not cancelled, priced lines only, Central-time days). Date filter presets and From / To
   in `lib/sales-range.ts` and `components/range-filter.tsx` (all in the link: `?r=last_month`, `?from=…&to=…`).
   Admins open anyone's; others only their own. No database change (orders are readable by all staff).
+- **Sales rep box on an order**: admins and the order desk (`order_desk` box) change `orders.sales_rep_id` from the
+  order page (`setOrderRep` in `app/(app)/orders/actions.ts`); "Also make them the customer's rep" sets
+  `companies.sales_rep_id` too (with the server key for non-admins, since customers are admin-only), and the
+  `companies_rep_fill` trigger then credits that customer's other orders that had no rep. Picker shared with
+  Admin → Customers (`components/rep-options.tsx`).
 
 Home "Jump back in" checks remembered orders with `openOrders()` and drops deleted, cancelled and completed ones.
 

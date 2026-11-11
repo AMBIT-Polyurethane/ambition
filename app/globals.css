@@ -3193,3 +3193,11 @@ a.sl-row:hover { background: var(--s2); color: var(--text); }
 .goal-tabs a.on { background: var(--red); color: #fff; }
 .goal-tabs .n { opacity: 0.75; font-weight: 600; margin-left: 4px; }
 .goal-sec-h { margin: 6px 0 -4px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text2); }
+
+/* ---- Sales rep box on an order (admins and the order desk) ---- */
+.rep-edit { margin-top: 4px; font-weight: 500; white-space: normal; }
+.rep-edit > summary { display: inline-block; font-size: 13px; }
+.rep-form { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--s2); max-width: 440px; }
+.rep-form .select { width: 100%; }
+.rep-form .check { align-items: flex-start; font-size: 13.5px; line-height: 1.35; }
+.rep-form .check input { margin-top: 1px; }

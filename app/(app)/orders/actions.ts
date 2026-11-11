@@ -10,6 +10,7 @@ import { kickForOrder } from "@/lib/inventory/sync";
 import { can } from "@/lib/access";
 import { money } from "@/lib/format";
 import { changesText, type OrderChange } from "@/lib/order-edit";
+import { serviceClient, serviceReady } from "@/lib/supabase/service";
 
 const STATUSES = ["new", "processing", "completed", "cancelled"];
 
@@ -33,6 +34,66 @@ export async function setOrderStatus(form: FormData) {
   await kickForOrder(s.supabase, id, `order ${status}`);
   revalidatePath(`/orders/${id}`);
   revalidatePath("/orders");
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The Sales rep box on an order (admins and the order desk): who gets credit for this order on the sales goal
+ * trackers, and (if ticked) the customer's rep from now on, which also credits that rep with the customer's other
+ * orders that had no rep. Staff can't write orders (or, unless admin, customers) directly, so after the check here
+ * both are saved with the server key, one column each.
+ */
+export async function setOrderRep(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const id = String(form.get("id") ?? "");
+  if (!UUID.test(id)) return;
+  const admin = s.profile.role === "admin";
+  if (!admin && !can(s.profile, "order_desk")) back(id, "err", "Only admins and the order desk can change the sales rep.");
+  const raw = String(form.get("rep") ?? "");
+  const rep = UUID.test(raw) ? raw : null;
+  const alsoCustomer = form.get("customer") === "1";
+
+  const { data: o } = await s.supabase.from("orders").select("id, company_id, company_name, sales_rep_id").eq("id", id).maybeSingle<{
+    id: string;
+    company_id: string | null;
+    company_name: string;
+    sales_rep_id: string | null;
+  }>();
+  if (!o) back(id, "err", "Order not found.");
+  let name = "";
+  if (rep) {
+    const { data: p } = await s.supabase.from("profiles").select("full_name, email, role, status").eq("id", rep).maybeSingle<{
+      full_name: string | null;
+      email: string;
+      role: string;
+      status: string;
+    }>();
+    if (!p || (p.role !== "employee" && p.role !== "admin") || p.status !== "active") back(id, "err", "Pick someone on AMBIT staff.");
+    name = p.full_name?.trim() || p.email;
+  }
+
+  if (!serviceReady()) back(id, "err", "The sales rep can't be saved yet: SUPABASE_SECRET_KEY isn't set in Vercel.");
+  const db = serviceClient();
+  if (rep !== o.sales_rep_id) {
+    const { error } = await db.from("orders").update({ sales_rep_id: rep }).eq("id", id);
+    if (error) back(id, "err", `The sales rep wasn't saved: ${error.message}`);
+  }
+  if (alsoCustomer && o.company_id) {
+    const { error } = await db.from("companies").update({ sales_rep_id: rep }).eq("id", o.company_id);
+    if (error) back(id, "err", `This order's sales rep is saved, but not ${o.company_name}'s: ${error.message}`);
+    revalidatePath("/admin/companies");
+  }
+  revalidatePath("/sales-goals");
+  revalidatePath("/");
+  back(
+    id,
+    "msg",
+    rep
+      ? `${name} now gets credit for this order${alsoCustomer && o.company_id ? ` and is ${o.company_name}'s sales rep from now on` : ""}.`
+      : `This order no longer credits a sales rep${alsoCustomer && o.company_id ? `, and ${o.company_name} has no sales rep now` : ""}.`,
+  );
 }
 
 export async function resendOrderEmail(form: FormData) {

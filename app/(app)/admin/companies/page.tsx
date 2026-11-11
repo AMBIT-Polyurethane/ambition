@@ -6,27 +6,8 @@ import { Submit } from "@/components/forms";
 import { CsvImport } from "@/components/csv-import";
 import { assignRep, saveCompany } from "@/app/(app)/admin/actions";
 import { CheckAll } from "@/components/check-all";
-import { roleLabel } from "@/lib/access";
+import { RepOptions, staffName, type Staff } from "@/components/rep-options";
 import type { Branch, Company } from "@/lib/types";
-
-type Staff = { id: string; full_name: string | null; email: string; job_role: string | null };
-const staffName = (p: Staff) => p.full_name?.trim() || p.email;
-
-/** Staff to pick a sales rep from: sales reps first, then everyone else on staff. */
-function RepOptions({ staff }: { staff: Staff[] }) {
-  const reps = staff.filter((p) => p.job_role === "sales_rep");
-  const rest = staff.filter((p) => p.job_role !== "sales_rep");
-  return (
-    <>
-      {reps.length ? <optgroup label="Sales reps">{reps.map((p) => <option key={p.id} value={p.id}>{staffName(p)}</option>)}</optgroup> : null}
-      {rest.length ? (
-        <optgroup label="Other AMBIT staff">
-          {rest.map((p) => <option key={p.id} value={p.id}>{staffName(p)}{roleLabel(p.job_role) ? ` (${roleLabel(p.job_role)})` : ""}</option>)}
-        </optgroup>
-      ) : null}
-    </>
-  );
-}
 
 export const metadata = { title: "Customers" };
 
