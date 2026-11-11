@@ -3,7 +3,7 @@ import { CirclePlay } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { roleLabel } from "@/lib/access";
 import { HOWTO, HOWTO_FOLDER, clock, howtoThumb, type HowToVideo } from "@/lib/howto";
-import { WatchedMark } from "@/components/howto/player";
+import { HowToBulkUpload, WatchedMark } from "@/components/howto/player";
 
 export const metadata = { title: "How To Use A.I." };
 
@@ -53,9 +53,10 @@ export default async function HowToPage() {
 
       {admin && missing ? (
         <div className="alert warn small" role="status">
-          <span>{missing} video{missing === 1 ? " hasn't" : "s haven't"} been uploaded yet. Open one and use Upload video (only admins see this).</span>
+          <span>{missing} video{missing === 1 ? " hasn't" : "s haven't"} been uploaded yet. Use Upload videos below (only admins see this).</span>
         </div>
       ) : null}
+      {admin ? <HowToBulkUpload /> : null}
 
       {mine.length ? (
         <section className="section">

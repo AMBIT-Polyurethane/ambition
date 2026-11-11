@@ -451,7 +451,8 @@ on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place,
 `/how-to` lists the app walkthrough videos in `lib/howto.ts` (title, who it's for, job roles, length, step chapters); `/how-to/[slug]`
 plays one with a 6-hour signed URL and a tappable step list (`components/howto/player.tsx`; "Watched" is kept in the browser's
 localStorage). Employees only (`requireEmployee`; it's in the employee menu and Home apps). The videos live in the private `academy`
-bucket at `how-to/<slug>.mp4`; admins upload or replace one from its page (straight from the browser, upsert). Covers (`<slug>.jpg`) and first frames
+bucket at `how-to/<slug>.mp4`; admins upload or replace them from the list ("Upload videos": several MP4s at once, matched by the number at the start of
+the file name) or from a video's page (straight from the browser, upsert). Covers (`<slug>.jpg`) and first frames
 (`<slug>-poster.jpg`) are in `public/howto/`. 0061 limits reading `how-to/` files in the bucket to employees (the rest of the academy bucket stays readable by
 everyone signed in). To add a video: add it to `HOWTO` and its cover to `public/howto/`, then upload the MP4 on its page.
 
