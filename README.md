@@ -497,6 +497,10 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   shipper, BOL #, PO #, carrier and lines (one per lot). The manager checks it; `inbound_receive_report` saves the
   header (`bol_no`, `po_no`, `carrier`, `files`, `read_by_ai`), replaces the lines (`qty` = on the BOL / expected,
   `received_qty` = what came, `note`) and calls `inbound_receive` (now open to `receiving` too).
+  Same BOL # twice: `sameBol()` in `lib/incoming.ts` finds other received / waiting reports at that location with
+  the same BOL # (case and spaces ignored). The form shows them (`bolMatches`) and `receiveReport` refuses to save
+  until "This is a new load" is ticked (`newLoad`), then starts the note with "Load N on BOL …". The report page
+  lists the same-BOL reports so the approver can cancel a truck sent twice. No database change.
 - **Transfers** (`inventory_transfers` / `inventory_transfer_lines`, `/inventory/transfers`): `transfer_send` checks
   availability (lots: remaining − sheet pending − reserved), takes it off the sender (`on_hand`, or the lot's
   `out_unsynced` → Shipped Out) and creates the receiver's `inbound_deliveries` row (`transfer_id`, lines with the lot,
@@ -585,6 +589,13 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   `companies.sales_rep_id` too (with the server key for non-admins, since customers are admin-only), and the
   `companies_rep_fill` trigger then credits that customer's other orders that had no rep. Picker shared with
   Admin → Customers (`components/rep-options.tsx`).
+- **Required sales rep and House Account (0060)**: `companies.house_account` / `orders.house_account`. The order
+  screen's Sales rep box (`components/order-builder.tsx`, review step) is required for staff: prefilled by
+  `customerRep()` from the customer (rep or House Account), `placeOrder` refuses an order without one and saves it
+  after `place_order` with the server key (`saveOrderRep`), optionally onto the customer too. `orders_set_rep`
+  copies House Account from the customer on insert; `companies_rep_fill` skips House Account orders. The picker's
+  value for House Account is `"house"` (`HOUSE` in `components/rep-options.tsx`). The Home goal card only shows for
+  sales reps, warehouse managers and people with goals (so an owner or tech covering an account isn't tracked).
 
 Home "Jump back in" checks remembered orders with `openOrders()` and drops deleted, cancelled and completed ones.
 

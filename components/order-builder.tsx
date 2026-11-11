@@ -7,7 +7,8 @@ import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, 
 import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, readLots, writeLots, NO_LOTS, type Cart, type LotPicks } from "@/lib/cart";
 import { money } from "@/lib/format";
-import { customerDetails, placeOrder } from "@/app/(app)/order/actions";
+import { customerDetails, customerRep, placeOrder } from "@/app/(app)/order/actions";
+import { HOUSE, RepOptions, staffName, type Staff } from "@/components/rep-options";
 import { CustomerPicker } from "@/components/customer-picker";
 import { addressOnFile, unpackCustomer, type OrderCustomer, type PackedCustomer } from "@/lib/customers";
 import { bagsFor, parseSqft, sqftText } from "@/lib/sqft";
@@ -94,6 +95,8 @@ type Props = {
   stock?: StockMap;
   /** Staff: each location's ISO and resin lots (custom foam order picks exact drums). */
   lots?: Record<string, FoamLot[]>;
+  /** Staff: everyone who can get credit for an order (the required Sales rep box). */
+  staff?: Staff[];
 };
 
 function PriceLine({ p }: { p: CatalogProduct }) {
@@ -224,6 +227,10 @@ export function OrderBuilder(props: Props) {
   const [autoEmail, setAutoEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Staff: who gets credit for the order (required). Starts as the customer's sales rep or House Account.
+  const [salesRep, setSalesRep] = useState("");
+  const [repOnFile, setRepOnFile] = useState<{ id: string; value: string } | null>(null);
+  const [repToCustomer, setRepToCustomer] = useState(true);
 
   // Load the saved cart (or the order being repeated) once.
   useEffect(() => {
@@ -302,6 +309,29 @@ export function OrderBuilder(props: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
+
+  // The customer's sales rep (or House Account) fills in the Sales rep box; a different customer starts it over.
+  useEffect(() => {
+    if (!isEmployee) return;
+    setRepOnFile(null);
+    setSalesRep("");
+    if (!companyId) return;
+    let stop = false;
+    customerRep(companyId).then((r) => {
+      if (stop || !r) return;
+      const value = r.rep ?? (r.house ? HOUSE : "");
+      setRepOnFile({ id: companyId, value });
+      setSalesRep((cur) => cur || value);
+      setRepToCustomer(!value);
+    });
+    return () => {
+      stop = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+  const staff = props.staff ?? [];
+  const fileRep = repOnFile?.id === companyId ? repOnFile.value : "";
+  const repName = (v: string) => (v === HOUSE ? "House Account" : staffName(staff.find((p) => p.id === v) ?? { full_name: null, email: "someone no longer on staff" }));
 
   const branch = branches.find((b) => b.id === branchId) ?? null;
   const stockHere = (props.stock ?? {})[delivery === "dropship" ? "" : branchId];
@@ -474,6 +504,11 @@ export function OrderBuilder(props: Props) {
 
   const submit = () => {
     setError(null);
+    if (isEmployee && !salesRep) {
+      setError("Pick the sales rep for this order (or House Account if no sales rep gets credit).");
+      document.getElementById("sales-rep")?.focus();
+      return;
+    }
     startTransition(async () => {
       const res = await placeOrder({
         items: Object.fromEntries(Object.entries(cart).filter(([id]) => carried(id))),
@@ -488,6 +523,8 @@ export function OrderBuilder(props: Props) {
         approvalEmail: isEmployee && approvals && !skipApproval ? approvalEmail : "",
         skipApproval: isEmployee && approvals && skipApproval,
         draftId: draftId ?? undefined,
+        salesRep: isEmployee ? salesRep : undefined,
+        repToCustomer: isEmployee && Boolean(companyId) && salesRep !== fileRep && repToCustomer,
         lots:
           isEmployee && delivery !== "dropship"
             ? Object.entries(picksHere)
@@ -498,7 +535,7 @@ export function OrderBuilder(props: Props) {
       if (res.ok) {
         writeCart({});
         writeLots(NO_LOTS);
-        router.push(`/orders/${res.id}?sent=${res.mode === "approval" ? "approval" : "1"}${res.warning ? "&warn=1" : ""}`);
+        router.push(`/orders/${res.id}?sent=${res.mode === "approval" ? "approval" : "1"}${res.warning ? "&warn=1" : ""}${res.repError ? `&err=${encodeURIComponent(res.repError)}` : ""}`);
       } else {
         setError(res.error);
       }
@@ -649,6 +686,46 @@ export function OrderBuilder(props: Props) {
             <div className="muted">{me.name}</div>
           </div>
         )}
+
+        {isEmployee ? (
+          <section className="section rep-pick">
+            <label className="field">
+              <span className="label">Sales rep <span className="req">Required</span></span>
+              <select
+                id="sales-rep"
+                className={`select${salesRep ? "" : " need"}`}
+                value={salesRep}
+                onChange={(e) => {
+                  setSalesRep(e.target.value);
+                  setError(null);
+                }}
+                aria-required="true"
+              >
+                <option value="" disabled>Pick who gets credit for this order…</option>
+                <RepOptions staff={staff} house />
+              </select>
+            </label>
+            <p className="tiny faint" style={{ margin: 0 }}>
+              {!companyId
+                ? "Pick the customer first; their sales rep fills in here."
+                : !repOnFile || repOnFile.id !== companyId
+                  ? "Looking up the customer's sales rep…"
+                  : fileRep && salesRep === fileRep
+                    ? `From ${customer?.name ?? "the customer"}'s account. This order counts toward ${fileRep === HOUSE ? "no one's sales goals (House Account)" : `${repName(fileRep)}'s sales goals`}.`
+                    : fileRep
+                      ? `${customer?.name ?? "This customer"}'s account says ${repName(fileRep)}. This order goes to ${salesRep ? repName(salesRep) : "whoever you pick"} instead.`
+                      : `${customer?.name ?? "This customer"} has no sales rep yet. Pick one, or House Account if no sales rep gets credit.`}
+            </p>
+            {companyId && salesRep && salesRep !== fileRep && repOnFile?.id === companyId ? (
+              <label className="check small">
+                <input type="checkbox" checked={repToCustomer} onChange={(e) => setRepToCustomer(e.target.checked)} />
+                <span>
+                  Also make {salesRep === HOUSE ? "this customer a House Account" : `${repName(salesRep)} ${customer?.name ?? "this customer"}'s sales rep`} for future orders
+                </span>
+              </label>
+            ) : null}
+          </section>
+        ) : null}
 
         {notice ? <div className="alert info small">{notice}</div> : null}
         {offNote}

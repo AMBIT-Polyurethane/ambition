@@ -58,3 +58,51 @@ export async function stockedAt(db: SupabaseClient, branches: string[]): Promise
   }
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
 }
+
+/** An earlier Receiving Report at the same location with the same BOL # (waiting for approval or received). */
+export type BolMatch = {
+  id: number;
+  status: "submitted" | "received";
+  at: string | null; // when it was sent / received
+  by: string | null;
+  lines: string; // "28 AMB-TITE-20-W, 2 GUN-PART-X"
+};
+
+/** BOL #s as people type them: case, spaces and a leading "#" don't matter. */
+export const bolKey = (bol: string | null | undefined) => String(bol ?? "").toUpperCase().replace(/^#/, "").replace(/\s+/g, "");
+
+/**
+ * Other reports at this location on the same BOL #, oldest first. A second report on one BOL is either the
+ * same truck sent twice (a mistake) or another load on the same ticket (the plant's shuttle loads all carry
+ * one transfer order #), so the person receiving has to say which.
+ */
+export async function sameBol(db: SupabaseClient, branch: string, bol: string, except?: number | null): Promise<BolMatch[]> {
+  const key = bolKey(bol);
+  if (key.length < 3) return [];
+  // Narrow on the database (contains the key's longest run of letters and digits), then compare exactly here.
+  const run = (key.match(/[A-Z0-9]+/g) ?? []).sort((a, b) => b.length - a.length)[0] ?? key;
+  const { data } = await db
+    .from("inbound_deliveries")
+    .select("id, status, bol_no, submitted_at, received_at, submitted_by_name, received_by_name, created_at")
+    .eq("branch_id", branch)
+    .in("status", ["submitted", "received"])
+    .ilike("bol_no", `%${run}%`)
+    .order("created_at")
+    .limit(50);
+  type Row = { id: number; status: "submitted" | "received"; bol_no: string | null; submitted_at: string | null; received_at: string | null; submitted_by_name: string | null; received_by_name: string | null; created_at: string };
+  const hits = ((data ?? []) as Row[]).filter((r) => r.id !== except && bolKey(r.bol_no) === key);
+  if (!hits.length) return [];
+  const { data: lineRows } = await db.from("inbound_lines").select("delivery_id, sku, qty, received_qty").in("delivery_id", hits.map((h) => h.id)).order("id");
+  const linesOf = new Map<number, string[]>();
+  for (const l of (lineRows ?? []) as { delivery_id: number; sku: string; qty: number; received_qty: number | null }[]) {
+    const n = Number(l.received_qty ?? l.qty);
+    (linesOf.get(l.delivery_id) ?? linesOf.set(l.delivery_id, []).get(l.delivery_id)!).push(`${Number.isInteger(n) ? n : n.toFixed(2)} ${l.sku}`);
+  }
+  return hits.map((h) => ({
+    id: h.id,
+    status: h.status,
+    at: h.submitted_at ?? h.received_at ?? h.created_at,
+    by: h.received_by_name ?? h.submitted_by_name,
+    lines: (linesOf.get(h.id) ?? []).join(", "),
+  }));
+}

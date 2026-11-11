@@ -3201,3 +3201,18 @@ a.sl-row:hover { background: var(--s2); color: var(--text); }
 .rep-form .select { width: 100%; }
 .rep-form .check { align-items: flex-start; font-size: 13.5px; line-height: 1.35; }
 .rep-form .check input { margin-top: 1px; }
+
+/* Order screen: the required Sales rep box (0060). */
+.rep-pick { gap: 8px; }
+.rep-pick .label { display: flex; align-items: center; gap: 8px; }
+.rep-pick .req { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--warn-text); background: color-mix(in srgb, var(--warn) 16%, transparent); border-radius: 999px; padding: 2px 8px; }
+.rep-pick .select.need { border-color: color-mix(in srgb, var(--warn) 70%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 18%, transparent); }
+.rep-pick .check { align-items: flex-start; line-height: 1.35; }
+.rep-pick .check input { margin-top: 1px; }
+
+/* Receiving: the BOL # is already on another report here (0060). */
+.bol-again { align-items: flex-start; }
+.bol-again .bol-list { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.5; }
+.bol-again .bol-list a { font-weight: 700; color: inherit; }
+.bol-again .check { align-items: flex-start; font-size: 14px; }
+.bol-again .check input { margin-top: 2px; }

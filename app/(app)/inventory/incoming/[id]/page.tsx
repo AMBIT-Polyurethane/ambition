@@ -7,7 +7,7 @@ import { dateShort, dateTime, plural } from "@/lib/format";
 import { todayCentral } from "@/lib/sale";
 import { claudeReady } from "@/lib/ai/claude";
 import { inventoryBranches } from "@/lib/widgets";
-import { stockItems, vendorNames } from "@/lib/incoming";
+import { sameBol, stockItems, vendorNames } from "@/lib/incoming";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { PrintButton } from "@/components/print-button";
@@ -51,6 +51,9 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
     lot_no: l.lot_no, mfg: l.mfg, exp: l.exp, note: l.note,
   }));
   const anyDamaged = lines.some((l) => Number(l.damaged_qty ?? 0) > 0);
+  // Other reports here with the same BOL #: a truck sent twice, or another load on the same ticket.
+  const twins = !expected && !d.transfer_id && d.bol_no && d.status !== "cancelled" ? await sameBol(supabase, d.branch_id, d.bol_no, d.id) : [];
+  const saidNewLoad = /^Load \d+ on BOL/.test(String(d.note ?? ""));
   const transfer = d.transfer_id as number | null;
 
   return (
@@ -84,6 +87,31 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
               ? <>Sent by <b>{d.submitted_by_name ?? "the warehouse"}</b> · {dateTime(d.submitted_at)}. Check it against the BOL, then approve it: stock and {branchName}&apos;s spreadsheet update right away.</>
               : <>Waiting for an admin to approve it (sent by {d.submitted_by_name ?? "you"} · {dateTime(d.submitted_at)}). Nothing has gone into stock yet.</>}
           </span>
+        </div>
+      ) : null}
+
+      {twins.length ? (
+        <div className={`alert ${waiting ? "warn" : "info"} bol-again`} role={waiting ? "alert" : "status"}>
+          <CircleAlert size={18} style={{ flex: "none", marginTop: 2 }} />
+          <div className="col" style={{ gap: 6, minWidth: 0 }}>
+            <b>Same BOL # ({d.bol_no}) as {twins.length === 1 ? "another report" : `${twins.length} other reports`} here</b>
+            <ul className="bol-list">
+              {twins.map((m) => (
+                <li key={m.id}>
+                  <Link href={`/inventory/incoming/${m.id}`}>#{m.id}</Link> {m.lines || "no lines"} · {m.status === "received" ? "received" : "waiting for approval"} {dateTime(m.at)}{m.by ? ` · ${m.by}` : ""}
+                </li>
+              ))}
+            </ul>
+            <span className="small">
+              {waiting
+                ? saidNewLoad
+                  ? `${d.submitted_by_name ?? "The receiver"} marked this as a new load on the same ticket. Check the BOL photos: a new load has its own count written on the ticket. If it's the same truck as one above, cancel this report (bottom of the page).`
+                  : "Check the BOL photos. If this is the same truck as one above, don't approve it: cancel this report (bottom of the page). If it's another load on the same ticket, approve it."
+                : saidNewLoad
+                  ? "Marked as a new load on the same ticket when it was sent."
+                  : "One BOL # on several reports: either separate loads on one ticket, or the same truck received twice. If it's the same truck, tell an admin so the extra can be taken back out of stock."}
+            </span>
+          </div>
         </div>
       ) : null}
 

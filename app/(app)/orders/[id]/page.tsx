@@ -10,7 +10,7 @@ import type { LotPick } from "@/lib/order-doc/loads";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderRep, setOrderStatus } from "@/app/(app)/orders/actions";
-import { RepOptions, staffName, type Staff } from "@/components/rep-options";
+import { HOUSE, RepOptions, staffName, type Staff } from "@/components/rep-options";
 import { changesText, editable, type OrderEdit } from "@/lib/order-edit";
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
@@ -45,9 +45,9 @@ export default async function OrderDetailPage({
     emp && order.company_id
       ? supabase
           .from("companies")
-          .select("email, contact_name, pay_cod, pay_no_checks, sales_rep_id")
+          .select("*") // everything, so a column added by a later update (house_account, 0060) never breaks the page
           .eq("id", order.company_id)
-          .maybeSingle<Pick<Company, "email" | "contact_name"> & { pay_cod: boolean | null; pay_no_checks: boolean | null; sales_rep_id: string | null }>()
+          .maybeSingle<Pick<Company, "email" | "contact_name"> & { pay_cod: boolean | null; pay_no_checks: boolean | null; sales_rep_id: string | null; house_account?: boolean | null }>()
       : Promise.resolve({ data: null }),
     // Staff: which brand and lot the spray foam drums come from.
     emp ? orderPicks(supabase, id) : Promise.resolve(new Map<number, LotPick[]>()),
@@ -73,13 +73,14 @@ export default async function OrderDetailPage({
   // The Sales rep box: admins and the order desk pick who gets credit for the order (and can make them the customer's rep).
   const canSetRep = emp && (profile.role === "admin" || can(profile, "order_desk"));
   const { data: staffRows } = canSetRep
-    ? await supabase.from("profiles").select("id, full_name, email, job_role").in("role", ["employee", "admin"]).eq("status", "active").order("full_name")
+    ? await supabase.from("profiles").select("id, full_name, email, job_role").in("role", ["employee", "admin"]).eq("status", "active").eq("demo", false).order("full_name")
     : { data: null };
   const staff = (staffRows ?? []) as Staff[];
   const customerRep = company?.sales_rep_id ? staff.find((p) => p.id === company.sales_rep_id) : undefined;
   // No rep yet and a sales rep placed it (e.g. Madison ordering for a customer nobody's assigned to): start with them picked.
   const placerRep = staff.find((p) => p.id === order.placed_by && p.job_role === "sales_rep");
-  const repPick = order.sales_rep_id ?? placerRep?.id ?? "";
+  const companyHouse = Boolean(company?.house_account) && !company?.sales_rep_id;
+  const repPick = order.sales_rep_id ?? (order.house_account ? HOUSE : placerRep?.id ?? "");
   // Staff: every edit to the order (0041), oldest first.
   const { data: editRows } = emp
     ? await supabase.from("order_edits").select("*").eq("order_id", id).order("edited_at")
@@ -242,28 +243,30 @@ export default async function OrderDetailPage({
               <dd>
                 {rep ? (
                   rep.full_name?.trim() || rep.email
+                ) : order.house_account ? (
+                  "House Account"
                 ) : (
                   <span className="faint">{canSetRep ? "None yet" : "None yet. Set the customer's rep in Admin → Customers."}</span>
                 )}
                 {canSetRep ? (
                   <details className="rep-edit">
-                    <summary className="linkbtn small">{order.sales_rep_id ? "Change" : "Set the sales rep"}</summary>
+                    <summary className="linkbtn small">{order.sales_rep_id || order.house_account ? "Change" : "Set the sales rep"}</summary>
                     <form action={setOrderRep} className="rep-form">
                       <input type="hidden" name="id" value={order.id} />
-                      <select className="select sm" name="rep" defaultValue={repPick} aria-label="Sales rep for this order">
-                        <option value="">No sales rep</option>
-                        <RepOptions staff={staff} />
+                      <select className="select sm" name="rep" defaultValue={repPick} required aria-label="Sales rep for this order">
+                        <option value="" disabled>Pick the sales rep…</option>
+                        <RepOptions staff={staff} house />
                       </select>
                       {order.company_id ? (
                         <label className="check small">
-                          <input type="checkbox" name="customer" value="1" defaultChecked={!company?.sales_rep_id} />
+                          <input type="checkbox" name="customer" value="1" defaultChecked={!company?.sales_rep_id && !companyHouse} />
                           <span>
-                            Also make them {order.company_name}&apos;s sales rep for future orders
-                            <span className="faint"> (now: {company?.sales_rep_id ? (customerRep ? staffName(customerRep) : "someone no longer on staff") : "none"})</span>
+                            Also use this for {order.company_name}&apos;s future orders
+                            <span className="faint"> (now: {company?.sales_rep_id ? (customerRep ? staffName(customerRep) : "someone no longer on staff") : companyHouse ? "House Account" : "none"})</span>
                           </span>
                         </label>
                       ) : null}
-                      <span className="tiny faint">Whoever you pick gets credit for this order on the sales goal trackers.</span>
+                      <span className="tiny faint">Whoever you pick gets credit for this order on the sales goal trackers. House Account: no one does.</span>
                       <div><Submit className="btn sm" pendingText="Saving…">Save sales rep</Submit></div>
                     </form>
                   </details>

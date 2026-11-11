@@ -177,7 +177,9 @@ async function GoalsWidget({ db, profile, due }: { db: Db; profile: Profile; due
   const me = board?.people.find((p) => p.id === profile.id);
   if (!board || !me) return null;
   const rep = profile.job_role === "sales_rep";
-  if (!sum(me.goals) && !sum(me.sold) && !rep && profile.job_role !== "warehouse") return null;
+  // Only sales reps, warehouse managers and people with goals are tracked. Anyone else picked as a customer's rep
+  // (an owner covering an account, a tech) gets the credit on orders but no goal card.
+  if (!sum(me.goals) && !rep && profile.job_role !== "warehouse") return null;
   const month = new Date(`${board.month}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
   return (
     <Card title={`Your sales goals · ${month}`} href="/sales-goals" link="Details">

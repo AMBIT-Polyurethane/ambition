@@ -7,6 +7,7 @@ import { saleOn, todayCentral } from "@/lib/sale";
 import { packCustomer } from "@/lib/customers";
 import { smartDraft } from "@/lib/reorder";
 import { stockRows } from "@/lib/inventory/carried";
+import type { Staff } from "@/components/rep-options";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
 export const metadata = { title: "Order" };
@@ -17,7 +18,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
   const emp = isEmployee(profile);
   if (emp && !can(profile, "ordering")) redirect("/");
 
-  const [{ data: products }, { data: categories }, { data: branches }, companiesRes, myCompanyRes, reorderRes, { data: brandRows }, lotsRes] = await Promise.all([
+  const [{ data: products }, { data: categories }, { data: branches }, companiesRes, myCompanyRes, reorderRes, { data: brandRows }, lotsRes, staffRes] = await Promise.all([
     supabase.from("products").select("*").eq("active", true).order("sort").order("name"),
     supabase.from("categories").select("*").order("sort"),
     supabase.from("branches").select("*").eq("active", true).order("sort"),
@@ -36,6 +37,10 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
     emp ? supabase.from("products").select("*").eq("active", false).not("stock_of", "is", null).order("name") : Promise.resolve({ data: null }),
     // Staff: every lot / batch with drums left at each location, so a custom foam order can name the exact drums.
     emp ? supabase.rpc("order_lot_choices", { p_branch: null }) : Promise.resolve({ data: null }),
+    // Staff: who can get credit for an order (the required Sales rep box).
+    emp
+      ? supabase.from("profiles").select("id, full_name, email, job_role").in("role", ["employee", "admin"]).eq("status", "active").eq("demo", false).order("full_name")
+      : Promise.resolve({ data: null }),
   ]);
   const lots: Record<string, FoamLot[]> = {};
   for (const r of ((lotsRes.data ?? []) as (Omit<FoamLot, "id" | "available" | "remaining"> & { lot_id: number; branch_id: string; available: number | string; remaining: number | string })[])) {
@@ -177,6 +182,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       initialSearch={sp.q ?? ""}
       stock={stock}
       lots={emp ? lots : undefined}
+      staff={emp ? ((staffRes.data ?? []) as Staff[]) : undefined}
     />
   );
 }

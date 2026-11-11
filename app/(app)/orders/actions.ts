@@ -53,6 +53,8 @@ export async function setOrderRep(form: FormData) {
   if (!admin && !can(s.profile, "order_desk")) back(id, "err", "Only admins and the order desk can change the sales rep.");
   const raw = String(form.get("rep") ?? "");
   const rep = UUID.test(raw) ? raw : null;
+  const house = raw === "house"; // House Account: no sales rep gets credit
+  if (!rep && !house) back(id, "err", "Pick the sales rep, or House Account.");
   const alsoCustomer = form.get("customer") === "1";
 
   const { data: o } = await s.supabase.from("orders").select("id, company_id, company_name, sales_rep_id").eq("id", id).maybeSingle<{
@@ -76,12 +78,12 @@ export async function setOrderRep(form: FormData) {
 
   if (!serviceReady()) back(id, "err", "The sales rep can't be saved yet: SUPABASE_SECRET_KEY isn't set in Vercel.");
   const db = serviceClient();
-  if (rep !== o.sales_rep_id) {
-    const { error } = await db.from("orders").update({ sales_rep_id: rep }).eq("id", id);
+  {
+    const { error } = await db.from("orders").update({ sales_rep_id: rep, house_account: house }).eq("id", id);
     if (error) back(id, "err", `The sales rep wasn't saved: ${error.message}`);
   }
   if (alsoCustomer && o.company_id) {
-    const { error } = await db.from("companies").update({ sales_rep_id: rep }).eq("id", o.company_id);
+    const { error } = await db.from("companies").update({ sales_rep_id: rep, house_account: house }).eq("id", o.company_id);
     if (error) back(id, "err", `This order's sales rep is saved, but not ${o.company_name}'s: ${error.message}`);
     revalidatePath("/admin/companies");
   }
@@ -92,7 +94,7 @@ export async function setOrderRep(form: FormData) {
     "msg",
     rep
       ? `${name} now gets credit for this order${alsoCustomer && o.company_id ? ` and is ${o.company_name}'s sales rep from now on` : ""}.`
-      : `This order no longer credits a sales rep${alsoCustomer && o.company_id ? `, and ${o.company_name} has no sales rep now` : ""}.`,
+      : `This order is a House Account order: no sales rep gets credit${alsoCustomer && o.company_id ? `, and ${o.company_name} is a House Account from now on` : ""}.`,
   );
 }
 

@@ -167,7 +167,8 @@ export async function saveCompany(form: FormData) {
     notes: n(form, "notes"),
     active: id ? form.get("active") === "on" : true,
     needs_qb_setup: form.get("needs_qb_setup") === "on",
-    sales_rep_id: n(form, "sales_rep_id"),
+    sales_rep_id: n(form, "sales_rep_id") === "house" ? null : n(form, "sales_rep_id"),
+    house_account: n(form, "sales_rep_id") === "house", // 0060: House Account (no sales rep gets credit)
   };
   if (!row.name) return;
   if (id) await supabase.from("companies").update(row).eq("id", id);
@@ -262,11 +263,12 @@ export async function assignRep(form: FormData) {
   const back = s(form, "back") || "/admin/companies";
   const go = (q: string) => redirect(`${back}${back.includes("?") ? "&" : "?"}${q}`);
   if (!ids.length) go("err=" + encodeURIComponent("Tick the customers first (the box next to each name)."));
-  if (rep && rep !== "none") {
+  if (rep && rep !== "none" && rep !== "house") {
     const { data: who } = await supabase.from("profiles").select("id").eq("id", rep).in("role", ["employee", "admin"]).maybeSingle();
     if (!who) go("err=" + encodeURIComponent("Pick an AMBIT staff member."));
   }
-  const { error } = await supabase.from("companies").update({ sales_rep_id: rep && rep !== "none" ? rep : null }).in("id", ids);
+  const house = rep === "house"; // House Account: no sales rep gets credit
+  const { error } = await supabase.from("companies").update({ sales_rep_id: rep && rep !== "none" && !house ? rep : null, house_account: house }).in("id", ids);
   if (error) go("err=" + encodeURIComponent(error.message));
   revalidatePath("/admin/companies");
   go("msg=" + encodeURIComponent(`${ids.length} ${ids.length === 1 ? "customer" : "customers"} updated.`));

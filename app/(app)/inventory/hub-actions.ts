@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { HUB_LOCKED_MSG, can, hubAllows } from "@/lib/access";
 import { claudeReady, friendlyClaudeError } from "@/lib/ai/claude";
-import { stockItems } from "@/lib/incoming";
+import { sameBol, stockItems, type BolMatch } from "@/lib/incoming";
 import { readBol, type BolRead } from "@/lib/inventory/bol";
 import { kickSync } from "@/lib/inventory/sync";
 import { emailAdminsReportWaiting, emailReceiverSentBack } from "@/lib/receiving-notify";
@@ -41,12 +41,21 @@ export async function readBolAction(input: { branch: string; paths: string[] }):
   }
 }
 
+/** The BOL # typed or read on a new report: earlier reports here with the same BOL # (to catch a truck sent twice). */
+export async function bolMatches(input: { branch: string; bol: string; except?: number | null }): Promise<BolMatch[]> {
+  const s = await receiver();
+  if (!s || !hubAllows(s.profile, String(input.branch ?? ""))) return [];
+  return sameBol(s.supabase, String(input.branch), String(input.bol ?? "").slice(0, 80), input.except ?? null);
+}
+
 export type ReportLine = { id?: number | null; product_id: string; qty: number; received_qty: number; damaged_qty?: number; lot_no?: string; mfg?: string; exp?: string; note?: string };
 export type ReportInput = {
   id: number | null;
   branch: string;
   head: { vendor: string; bol_no: string; po_no: string; carrier: string; received_on: string; note: string; files: { path: string; name: string }[]; read_by_ai: boolean; ai_cost_cents: number };
   lines: ReportLine[];
+  /** The BOL # is already on another report here and the receiver confirmed this is a new load on it. */
+  newLoad?: boolean;
 };
 
 /**
@@ -58,10 +67,23 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
   if (!s) return { ok: false, error: "You don't have access to receiving." };
   if (!hubAllows(s.profile, input.branch)) return { ok: false, error: HUB_LOCKED_MSG };
   const files = (input.head.files ?? []).filter((f) => FILE.test(f.path)).map((f) => ({ path: f.path, name: String(f.name ?? "").slice(0, 120) }));
+  // Same BOL # as another report here: only as a new load on the same ticket, said out loud (and written on the report).
+  let note = String(input.head.note ?? "");
+  const earlier = input.head.bol_no ? await sameBol(s.supabase, input.branch, input.head.bol_no, input.id) : [];
+  if (earlier.length) {
+    if (!input.newLoad) {
+      return {
+        ok: false,
+        error: `BOL ${input.head.bol_no} is already on ${earlier.length === 1 ? "report" : "reports"} ${earlier.map((m) => `#${m.id}`).join(", ")}. If this is the same truck, don't send it again. If it's a new load on the same ticket, tick "This is a new load".`,
+      };
+    }
+    const tag = `Load ${earlier.length + 1} on BOL ${input.head.bol_no}`;
+    if (!note.startsWith("Load ")) note = [tag, note].filter(Boolean).join(" · ");
+  }
   const { data, error } = await s.supabase.rpc("inbound_receive_report", {
     p_id: input.id,
     p_branch: input.branch,
-    p_head: { ...input.head, files },
+    p_head: { ...input.head, note, files },
     p_lines: input.lines.map((l) => ({
       id: l.id ?? null,
       product_id: l.product_id,

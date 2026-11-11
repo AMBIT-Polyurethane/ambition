@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, CircleAlert, FileText, LoaderCircle, Plus, Sparkles, SplitSquareVertical, Trash2, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { shrink } from "@/lib/photo-upload";
-import { plural } from "@/lib/format";
+import { dateTime, plural } from "@/lib/format";
 import { ItemPick, type StockItem } from "@/components/incoming-forms";
-import { readBolAction, receiveReport, type ReportLine } from "@/app/(app)/inventory/hub-actions";
+import { bolMatches, readBolAction, receiveReport, type ReportLine } from "@/app/(app)/inventory/hub-actions";
 import type { BolRead } from "@/lib/inventory/bol";
+import type { BolMatch } from "@/lib/incoming";
 
 // The Receiving Report: snap or upload the BOL, the app fills in the lines, whoever unloads checks each one
 // (what the BOL says, what came, how many arrived damaged, lot / batch # and expiration) and sends it to an
@@ -116,6 +117,27 @@ export function ReceivingForm({
   );
   const [busy, setBusy] = useState<null | "upload" | "read" | "save">(null);
   const [error, setError] = useState<string | null>(null);
+  // The BOL # is already on another report here: same truck sent twice, or a new load on the same ticket?
+  const [matches, setMatches] = useState<BolMatch[]>([]);
+  const [newLoad, setNewLoad] = useState(false);
+  useEffect(() => {
+    if (transfer) return;
+    const b = bol.trim();
+    if (b.length < 3) {
+      setMatches([]);
+      return;
+    }
+    let stop = false;
+    const t = setTimeout(() => {
+      bolMatches({ branch, bol: b, except: delivery?.id ?? null }).then((m) => {
+        if (!stop) setMatches(m);
+      });
+    }, 500);
+    return () => {
+      stop = true;
+      clearTimeout(t);
+    };
+  }, [bol, branch, transfer, delivery?.id]);
   const camRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLInputElement>(null);
 
@@ -226,12 +248,17 @@ export function ReceivingForm({
       out.push({ id: l.id, product_id: l.item.product_id, qty: q, received_qty: r, damaged_qty: d, lot_no: l.lot.trim().toUpperCase(), mfg: l.mfg, exp, note: l.note.trim() });
     }
     if (!out.length) return setError("Add at least one item.");
+    if (matches.length && !newLoad) {
+      document.getElementById("bol-again")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return setError(`BOL ${bol.trim()} is already on another report. If it's the same truck, don't send it again. If it's a new load on the same ticket, tick "This is a new load" above.`);
+    }
     setBusy("save");
     const res = await receiveReport({
       id: delivery?.id ?? null,
       branch,
       head: { vendor, bol_no: bol, po_no: po, carrier, received_on: day, note: [note.trim(), ai.notes ? `From the BOL: ${ai.notes}` : ""].filter(Boolean).join(" · "), files, read_by_ai: ai.read, ai_cost_cents: ai.cost },
       lines: out,
+      newLoad: matches.length > 0 && newLoad,
     });
     setBusy(null);
     if (res && !res.ok) setError(res.error);
@@ -307,6 +334,33 @@ export function ReceivingForm({
           </div>
         </div>
       </section>
+
+      {matches.length ? (
+        <section id="bol-again" className="alert warn bol-again" role="alert">
+          <CircleAlert size={18} style={{ flex: "none", marginTop: 2 }} />
+          <div className="col" style={{ gap: 8, minWidth: 0 }}>
+            <b>BOL {bol.trim()} is already on {matches.length === 1 ? "a report" : `${matches.length} reports`} here</b>
+            <ul className="bol-list">
+              {matches.map((m) => (
+                <li key={m.id}>
+                  <a href={`/inventory/incoming/${m.id}`} target="_blank" rel="noopener noreferrer">#{m.id}</a>{" "}
+                  {m.lines || "no lines"} · {m.status === "received" ? "received" : "waiting for approval"} {dateTime(m.at)}{m.by ? ` · ${m.by}` : ""}
+                </li>
+              ))}
+            </ul>
+            <span className="small">
+              <b>Same truck?</b> Don&apos;t send it again. Open the report above instead{matches.some((m) => m.status === "submitted") ? " (an admin can still fix it before approving)" : ""}.
+            </span>
+            <span className="small">
+              <b>A new load on the same ticket?</b> (The plant&apos;s shuttle loads all carry one transfer order #.) Count this load, then tick:
+            </span>
+            <label className="check">
+              <input type="checkbox" checked={newLoad} onChange={(e) => { setNewLoad(e.target.checked); setError(null); }} />
+              <span><b>This is a new load</b>: load {matches.length + 1} on BOL {bol.trim()}</span>
+            </label>
+          </div>
+        </section>
+      ) : null}
 
       <div className="eyebrow">What came in</div>
       <div className="col" style={{ gap: 10 }}>

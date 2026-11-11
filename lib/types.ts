@@ -21,6 +21,7 @@ export type Company = {
   source?: "admin" | "quickbooks" | "app";
   needs_qb_setup?: boolean;
   sales_rep_id?: string | null; // 0028: the customer's sales rep (credited with their orders)
+  house_account?: boolean; // 0060: a House Account (their orders credit no sales rep)
   created_by?: string | null;
 };
 
@@ -159,6 +160,7 @@ export type Order = {
   // Invoice # and the scheduled-email override (migration 0025)
   invoice_no?: string | null;
   sales_rep_id?: string | null; // 0028: the customer's rep when it was placed
+  house_account?: boolean; // 0060: a House Account order (no sales rep gets credit)
   priced_at?: string | null; // 0028: invoice prices entered by the order desk
   priced_by_name?: string | null;
   notify_override_by?: string | null;

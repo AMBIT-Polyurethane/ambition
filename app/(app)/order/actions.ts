@@ -11,6 +11,7 @@ import { escapeHtml as h } from "@/lib/format";
 import { ORDER_CUSTOMER_COLUMNS, type OrderCustomer } from "@/lib/customers";
 import { kickSync } from "@/lib/inventory/sync";
 import { carriedAt } from "@/lib/inventory/carried";
+import { serviceClient, serviceReady } from "@/lib/supabase/service";
 
 export type NewCustomerInput = {
   name: string;
@@ -32,6 +33,19 @@ export async function customerDetails(id: string): Promise<OrderCustomer | null>
   if (!s?.profile || !isEmployee(s.profile) || !/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data } = await s.supabase.from("companies").select(ORDER_CUSTOMER_COLUMNS).eq("id", id).maybeSingle();
   return (data as OrderCustomer | null) ?? null;
+}
+
+/** Staff picked a customer on the order screen: who gets credit for their orders (prefills the Sales rep box). */
+export async function customerRep(id: string): Promise<{ rep: string | null; house: boolean } | null> {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile) || !/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { data, error } = await s.supabase.from("companies").select("sales_rep_id, house_account").eq("id", id).maybeSingle<{ sales_rep_id: string | null; house_account: boolean | null }>();
+  if (error) {
+    // Update 0060 not run yet: no House Account column.
+    const { data: old } = await s.supabase.from("companies").select("sales_rep_id").eq("id", id).maybeSingle<{ sales_rep_id: string | null }>();
+    return { rep: old?.sales_rep_id ?? null, house: false };
+  }
+  return { rep: data?.sales_rep_id ?? null, house: Boolean(data?.house_account) && !data?.sales_rep_id };
 }
 
 export type CustomerRequestResult = { ok: true; message: string } | { ok: false; error: string };
@@ -194,13 +208,17 @@ export type PlaceOrderInput = {
   approvalEmail?: string; // employees only: where the customer's approval link goes
   skipApproval?: boolean; // employees only: approved without the customer's email approval
   draftId?: string; // an AI order intake draft this order came from
+  /** Employees only: who gets credit for the order: a staff member's id, or "house" (House Account). Required. */
+  salesRep?: string;
+  /** Employees only: also make that the customer's sales rep (or House Account) for future orders. */
+  repToCustomer?: boolean;
   /** Employees only (custom foam order): the exact lots picked, drums per lot. The rest is picked by the app. */
   lots?: { product_id: string; lot_id: number; qty: number }[];
 };
 
 /** sent = went to orders@ (or saved, if email is off); approval = emailed to the customer to approve first. */
 export type PlaceOrderResult =
-  | { ok: true; id: string; mode: "sent" | "approval"; warning?: string }
+  | { ok: true; id: string; mode: "sent" | "approval"; warning?: string; repError?: string }
   | { ok: false; error: string };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -220,6 +238,15 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   if (emp && !input.companyId) return { ok: false, error: "Choose who this order is for." };
   if (emp && input.companyId === "__other" && !input.customerName.trim()) {
     return { ok: false, error: "Type the customer's name." };
+  }
+  // Staff: every order names who gets the sales credit (a sales rep, anyone on staff, or House Account).
+  const repRaw = String(input.salesRep ?? "").trim();
+  const house = repRaw === "house";
+  const repId = UUID.test(repRaw) ? repRaw : null;
+  if (emp && !house && !repId) return { ok: false, error: "Pick the sales rep for this order (or House Account if no sales rep gets credit)." };
+  if (emp && repId) {
+    const { data: p } = await s.supabase.from("profiles").select("role, status").eq("id", repId).maybeSingle<{ role: string; status: string }>();
+    if (!p || (p.role !== "employee" && p.role !== "admin") || p.status !== "active") return { ok: false, error: "Pick a sales rep who is on AMBIT staff." };
   }
   if (emp && input.delivery !== "dropship" && !input.branchId) {
     return { ok: false, error: "Pick the AMBIT location this order is picked up or shipped from." };
@@ -268,6 +295,8 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   if (error || !id) return { ok: false, error: error?.message ?? "Something went wrong. Please try again." };
 
   const orderId = id as string;
+  let repWarning: string | undefined;
+  if (emp) repWarning = await saveOrderRep(orderId, UUID.test(input.companyId) ? input.companyId : null, repId, house, Boolean(input.repToCustomer));
   if (emp && input.draftId && UUID.test(input.draftId)) {
     await s.supabase.from("order_drafts").update({ status: "sent", order_id: orderId, updated_at: new Date().toISOString() }).eq("id", input.draftId);
   }
@@ -281,17 +310,40 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     if (sent.setupMissing) {
       // The database update for approvals hasn't been run yet: fall back to the old way.
       await sendOrderEmail(s.supabase, orderId);
-      return { ok: true, id: orderId, mode: "sent" };
+      return { ok: true, id: orderId, mode: "sent", repError: repWarning };
     }
     return {
       ok: true,
       id: orderId,
       mode: "approval",
       warning: sent.status === "sent" ? undefined : `The approval email didn't go out (${sent.error ?? sent.status}). Use Resend on the order page.`,
+      repError: repWarning,
     };
   }
 
   if (skip) await s.supabase.rpc("order_approve_without_customer", { p_order: orderId, p_note: null });
   await sendOrderEmail(s.supabase, orderId);
-  return { ok: true, id: orderId, mode: "sent" };
+  return { ok: true, id: orderId, mode: "sent", repError: repWarning };
+}
+
+/**
+ * The sales rep picked on the order screen goes onto the order (staff can't write orders directly, so this runs
+ * on the server after the checks above). "Also for future orders" puts it on the customer too, which also credits
+ * that rep with the customer's earlier orders that had nobody. Gives back a warning if something didn't save.
+ */
+async function saveOrderRep(orderId: string, companyId: string | null, rep: string | null, house: boolean, toCustomer: boolean): Promise<string | undefined> {
+  if (!serviceReady()) return "The sales rep wasn't saved on the order (SUPABASE_SECRET_KEY isn't set in Vercel). Set it with the Sales rep box on the order page.";
+  const db = serviceClient();
+  let { error } = await db.from("orders").update({ sales_rep_id: rep, house_account: house }).eq("id", orderId);
+  if (error && /house_account/.test(error.message)) {
+    // Update 0060 not run yet: save the rep without the House Account mark.
+    ({ error } = await db.from("orders").update({ sales_rep_id: rep }).eq("id", orderId));
+  }
+  if (error) return `The sales rep wasn't saved on the order (${error.message}). Set it with the Sales rep box on the order page.`;
+  if (toCustomer && companyId) {
+    let { error: e2 } = await db.from("companies").update({ sales_rep_id: rep, house_account: house }).eq("id", companyId);
+    if (e2 && /house_account/.test(e2.message)) ({ error: e2 } = await db.from("companies").update({ sales_rep_id: rep }).eq("id", companyId));
+    if (e2) return `The sales rep is on the order, but wasn't saved on the customer (${e2.message}).`;
+  }
+  return undefined;
 }

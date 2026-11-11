@@ -6,7 +6,7 @@ import { Submit } from "@/components/forms";
 import { CsvImport } from "@/components/csv-import";
 import { assignRep, saveCompany } from "@/app/(app)/admin/actions";
 import { CheckAll } from "@/components/check-all";
-import { RepOptions, staffName, type Staff } from "@/components/rep-options";
+import { HOUSE, RepOptions, staffName, type Staff } from "@/components/rep-options";
 import type { Branch, Company } from "@/lib/types";
 
 export const metadata = { title: "Customers" };
@@ -25,9 +25,9 @@ function CompanyFields({ c, branches, staff }: { c?: Company; branches: Branch[]
       </label>
       <label className="field">
         <span className="label">Sales rep</span>
-        <select className="select sm" name="sales_rep_id" defaultValue={c?.sales_rep_id ?? ""}>
+        <select className="select sm" name="sales_rep_id" defaultValue={c?.sales_rep_id ?? (c?.house_account ? HOUSE : "")}>
           <option value="">-</option>
-          <RepOptions staff={staff} />
+          <RepOptions staff={staff} house />
         </select>
       </label>
       <label className="field"><span className="label">Contact</span><input className="input sm" name="contact_name" defaultValue={c?.contact_name ?? ""} /></label>
@@ -59,15 +59,17 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
   let query = supabase.from("companies").select("*").order("name").limit(500);
   if (q) query = query.or(`name.ilike.%${q}%,account_no.ilike.%${q}%,city.ilike.%${q}%,contact_name.ilike.%${q}%`);
   if (needs) query = query.eq("needs_qb_setup", true);
-  if (rep === "none") query = query.is("sales_rep_id", null);
+  if (rep === "none") query = query.is("sales_rep_id", null).eq("house_account", false);
+  else if (rep === HOUSE) query = query.is("sales_rep_id", null).eq("house_account", true);
   else if (/^[0-9a-f-]{36}$/i.test(rep)) query = query.eq("sales_rep_id", rep);
-  const [{ data }, { data: branches }, { count: total }, { count: needCount }, { count: noRep }, { data: staffRows }] = await Promise.all([
+  const [{ data }, { data: branches }, { count: total }, { count: needCount }, { count: noRep }, { data: staffRows }, { count: houseCount }] = await Promise.all([
     query,
     supabase.from("branches").select("*").order("sort"),
     supabase.from("companies").select("id", { count: "exact", head: true }),
     supabase.from("companies").select("id", { count: "exact", head: true }).eq("needs_qb_setup", true),
-    supabase.from("companies").select("id", { count: "exact", head: true }).eq("active", true).is("sales_rep_id", null),
-    supabase.from("profiles").select("id, full_name, email, job_role").in("role", ["employee", "admin"]).eq("status", "active").order("full_name"),
+    supabase.from("companies").select("id", { count: "exact", head: true }).eq("active", true).is("sales_rep_id", null).eq("house_account", false),
+    supabase.from("profiles").select("id, full_name, email, job_role").in("role", ["employee", "admin"]).eq("status", "active").eq("demo", false).order("full_name"),
+    supabase.from("companies").select("id", { count: "exact", head: true }).eq("active", true).is("sales_rep_id", null).eq("house_account", true),
   ]);
   const companies = (data ?? []) as Company[];
   const br = (branches ?? []) as Branch[];
@@ -92,6 +94,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         <Link className={`chip${needs ? "" : " on"}`} href="/admin/companies">All customers · {total ?? 0}</Link>
         <Link className={`chip${needs ? " on" : ""}`} href="/admin/companies?needs=1">Needs QuickBooks setup · {needCount ?? 0}</Link>
         <Link className={`chip${rep === "none" ? " on" : ""}`} href="/admin/companies?rep=none">No sales rep · {noRep ?? 0}</Link>
+        <Link className={`chip${rep === HOUSE ? " on" : ""}`} href={`/admin/companies?rep=${HOUSE}`}>House Accounts · {houseCount ?? 0}</Link>
       </div>
       {needs ? (
         <p className="small muted" style={{ margin: 0 }}>
@@ -100,7 +103,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
       ) : null}
       {rep === "none" ? (
         <p className="small muted" style={{ margin: 0 }}>
-          Every order from a customer counts toward their sales rep&apos;s goals. Tick the customers below, pick the rep, then tap Assign.
+          Every order from a customer counts toward their sales rep&apos;s goals. Tick the customers below, pick the rep (or House Account if no sales rep gets credit), then tap Assign. Staff can&apos;t send an order until it has a sales rep or House Account.
         </p>
       ) : null}
       <form action="/admin/companies" className="row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -109,7 +112,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         <select className="select sm" name="rep" defaultValue={rep} aria-label="Sales rep" style={{ width: "auto" }}>
           <option value="">Any sales rep</option>
           <option value="none">No sales rep</option>
-          <RepOptions staff={staff} />
+          <RepOptions staff={staff} house />
         </select>
         <button type="submit" className="btn sm dark">Show</button>
       </form>
@@ -119,7 +122,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         <CheckAll form="bulk-rep" name="ids" />
         <select className="select sm" name="rep" required defaultValue="" aria-label="Sales rep for the ticked customers">
           <option value="" disabled>Sales rep for ticked customers…</option>
-          <RepOptions staff={staff} />
+          <RepOptions staff={staff} house />
           <option value="none">(No sales rep)</option>
         </select>
         <Submit className="btn sm" pendingText="Assigning…">Assign</Submit>
@@ -133,8 +136,8 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
                 <div className="t ellipsis">{c.name}{c.active ? "" : " (inactive)"}</div>
                 {c.needs_qb_setup ? <span className="pill warn" style={{ marginTop: 4 }}>New · set up in QuickBooks</span> : null}
                 <div className="s">
-                  {[c.account_no, c.city && c.state ? `${c.city}, ${c.state}` : c.state, c.sales_rep_id ? `Rep: ${nameOf.get(c.sales_rep_id) ?? "(no longer on staff)"}` : null].filter(Boolean).join(" · ")}
-                  {!c.sales_rep_id && c.active ? <span className="faint"> · No sales rep</span> : null}
+                  {[c.account_no, c.city && c.state ? `${c.city}, ${c.state}` : c.state, c.sales_rep_id ? `Rep: ${nameOf.get(c.sales_rep_id) ?? "(no longer on staff)"}` : c.house_account ? "House Account" : null].filter(Boolean).join(" · ")}
+                  {!c.sales_rep_id && !c.house_account && c.active ? <span className="faint"> · No sales rep</span> : null}
                 </div>
               </div>
               <span className="small red">Edit</span>
