@@ -446,6 +446,15 @@ have a light-mode copy of its video (`video_path_light`, uploaded under "Light-m
 player (`components/academy/lesson-video.tsx`) plays it for people using the app in Light mode (Appearance Light, or Auto
 on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place, keeping the spot, if the look changes.
 
+### How To Use A.I. (employee walkthrough videos, 0061)
+
+`/how-to` lists the app walkthrough videos in `lib/howto.ts` (title, who it's for, job roles, length, step chapters); `/how-to/[slug]`
+plays one with a 6-hour signed URL and a tappable step list (`components/howto/player.tsx`; "Watched" is kept in the browser's
+localStorage). Employees only (`requireEmployee`; it's in the employee menu and Home apps). The videos live in the private `academy`
+bucket at `how-to/<slug>.mp4`; admins upload or replace one from its page (straight from the browser, upsert). Covers (`<slug>.jpg`) and first frames
+(`<slug>-poster.jpg`) are in `public/howto/`. 0061 limits reading `how-to/` files in the bucket to employees (the rest of the academy bucket stays readable by
+everyone signed in). To add a video: add it to `HOWTO` and its cover to `public/howto/`, then upload the MP4 on its page.
+
 ### Home widgets, spot checks, reconciliation, incoming deliveries
 
 `components/home-widgets.tsx` (data in `lib/widgets.ts`, `widgetsFor()` decides who gets what) puts a few cards under

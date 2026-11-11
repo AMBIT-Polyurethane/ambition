@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  CirclePlay,
   Blocks,
   ClipboardCheck,
   NotebookPen,
@@ -53,6 +54,7 @@ const ICONS = {
   expenses: Receipt,
   docs: FileText,
   academy: GraduationCap,
+  howto: CirclePlay,
   directory: Users,
   tax: Landmark,
   complaints: MessageSquareWarning,
