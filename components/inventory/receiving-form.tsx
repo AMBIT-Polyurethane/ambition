@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CircleAlert, FileText, LoaderCircle, Plus, Sparkles, SplitSquareVertical, Trash2, Upload } from "lucide-react";
+import { Camera, CircleAlert, CircleCheck, FileText, LoaderCircle, Plus, Sparkles, SplitSquareVertical, Trash2, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { shrink } from "@/lib/photo-upload";
 import { dateTime, plural } from "@/lib/format";
 import { ItemPick, type StockItem } from "@/components/incoming-forms";
 import { bolMatches, readBolAction, receiveReport, type ReportLine } from "@/app/(app)/inventory/hub-actions";
 import type { BolRead } from "@/lib/inventory/bol";
+import { paperwork, type ReportFile } from "@/lib/report-files";
 import type { BolMatch } from "@/lib/incoming";
 
-// The Receiving Report: snap or upload the BOL, the app fills in the lines, whoever unloads checks each one
-// (what the BOL says, what came, how many arrived damaged, lot / batch # and expiration) and sends it to an
-// admin for approval. Stock and the spreadsheet change when an admin approves it (an admin's own report
+// The Receiving Report: snap or upload the BOL and the packing list (both are required, 0067), the app fills in
+// the lines and checks the BOL's lot numbers (often handwritten) against the packing list's (the manufacturer's),
+// whoever unloads checks each line (what came, how many arrived damaged, lot / batch # and expiration) and sends
+// it to an admin for approval. Stock and the spreadsheet change when an admin approves it (an admin's own report
 // goes straight in).
+
+type Kind = "bol" | "packing";
 
 type Line = {
   key: number;
@@ -27,16 +31,28 @@ type Line = {
   exp: string;
   autoExp?: boolean; // filled in from the Mfg date and shelf life
   note: string;
-  raw?: string | null;
+  raw?: string | null; // what the BOL says
+  rawPack?: string | null; // what the packing list says
   conf?: "high" | "medium" | "low" | null;
   hint?: string | null;
   fixed?: boolean; // a transfer line: the item and lot come from the sending location
+  /** What each document said for this line (to check the BOL against the manufacturer's packing list). */
+  bolLot?: string | null;
+  packLot?: string | null;
+  bolQty?: number | null;
+  packQty?: number | null;
+  lotFrom?: Kind | null; // which document the lot / dates came from (the packing list wins)
+  recvTyped?: boolean; // "Came in" was typed by hand: a later read doesn't change it
 };
 
 export type ReportDelivery = {
   id: number;
   vendor: string;
   transfer: boolean;
+  /** expected (receive it, or fix it after it was sent back) or submitted (an admin changing it before approving). */
+  status?: string;
+  /** Paperwork already on the report (kept when it's sent again). */
+  files?: ReportFile[];
   bol_no: string | null;
   po_no: string | null;
   carrier: string | null;
@@ -96,8 +112,16 @@ export function ReceivingForm({
   const [carrier, setCarrier] = useState(delivery?.carrier ?? "");
   const [day, setDay] = useState(today);
   const [note, setNote] = useState(delivery?.note ?? "");
-  const [files, setFiles] = useState<{ path: string; name: string }[]>([]);
-  const [ai, setAi] = useState<{ read: boolean; cost: number; notes: string | null }>({ read: false, cost: 0, notes: null });
+  const [files, setFiles] = useState<ReportFile[]>([]);
+  const have = useMemo(() => delivery?.files ?? [], [delivery?.files]);
+  const [ai, setAi] = useState<{ read: boolean; cost: number; notes: Partial<Record<Kind, string>>; kinds: Kind[] }>({ read: false, cost: 0, notes: {}, kinds: [] });
+  // Both the BOL and the packing list are required on a report from a vendor (not a transfer, and not when an
+  // admin is changing a report while approving it).
+  const needPapers = !transfer && delivery?.status !== "submitted";
+  const [noPack, setNoPack] = useState(false);
+  const [noPackWhy, setNoPackWhy] = useState("");
+  // Sent-back reports for this same truck: closed when this one is sent (unless unticked).
+  const [keepOld, setKeepOld] = useState<number[]>([]);
   const [lines, setLines] = useState<Line[]>(() =>
     delivery?.lines.length
       ? delivery.lines.map((l) => ({
@@ -116,6 +140,7 @@ export function ReceivingForm({
       : [blank()],
   );
   const [busy, setBusy] = useState<null | "upload" | "read" | "save">(null);
+  const [busyKind, setBusyKind] = useState<Kind>("bol");
   const [error, setError] = useState<string | null>(null);
   // The BOL # is already on another report here: same truck sent twice, or a new load on the same ticket?
   const [matches, setMatches] = useState<BolMatch[]>([]);
@@ -140,6 +165,12 @@ export function ReceivingForm({
   }, [bol, branch, transfer, delivery?.id]);
   const camRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLInputElement>(null);
+  const pickKind = useRef<Kind>("bol");
+  const all = [...have, ...files];
+  const pw = paperwork(all);
+  const sentBack = matches.filter((m) => m.status === "sent_back");
+  const closing = sentBack.filter((m) => !keepOld.includes(m.id));
+  const dupes = matches.filter((m) => !closing.some((c) => c.id === m.id));
 
   const set = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   /** Mfg date typed: the expiration follows it (unless someone typed their own). */
@@ -148,36 +179,68 @@ export function ReceivingForm({
     set(l.key, auto && (!l.exp || l.autoExp) ? { mfg, exp: auto, autoExp: true } : { mfg });
   };
 
-  /** Put what the AI read onto the report (matching lines already there when it's an expected delivery). */
-  const apply = (r: BolRead) => {
-    if (!transfer && r.vendor && (!vendor.trim() || !delivery)) setVendor(r.vendor);
-    if (r.bol_no) setBol(r.bol_no);
-    if (r.po_no) setPo(r.po_no);
-    if (r.carrier) setCarrier(r.carrier);
-    setAi((a) => ({ read: true, cost: a.cost + r.cost_cents, notes: r.notes }));
+  /**
+   * Put what the AI read onto the report (matching lines already there when it's an expected delivery). The BOL
+   * and the packing list are read one at a time: the packing list's lot numbers and dates are the manufacturer's,
+   * so they win over the BOL's (often handwritten); each document's own lot and count stay on the line to compare.
+   */
+  const apply = (r: BolRead, kind: Kind) => {
+    const pack = kind === "packing";
+    if (!transfer && r.vendor && (!vendor.trim() || !delivery)) setVendor((v) => (pack && v.trim() ? v : r.vendor!));
+    if (r.bol_no) setBol((b) => (pack && b.trim() ? b : r.bol_no!));
+    if (r.po_no) setPo((x) => (x.trim() && (pack || ai.kinds.includes("packing")) ? x : r.po_no!));
+    if (r.carrier) setCarrier((c) => (pack && c.trim() ? c : r.carrier!));
+    setAi((a) => ({ read: true, cost: a.cost + r.cost_cents, notes: r.notes ? { ...a.notes, [kind]: r.notes } : a.notes, kinds: a.kinds.includes(kind) ? a.kinds : [...a.kinds, kind] }));
     setLines((cur) => {
       const out = cur.filter((l) => l.item || l.qty || l.recv).map((l) => ({ ...l }));
       const used = new Set<number>();
       for (const x of r.lines) {
         const item = x.product_id ? byId.get(x.product_id) ?? null : null;
-        const hit = item ? out.find((l) => !used.has(l.key) && l.item?.product_id === item.product_id && (!l.fixed || !l.lot || !x.lot_no || l.lot.toUpperCase() === x.lot_no)) : undefined;
+        const lot = x.lot_no ?? null;
+        const free = item ? out.filter((l) => !used.has(l.key) && l.item?.product_id === item.product_id && (!l.fixed || !l.lot || !lot || l.lot.toUpperCase() === lot)) : [];
+        const hit =
+          free.find((l) => lot && [l.lot, l.bolLot, l.packLot].some((v) => v && v.toUpperCase() === lot)) ??
+          free.find((l) => (pack ? l.packQty == null : l.bolQty == null)) ??
+          free[0];
         if (hit) {
           used.add(hit.key);
-          hit.recv = String(x.qty);
-          if (!hit.fixed) {
-            hit.lot = x.lot_no ?? hit.lot;
-            hit.mfg = x.mfg ?? hit.mfg;
-            hit.exp = x.exp ?? (expFrom(hit.mfg, hit.item?.shelfLife) || hit.exp);
+          const first = hit.bolQty == null && hit.packQty == null;
+          if (first && !hit.recvTyped) hit.recv = String(x.qty);
+          if (pack) {
+            hit.packLot = lot;
+            hit.packQty = x.qty;
+            hit.rawPack = x.raw;
+          } else {
+            hit.bolLot = lot;
+            hit.bolQty = x.qty;
+            hit.raw = x.raw;
           }
-          hit.raw = x.raw;
-          hit.conf = x.confidence;
-          hit.hint = x.note;
+          if (!hit.fixed) {
+            if (pack || hit.lotFrom !== "packing") {
+              hit.lot = lot ?? hit.lot;
+              hit.mfg = x.mfg ?? hit.mfg;
+              hit.exp = x.exp ?? (expFrom(hit.mfg, hit.item?.shelfLife) || hit.exp);
+              if (lot) hit.lotFrom = kind;
+            } else {
+              // The packing list already set the lot: only fill in a date it didn't have.
+              if (!hit.mfg && x.mfg) hit.mfg = x.mfg;
+              if (!hit.exp && x.exp) hit.exp = x.exp;
+            }
+          }
+          if (pack || hit.packQty == null) {
+            hit.conf = x.confidence;
+            hit.hint = x.note;
+          }
           continue;
         }
         if (transfer) continue; // a transfer only receives what was sent
         const mfg = x.mfg ?? "";
         const exp = x.exp ?? expFrom(mfg, item?.shelfLife);
-        const l: Line = { key: seq++, id: null, item, qty: String(x.qty), recv: String(x.qty), damaged: "", lot: x.lot_no ?? "", mfg, exp, autoExp: !x.exp && Boolean(exp), note: "", raw: x.raw, conf: x.confidence, hint: x.note };
+        const l: Line = {
+          key: seq++, id: null, item, qty: String(x.qty), recv: String(x.qty), damaged: "", lot: lot ?? "", mfg, exp, autoExp: !x.exp && Boolean(exp), note: "",
+          raw: pack ? null : x.raw, rawPack: pack ? x.raw : null, conf: x.confidence, hint: x.note,
+          bolLot: pack ? null : lot, packLot: pack ? lot : null, bolQty: pack ? null : x.qty, packQty: pack ? x.qty : null, lotFrom: lot ? kind : null,
+        };
         used.add(l.key);
         out.push(l);
       }
@@ -185,12 +248,13 @@ export function ReceivingForm({
     });
   };
 
-  const addFiles = async (list: FileList | null) => {
+  const addFiles = async (list: FileList | null, kind: Kind) => {
     if (!list?.length) return;
     setError(null);
+    setBusyKind(kind);
     setBusy("upload");
     const supabase = createClient();
-    const added: { path: string; name: string }[] = [];
+    const added: ReportFile[] = [];
     for (const f of Array.from(list).slice(0, 4)) {
       const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
       const isImg = f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
@@ -209,26 +273,40 @@ export function ReceivingForm({
         continue;
       }
       const ext = isPdf ? "pdf" : type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
-      const path = `${branch}/bol-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const path = `${branch}/${kind === "packing" ? "pack" : "bol"}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
       const up = await supabase.storage.from("inventory-files").upload(path, body, { contentType: type, upsert: false });
       if (up.error) {
         setError(`${f.name}: couldn't upload (${up.error.message}).`);
         continue;
       }
-      added.push({ path, name: f.name.slice(0, 120) || "BOL" });
+      added.push({ path, name: f.name.slice(0, 120) || (kind === "packing" ? "Packing list" : "BOL"), kind });
     }
     if (!added.length) return setBusy(null);
     setFiles((fs) => [...fs, ...added]);
+    if (kind === "packing") setNoPack(false);
     if (!aiReady) return setBusy(null);
     setBusy("read");
-    const r = await readBolAction({ branch, paths: added.map((a) => a.path) });
+    const r = await readBolAction({ branch, paths: added.map((a) => a.path), kind });
     setBusy(null);
     if (!r.ok) return setError(r.error);
-    apply(r.read);
+    apply(r.read, kind);
+  };
+  const pick = (kind: Kind, camera: boolean) => {
+    pickKind.current = kind;
+    (camera ? camRef : pickRef).current?.click();
   };
 
   const receive = async () => {
     setError(null);
+    const papers = () => document.getElementById("recv-papers")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (needPapers && !pw.bol) {
+      papers();
+      return setError("Add the BOL first: take a photo of it or upload the PDF (step 1 at the top).");
+    }
+    if (needPapers && !pw.packing && !(noPack && noPackWhy.trim().length >= 3)) {
+      papers();
+      return setError(noPack ? "Say why there's no packing list (step 2 at the top)." : 'Add the packing list (step 2 at the top). If none came with this truck, tick "No packing list came with this truck" and say why.');
+    }
     if (!transfer && !vendor.trim()) return setError("Who is it from? (the shipper on the BOL)");
     const out: ReportLine[] = [];
     for (const l of lines) {
@@ -248,17 +326,23 @@ export function ReceivingForm({
       out.push({ id: l.id, product_id: l.item.product_id, qty: q, received_qty: r, damaged_qty: d, lot_no: l.lot.trim().toUpperCase(), mfg: l.mfg, exp, note: l.note.trim() });
     }
     if (!out.length) return setError("Add at least one item.");
-    if (matches.length && !newLoad) {
+    if (dupes.length && !newLoad) {
       document.getElementById("bol-again")?.scrollIntoView({ behavior: "smooth", block: "center" });
       return setError(`BOL ${bol.trim()} is already on another report. If it's the same truck, don't send it again. If it's a new load on the same ticket, tick "This is a new load" above.`);
     }
     setBusy("save");
+    const read = [
+      ai.notes.bol ? `From the BOL: ${ai.notes.bol}` : "",
+      ai.notes.packing ? `From the packing list: ${ai.notes.packing}` : "",
+    ];
     const res = await receiveReport({
       id: delivery?.id ?? null,
       branch,
-      head: { vendor, bol_no: bol, po_no: po, carrier, received_on: day, note: [note.trim(), ai.notes ? `From the BOL: ${ai.notes}` : ""].filter(Boolean).join(" · "), files, read_by_ai: ai.read, ai_cost_cents: ai.cost },
+      head: { vendor, bol_no: bol, po_no: po, carrier, received_on: day, note: [note.trim(), ...read].filter(Boolean).join(" · "), files, read_by_ai: ai.read, ai_cost_cents: ai.cost },
       lines: out,
-      newLoad: matches.length > 0 && newLoad,
+      newLoad: dupes.length > 0 && newLoad,
+      noPacking: needPapers && !pw.packing && noPack ? noPackWhy.trim() : undefined,
+      replaces: closing.map((m) => m.id),
     });
     setBusy(null);
     if (res && !res.ok) setError(res.error);
@@ -269,38 +353,90 @@ export function ReceivingForm({
 
   return (
     <div className="col" style={{ gap: 12 }}>
-      <section className="card col recv-bol" style={{ gap: 10 }}>
+      <section id="recv-papers" className="card col recv-bol" style={{ gap: 10 }}>
         <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
           <Sparkles size={18} style={{ flex: "none", marginTop: 2, color: "var(--red-text)" }} />
           <div className="col tight">
-            <b>{transfer ? "Attach the BOL (optional)" : "Read the BOL"}</b>
+            <b>{transfer ? "Attach the BOL (optional)" : "The BOL and the packing list"}</b>
             <span className="tiny faint">
-              {aiReady
-                ? transfer
-                  ? "Snap the signed BOL to keep it with this transfer."
-                  : "Take a photo or upload the PDF. The app fills in the shipper, BOL #, PO #, carrier and every line with its lot numbers. Then check it."
-                : "Attach the BOL photo or PDF to keep it with the report."}
+              {transfer
+                ? "Snap the signed BOL to keep it with this transfer."
+                : aiReady
+                  ? "Both are needed on every Receiving Report. Snap or upload each one: the app fills in the report, then checks the lot numbers on the BOL (often written in by hand) against the packing list (the manufacturer's numbers)."
+                  : "Both are needed on every Receiving Report. Snap or upload each one to keep it with the report."}
             </span>
           </div>
         </div>
-        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <button type="button" className="btn sm" onClick={() => camRef.current?.click()} disabled={busy !== null}><Camera size={16} /> Take a photo</button>
-          <button type="button" className="btn sm dark" onClick={() => pickRef.current?.click()} disabled={busy !== null}><Upload size={16} /> Photo or PDF</button>
-          <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
-          <input ref={pickRef} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
+        <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void addFiles(e.target.files, pickKind.current); e.target.value = ""; }} />
+        <input ref={pickRef} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { void addFiles(e.target.files, pickKind.current); e.target.value = ""; }} />
+        <div className={transfer ? "col" : "recv-docs"}>
+          {(transfer ? (["bol"] as Kind[]) : (["bol", "packing"] as Kind[])).map((k, n) => {
+            const mine = all.filter((f) => (k === "bol" ? f.kind === "bol" || !f.kind : f.kind === k));
+            const done = mine.length > 0;
+            return (
+              <div key={k} className={`recv-doc${done ? " done" : noPack && k === "packing" ? " skip" : needPapers ? " need" : ""}`}>
+                <div className="row between" style={{ gap: 8, alignItems: "flex-start" }}>
+                  <div className="col tight" style={{ minWidth: 0 }}>
+                    <b>{transfer ? "BOL" : `${n + 1}. ${k === "bol" ? "BOL (bill of lading)" : "Packing list"}`}</b>
+                    <span className="tiny faint">
+                      {k === "bol"
+                        ? "The trucking paperwork the driver signs."
+                        : "From the manufacturer: what's on the truck, with their lot / batch numbers. Often in a pouch on the first pallet, or emailed."}
+                    </span>
+                  </div>
+                  {done ? (
+                    <span className="pill ok" style={{ flex: "none" }}><CircleCheck size={12} /> Added</span>
+                  ) : needPapers && !(noPack && k === "packing") ? (
+                    <span className="pill warn" style={{ flex: "none" }}>Needed</span>
+                  ) : null}
+                </div>
+                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <button type="button" className="btn sm" onClick={() => pick(k, true)} disabled={busy !== null}><Camera size={16} /> Take a photo</button>
+                  <button type="button" className="btn sm dark" onClick={() => pick(k, false)} disabled={busy !== null}><Upload size={16} /> Photo or PDF</button>
+                </div>
+                {(busy === "upload" || busy === "read") && busyKind === k ? (
+                  <div className="row small muted" style={{ gap: 8 }} role="status">
+                    <LoaderCircle size={16} className="spin" /> {busy === "upload" ? "Uploading…" : `Reading the ${k === "packing" ? "packing list" : "BOL"}… (about 20 seconds)`}
+                  </div>
+                ) : null}
+                {mine.length ? (
+                  <div className="row tiny" style={{ gap: 6, flexWrap: "wrap" }}>
+                    {mine.map((f) => (
+                      <span key={f.path} className="pill grey"><FileText size={12} /> {f.name}{have.includes(f) ? " · on the report" : ""}</span>
+                    ))}
+                  </div>
+                ) : null}
+                {k === "packing" && needPapers && !done ? (
+                  <div className="col" style={{ gap: 6 }}>
+                    <label className="check small">
+                      <input type="checkbox" checked={noPack} onChange={(e) => { setNoPack(e.target.checked); setError(null); }} />
+                      <span>No packing list came with this truck</span>
+                    </label>
+                    {noPack ? (
+                      <input
+                        className="input sm"
+                        value={noPackWhy}
+                        onChange={(e) => setNoPackWhy(e.target.value)}
+                        maxLength={200}
+                        placeholder="Why? (for example: the driver didn't have one, asked Covestro to email it)"
+                        aria-label="Why there's no packing list"
+                      />
+                    ) : null}
+                    {noPack ? <span className="tiny faint">The report is flagged for the admin, and the packing list can be added to it later.</span> : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
-        {busy === "upload" || busy === "read" ? (
-          <div className="row small muted" style={{ gap: 8 }} role="status"><LoaderCircle size={16} className="spin" /> {busy === "upload" ? "Uploading…" : "Reading the BOL… (about 20 seconds)"}</div>
-        ) : null}
-        {files.length ? (
-          <div className="row tiny" style={{ gap: 6, flexWrap: "wrap" }}>
-            {files.map((f) => <span key={f.path} className="pill grey"><FileText size={12} /> {f.name}</span>)}
-          </div>
-        ) : null}
         {ai.read ? (
           <div className="alert warn small" role="status">
             <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
-            <span>Filled in from the BOL. Check every line against what&apos;s on the truck, especially the ones marked <b>check</b>. Change anything that&apos;s off.{ai.notes ? ` The BOL also says: ${ai.notes}` : ""}</span>
+            <span>
+              Filled in from the {ai.kinds.length > 1 ? "BOL and the packing list" : ai.kinds[0] === "packing" ? "packing list" : "BOL"}. Check every line against what&apos;s on the truck, especially the ones marked <b>check</b>. Change anything that&apos;s off.
+              {ai.notes.bol ? ` The BOL also says: ${ai.notes.bol}` : ""}
+              {ai.notes.packing ? ` The packing list also says: ${ai.notes.packing}` : ""}
+            </span>
           </div>
         ) : null}
       </section>
@@ -335,28 +471,51 @@ export function ReceivingForm({
         </div>
       </section>
 
-      {matches.length ? (
+      {sentBack.length ? (
+        <section className="alert info bol-again" role="status">
+          <CircleAlert size={18} style={{ flex: "none", marginTop: 2 }} />
+          <div className="col" style={{ gap: 8, minWidth: 0 }}>
+            <b>This truck was sent back to fix on {sentBack.length === 1 ? "another report" : `${sentBack.length} other reports`}</b>
+            <ul className="bol-list">
+              {sentBack.map((m) => (
+                <li key={m.id}>
+                  <a href={`/inventory/incoming/${m.id}`} target="_blank" rel="noopener noreferrer">#{m.id}</a> {m.lines || "no lines"} · sent back {dateTime(m.at)}{m.by ? ` by ${m.by}` : ""}{m.note ? `: “${m.note}”` : ""}
+                </li>
+              ))}
+            </ul>
+            <span className="small">Nothing from {sentBack.length === 1 ? "it" : "them"} went into stock. When you send this report, {sentBack.length === 1 ? "that one is" : "those are"} closed as redone here, so the truck only counts once.</span>
+            {sentBack.map((m) => (
+              <label key={m.id} className="check">
+                <input type="checkbox" checked={!keepOld.includes(m.id)} onChange={(e) => setKeepOld((k) => (e.target.checked ? k.filter((x) => x !== m.id) : [...k, m.id]))} />
+                <span><b>Close #{m.id}</b>: it&apos;s this same truck</span>
+              </label>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {dupes.length ? (
         <section id="bol-again" className="alert warn bol-again" role="alert">
           <CircleAlert size={18} style={{ flex: "none", marginTop: 2 }} />
           <div className="col" style={{ gap: 8, minWidth: 0 }}>
-            <b>BOL {bol.trim()} is already on {matches.length === 1 ? "a report" : `${matches.length} reports`} here</b>
+            <b>BOL {bol.trim()} is already on {dupes.length === 1 ? "a report" : `${dupes.length} reports`} here</b>
             <ul className="bol-list">
-              {matches.map((m) => (
+              {dupes.map((m) => (
                 <li key={m.id}>
                   <a href={`/inventory/incoming/${m.id}`} target="_blank" rel="noopener noreferrer">#{m.id}</a>{" "}
-                  {m.lines || "no lines"} · {m.status === "received" ? "received" : "waiting for approval"} {dateTime(m.at)}{m.by ? ` · ${m.by}` : ""}
+                  {m.lines || "no lines"} · {m.status === "received" ? "received" : m.status === "sent_back" ? "sent back, not closed" : "waiting for approval"} {dateTime(m.at)}{m.by ? ` · ${m.by}` : ""}
                 </li>
               ))}
             </ul>
             <span className="small">
-              <b>Same truck?</b> Don&apos;t send it again. Open the report above instead{matches.some((m) => m.status === "submitted") ? " (an admin can still fix it before approving)" : ""}.
+              <b>Same truck?</b> Don&apos;t send it again. Open the report above instead{dupes.some((m) => m.status === "submitted") ? " (an admin can still fix it before approving)" : ""}.
             </span>
             <span className="small">
               <b>A new load on the same ticket?</b> (The plant&apos;s shuttle loads all carry one transfer order #.) Count this load, then tick:
             </span>
             <label className="check">
               <input type="checkbox" checked={newLoad} onChange={(e) => { setNewLoad(e.target.checked); setError(null); }} />
-              <span><b>This is a new load</b>: load {matches.length + 1} on BOL {bol.trim()}</span>
+              <span><b>This is a new load</b>: load {dupes.length + 1} on BOL {bol.trim()}</span>
             </label>
           </div>
         </section>
@@ -380,7 +539,22 @@ export function ReceivingForm({
                     <ItemPick items={items} value={l.item} onPick={(it) => set(l.key, { item: it, conf: l.conf === "low" ? "medium" : l.conf })} />
                   )}
                   {l.raw ? <div className="tiny faint" style={{ marginTop: 4 }}>BOL says: {l.raw}</div> : null}
+                  {l.rawPack ? <div className="tiny faint" style={{ marginTop: l.raw ? 0 : 4 }}>Packing list says: {l.rawPack}</div> : null}
                   {l.conf && l.conf !== "high" ? <div className="tiny warn-t" style={{ marginTop: 2 }}>Check: {l.hint || (l.item ? "make sure this is the right item" : "pick the item this line is")}</div> : null}
+                  {l.bolLot && l.packLot && l.bolLot.toUpperCase() !== l.packLot.toUpperCase() ? (
+                    <div className="tiny warn-t" style={{ marginTop: 2 }}>
+                      Lots don&apos;t match: the BOL says <b>{l.bolLot}</b>, the packing list says <b>{l.packLot}</b>. The packing list is the manufacturer&apos;s number; check it against the labels on the drums.
+                    </div>
+                  ) : null}
+                  {l.bolQty != null && l.packQty != null && l.bolQty !== l.packQty ? (
+                    <div className="tiny warn-t" style={{ marginTop: 2 }}>Counts don&apos;t match: the BOL says {l.bolQty}, the packing list says {l.packQty}. Count what came off the truck.</div>
+                  ) : null}
+                  {ai.kinds.length > 1 && !l.fixed && l.item && (l.bolQty == null) !== (l.packQty == null) ? (
+                    <div className="tiny warn-t" style={{ marginTop: 2 }}>Only on the {l.packQty == null ? "BOL" : "packing list"}. Check it&apos;s really on this truck.</div>
+                  ) : null}
+                  {l.bolLot && l.packLot && l.bolLot.toUpperCase() === l.packLot.toUpperCase() ? (
+                    <div className="tiny" style={{ marginTop: 2, color: "var(--ok-text)" }}><CircleCheck size={11} style={{ verticalAlign: "-1px" }} /> Lot matches the packing list</div>
+                  ) : null}
                 </div>
                 {!l.fixed ? (
                   <button type="button" className="iconbtn" aria-label="Remove this line" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [blank()]))}>
@@ -395,7 +569,7 @@ export function ReceivingForm({
                 </label>
                 <label className="field">
                   <span className="label">Came in</span>
-                  <input className={`input sm${off ? " warn-in" : ""}`} inputMode="decimal" value={l.recv} onChange={(e) => set(l.key, { recv: e.target.value })} placeholder="0 if none" />
+                  <input className={`input sm${off ? " warn-in" : ""}`} inputMode="decimal" value={l.recv} onChange={(e) => set(l.key, { recv: e.target.value, recvTyped: true })} placeholder="0 if none" />
                 </label>
                 <label className="field">
                   <span className="label">Damaged</span>

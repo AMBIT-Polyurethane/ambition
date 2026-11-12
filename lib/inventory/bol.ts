@@ -90,7 +90,7 @@ async function fileBlocks(supabase: SupabaseClient, paths: string[]): Promise<An
   return out;
 }
 
-export async function readBol(opts: { supabase: SupabaseClient; branchName: string; items: BolItem[]; paths: string[] }): Promise<BolRead> {
+export async function readBol(opts: { supabase: SupabaseClient; branchName: string; items: BolItem[]; paths: string[]; kind?: "bol" | "packing" }): Promise<BolRead> {
   const { supabase, items } = opts;
   const settings = await loadAiSettings(supabase);
   const model = settings?.model ?? "claude-sonnet-5-5";
@@ -115,7 +115,15 @@ ${list}`,
   ];
   const blocks = await fileBlocks(supabase, opts.paths);
   if (!blocks.length) throw new Error("Couldn't open the file. Try the photo or PDF again.");
-  const content: Anthropic.Messages.ContentBlockParam[] = [...blocks, { type: "text", text: "Here is the delivery document. Record it." }];
+  // Which document this is (0067: every report has both). The packing list is the manufacturer's own record of
+  // lots and dates; the BOL is the trucking paperwork, where lot numbers are often written in by hand.
+  const said =
+    opts.kind === "packing"
+      ? "Here is the manufacturer's packing list for this truck. Its lot / batch numbers, quantities and dates are the manufacturer's own: record them exactly as printed. Record it."
+      : opts.kind === "bol"
+        ? "Here is the bill of lading (BOL) for this truck. Lot / batch numbers on a BOL are often written in by hand at our warehouse: if a lot number is handwritten, still record it, but set confidence no higher than \"medium\" and say \"handwritten\" in that line's note. Record it."
+        : "Here is the delivery document. Record it.";
+  const content: Anthropic.Messages.ContentBlockParam[] = [...blocks, { type: "text", text: said }];
   const { data: raw, usage } = await fillForm<Record<string, unknown>>({ model, maxTokens: 8000, system, content, ...FORM });
   const out = (raw ?? {}) as {
     shipper?: string;

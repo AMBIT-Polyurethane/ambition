@@ -581,6 +581,20 @@ them): `receiving`, `transfers`, `inv_reports`. Old `/inventory?f=…` stock lin
   the same BOL # (case and spaces ignored). The form shows them (`bolMatches`) and `receiveReport` refuses to save
   until "This is a new load" is ticked (`newLoad`), then starts the note with "Load N on BOL …". The report page
   lists the same-BOL reports so the approver can cancel a truck sent twice. No database change.
+  **BOL + packing list (0067).** Each file in `inbound_deliveries.files` carries `kind` (`bol` / `packing` /
+  `other`; older files have none and count as the BOL: `readFiles()` / `paperwork()` in `lib/incoming.ts`). The form
+  has a spot for each (`<branch>/bol-…`, `<branch>/pack-…`), reads each with `readBolAction({kind})` (the prompt says
+  which document it is; handwritten BOL lots are "medium"), keeps each document's lot and count per line and warns
+  when they differ (the packing list's lot wins). `receiveReport` refuses a vendor report (new, or `expected` /
+  sent back) without both, unless `noPacking` gives a reason (the note starts "No packing list: …"); not enforced
+  for transfers, returns (`receiveReturn`) or an admin's "Change something first". `approveReceiving` needs
+  `nopack_ok` for a labeled report with no packing list. `inbound_add_files` + `AddPaperwork` add files later.
+  Sent back, then redone as a new report: `sameBol()` now also returns `expected` rows with a `sent_back_note`
+  (`status: "sent_back"`); the form lists them with "Close #N" (ticked) and `receiveReport` calls
+  `inbound_replace(old, new)` after saving (status `cancelled`, `replaced_by`, `cancel_note`; falls back to
+  `inbound_cancel` before 0067). `closeRedone` does the same from a report page. 0067's cleanup closed the ones
+  already there (same location, BOL #, items and quantities, within 3 days). Receiving lists "Sent back to fix"
+  separately, and New Receiving Report lists the location's sent-back reports first.
 - **Transfers** (`inventory_transfers` / `inventory_transfer_lines`, `/inventory/transfers`): `transfer_send` checks
   availability (lots: remaining − sheet pending − reserved), takes it off the sender (`on_hand`, or the lot's
   `out_unsynced` → Shipped Out) and creates the receiver's `inbound_deliveries` row (`transfer_id`, lines with the lot,

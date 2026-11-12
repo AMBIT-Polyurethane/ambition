@@ -2561,6 +2561,16 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 /* receiving report */
 .recv-line.recv-check { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
 .recv-line.recv-low { border-color: color-mix(in srgb, var(--red) 60%, var(--line)); }
+/* 0067: the two documents on a Receiving Report (BOL + packing list), side by side on wide screens */
+.recv-docs { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 700px) { .recv-docs { grid-template-columns: 1fr 1fr; } }
+.recv-doc { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px dashed var(--line-hover); border-radius: 12px; background: var(--s2); min-width: 0; }
+.recv-doc.need { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+.recv-doc.done { border-style: solid; border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.recv-doc.skip { border-style: solid; }
+.recv-doc .check { align-items: flex-start; }
+.recv-doc .check input { margin-top: 2px; }
+.add-paper { padding: 12px; border: 1px dashed var(--line-hover); border-radius: 12px; }
 .input.warn-in { border-color: var(--warn); }
 @media (min-width: 700px) { .recv-grid.grid4 { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 @media print { .hub-tabs, .topbar .iconbtn { display: none !important; } .recv-report, .card { border: 0 !important; } .tbl th, .tbl td { color: #18181b; } }

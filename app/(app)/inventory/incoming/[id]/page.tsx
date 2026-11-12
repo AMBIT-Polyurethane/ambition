@@ -7,15 +7,16 @@ import { dateShort, dateTime, plural } from "@/lib/format";
 import { todayCentral } from "@/lib/sale";
 import { claudeReady } from "@/lib/ai/claude";
 import { inventoryBranches } from "@/lib/widgets";
-import { sameBol, stockItems, vendorNames } from "@/lib/incoming";
+import { FILE_KIND, NO_PACKING, paperwork, readFiles, sameBol, stockItems, vendorNames } from "@/lib/incoming";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { PrintButton } from "@/components/print-button";
 import { IncomingForm } from "@/components/incoming-forms";
 import { ReceivingForm } from "@/components/inventory/receiving-form";
 import { PartialReceipt } from "@/components/inventory/partial-receipt";
+import { AddPaperwork } from "@/components/inventory/add-paperwork";
 import { cancelIncoming } from "@/app/(app)/inventory/count-actions";
-import { approveReceiving, sendBackReceiving } from "@/app/(app)/inventory/hub-actions";
+import { approveReceiving, closeRedone, sendBackReceiving } from "@/app/(app)/inventory/hub-actions";
 
 export const metadata = { title: "Receiving Report" };
 export const dynamic = "force-dynamic";
@@ -41,10 +42,24 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
   const waiting = d.status === "submitted";
   const admin = profile.role === "admin";
   const late = expected && d.expected_on < todayCentral();
-  const files = (Array.isArray(d.files) ? d.files : []) as { path: string; name: string }[];
+  const files = readFiles(d.files);
   const links = await Promise.all(
     files.map(async (f) => ({ ...f, url: (await supabase.storage.from("inventory-files").createSignedUrl(f.path, 3600)).data?.signedUrl ?? null })),
   );
+  // The paperwork (0067): every report from a vendor needs the BOL and the packing list. Older reports' files
+  // don't say which is which.
+  const pw = paperwork(files);
+  const vendorReport = !d.transfer_id && !String(d.vendor ?? "").startsWith("Return: ");
+  const noPackWhy = String(d.note ?? "").split(" · ").find((x) => x.startsWith(NO_PACKING))?.slice(NO_PACKING.length).trim() || null;
+  const missingPacking = vendorReport && pw.labeled && !pw.packing;
+  const groups: { label: string; files: typeof links }[] = pw.labeled
+    ? (["bol", "packing", "other"] as const)
+        .map((k) => ({ label: FILE_KIND[k], files: links.filter((f) => (f.kind ?? "bol") === k) }))
+        .filter((g) => g.files.length)
+    : links.length
+      ? [{ label: "BOL and paperwork", files: links }]
+      : [];
+  const replacedBy = d.status === "cancelled" && d.replaced_by ? Number(d.replaced_by) : null;
   // Partial receipts (0065): this report's follow-up (the rest of the PO), or the report this one is the rest of.
   const canPartial = !d.transfer_id && (d.status === "submitted" || d.status === "received") && d.partial !== undefined;
   const [items, vendors] = expected || (waiting && admin) || canPartial ? await Promise.all([stockItems(supabase, d.branch_id), vendorNames(supabase)]) : [[], []];
@@ -63,7 +78,10 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
   }));
   const anyDamaged = lines.some((l) => Number(l.damaged_qty ?? 0) > 0);
   // Other reports here with the same BOL #: a truck sent twice, or another load on the same ticket.
-  const twins = !expected && !d.transfer_id && d.bol_no && d.status !== "cancelled" ? await sameBol(supabase, d.branch_id, d.bol_no, d.id) : [];
+  const sameTruck = !expected && !d.transfer_id && d.bol_no && d.status !== "cancelled" ? await sameBol(supabase, d.branch_id, d.bol_no, d.id) : [];
+  // A report sent back for this truck that was redone as this one (left open before 0067 closed them on its own).
+  const redone = sameTruck.filter((m) => m.status === "sent_back");
+  const twins = sameTruck.filter((m) => m.status !== "sent_back");
   const saidNewLoad = /^Load \d+ on BOL/.test(String(d.note ?? ""));
   const transfer = d.transfer_id as number | null;
 
@@ -95,10 +113,26 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
         </Link>
       ) : null}
 
+      {replacedBy ? (
+        <Link href={`/inventory/incoming/${replacedBy}`} className="alert info small" style={{ textDecoration: "none" }}>
+          <CircleCheck size={16} style={{ flex: "none", marginTop: 2 }} />
+          <span>
+            <b>Closed: redone on Receiving Report #{replacedBy}</b> (the same truck). Nothing from this one went into stock{d.cancelled_by_name ? ` · closed by ${d.cancelled_by_name}` : ""}{d.cancelled_at ? ` · ${dateTime(d.cancelled_at)}` : ""}. Open #{replacedBy}
+          </span>
+        </Link>
+      ) : d.status === "cancelled" && d.cancelled_at ? (
+        <div className="alert info small" role="status">
+          <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
+          <span>Cancelled{d.cancelled_by_name ? ` by ${d.cancelled_by_name}` : ""} · {dateTime(d.cancelled_at)}. Nothing from it went into stock.</span>
+        </div>
+      ) : null}
+
       {expected && d.sent_back_note ? (
         <div className="alert warn" role="alert">
           <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />
-          <span><b>Sent back by {d.sent_back_by_name ?? "an admin"}:</b> {d.sent_back_note} Fix the report below and send it again. Nothing went into stock.</span>
+          <span>
+            <b>Sent back by {d.sent_back_by_name ?? "an admin"}:</b> {d.sent_back_note} Fix this report below and send it again (don&apos;t start a new one). The paperwork already on it stays: just add what&apos;s missing. Nothing went into stock.
+          </span>
         </div>
       ) : null}
       {waiting ? (
@@ -109,6 +143,32 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
               ? <>Sent by <b>{d.submitted_by_name ?? "the warehouse"}</b> · {dateTime(d.submitted_at)}. Check it against the BOL, then approve it: stock and {branchName}&apos;s spreadsheet update right away.</>
               : <>Waiting for an admin to approve it (sent by {d.submitted_by_name ?? "you"} · {dateTime(d.submitted_at)}). Nothing has gone into stock yet.</>}
           </span>
+        </div>
+      ) : null}
+
+      {redone.length ? (
+        <div className="alert warn bol-again" role="alert">
+          <CircleAlert size={18} style={{ flex: "none", marginTop: 2 }} />
+          <div className="col" style={{ gap: 6, minWidth: 0 }}>
+            <b>This truck also has {redone.length === 1 ? "a report" : `${redone.length} reports`} that {redone.length === 1 ? "was" : "were"} sent back and never closed</b>
+            <ul className="bol-list">
+              {redone.map((m) => (
+                <li key={m.id}>
+                  <Link href={`/inventory/incoming/${m.id}`}>#{m.id}</Link> {m.lines || "no lines"} · sent back {dateTime(m.at)}{m.by ? ` by ${m.by}` : ""}{m.note ? `: “${m.note}”` : ""}
+                </li>
+              ))}
+            </ul>
+            <span className="small">Nothing from {redone.length === 1 ? "it" : "them"} went into stock, but {redone.length === 1 ? "it still shows" : "they still show"} as on the way. If it&apos;s this same truck, close it:</span>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              {redone.map((m) => (
+                <form key={m.id} action={closeRedone}>
+                  <input type="hidden" name="old" value={m.id} />
+                  <input type="hidden" name="new" value={d.id} />
+                  <Submit className="btn sm" pendingText="Closing…">Close #{m.id}: redone here</Submit>
+                </form>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -165,6 +225,8 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
               po_no: d.po_no,
               carrier: d.carrier,
               note: d.note,
+              status: d.status,
+              files,
               lines: d.sent_back_note ? formLines : formLines.map((l) => ({ ...l, received_qty: null, damaged_qty: 0 })),
             }}
           />
@@ -245,11 +307,11 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
               </tbody>
             </table>
           </div>
-          {links.length ? (
-            <div className="col" style={{ gap: 6 }}>
-              <span className="eyebrow">BOL and paperwork</span>
+          {groups.map((g) => (
+            <div key={g.label} className="col" style={{ gap: 6 }}>
+              <span className="eyebrow">{g.label}</span>
               <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                {links.map((f) =>
+                {g.files.map((f) =>
                   f.url ? (
                     <a key={f.path} href={f.url} target="_blank" rel="noopener noreferrer" className="btn sm dark"><FileText size={15} /> {f.name}</a>
                   ) : (
@@ -257,6 +319,23 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
                   ),
                 )}
               </div>
+            </div>
+          ))}
+          {vendorReport && d.status !== "cancelled" && (missingPacking || (pw.labeled && !pw.bol)) ? (
+            <div className="alert err small" role="alert">
+              <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
+              <span>
+                <b>No {missingPacking ? "packing list" : "BOL"} on this report.</b>
+                {noPackWhy ? ` ${d.submitted_by_name ?? d.received_by_name ?? "The receiver"} said: “${noPackWhy}”.` : ""} Add it below when it comes in.
+              </span>
+            </div>
+          ) : null}
+          {vendorReport && d.status !== "cancelled" && files.length && !pw.labeled && waiting ? (
+            <p className="tiny faint" style={{ margin: 0 }}>Sent before the BOL and packing list had their own spots: open the files and make sure the packing list is one of them.</p>
+          ) : null}
+          {d.status !== "cancelled" && !transfer ? (
+            <div className="no-print">
+              <AddPaperwork id={d.id} branch={d.branch_id} missing={missingPacking ? "packing" : vendorReport && pw.labeled && !pw.bol ? "bol" : null} />
             </div>
           ) : null}
           {anyDamaged ? <p className="tiny faint" style={{ margin: 0 }}>Damaged items didn&apos;t go into stock.</p> : null}
@@ -275,9 +354,15 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
 
       {waiting && admin ? (
         <section className="col no-print" style={{ gap: 10 }}>
-          <form action={approveReceiving}>
+          <form action={approveReceiving} className="col" style={{ gap: 8 }}>
             <input type="hidden" name="id" value={d.id} />
-            <Submit className="btn block" pendingText="Approving…">Approve: add to stock</Submit>
+            {missingPacking ? (
+              <label className="check small">
+                <input type="checkbox" name="nopack_ok" value="1" required />
+                <span><b>Approve without a packing list</b>: I checked the lot numbers another way (the drum labels, or the packing list sent by email).</span>
+              </label>
+            ) : null}
+            <Submit className="btn block" pendingText="Approving…">{missingPacking ? "Approve without a packing list" : "Approve: add to stock"}</Submit>
           </form>
           <details className="card">
             <summary><b>Change something first</b> <span className="muted small">· fix a quantity, lot or date, then receive it</span></summary>
@@ -290,7 +375,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
                 today={todayCentral()}
                 aiReady={false}
                 vendors={vendors}
-                delivery={{ id: d.id, vendor: d.vendor, transfer: Boolean(transfer), bol_no: d.bol_no, po_no: d.po_no, carrier: d.carrier, note: d.note, lines: formLines }}
+                delivery={{ id: d.id, vendor: d.vendor, transfer: Boolean(transfer), status: d.status, files, bol_no: d.bol_no, po_no: d.po_no, carrier: d.carrier, note: d.note, lines: formLines }}
               />
             </div>
           </details>

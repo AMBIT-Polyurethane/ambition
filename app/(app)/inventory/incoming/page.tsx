@@ -49,7 +49,9 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
   if (res.error && /rest_of|partial/.test(res.error.message)) res = await q(COLS); // before 0065
   const rows = (res.data ?? []) as unknown as Row[];
   const rests = rows.filter((r) => r.status === "expected" && r.rest_of);
-  const coming = rows.filter((r) => r.status === "expected" && !r.rest_of);
+  // Sent back by an admin to fix: fix that report and send it again (not a new one), so the truck counts once.
+  const fix = rows.filter((r) => r.status === "expected" && !r.rest_of && r.sent_back_note);
+  const coming = rows.filter((r) => r.status === "expected" && !r.rest_of && !r.sent_back_note);
   const waiting = rows.filter((r) => r.status === "submitted").sort((a, b) => (a.submitted_at ?? "").localeCompare(b.submitted_at ?? ""));
   const got = rows.filter((r) => r.status === "received").sort((a, b) => (b.received_at ?? "").localeCompare(a.received_at ?? "")).slice(0, 40);
   const item = (r: Row) => {
@@ -105,7 +107,7 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
         <Link href={`/inventory/incoming/new?b=${branch.id}`} className="btn dark"><Plus size={17} /> Expected delivery</Link>
       </div>
       <p className="tiny faint" style={{ margin: 0 }}>
-        Truck here? If it was added as an expected delivery (or it&apos;s a transfer), open it below and receive it there. Otherwise start a New Receiving Report and snap the BOL.
+        Truck here? If it was added as an expected delivery (or it&apos;s a transfer), open it below and receive it there. Otherwise start a New Receiving Report and snap the BOL and the packing list (both are needed).
       </p>
       {waiting.length ? (
         <>
@@ -114,6 +116,13 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
             {profile.role === "admin" ? "Open each one, check it, and approve it. Stock and the spreadsheet update when you do." : "An admin approves these. Stock and the spreadsheet update then."}
           </p>
           <div className="list">{waiting.map(item)}</div>
+        </>
+      ) : null}
+      {fix.length ? (
+        <>
+          <div className="eyebrow">Sent back to fix · {fix.length}</div>
+          <p className="tiny faint" style={{ margin: 0 }}>An admin sent these back. Open one, fix it (add what&apos;s missing) and send it again. Don&apos;t start a new report for the same truck.</p>
+          <div className="list">{fix.map(item)}</div>
         </>
       ) : null}
       {rests.length ? (

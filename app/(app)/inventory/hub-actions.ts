@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { HUB_LOCKED_MSG, can, hubAllows } from "@/lib/access";
 import { claudeReady, friendlyClaudeError } from "@/lib/ai/claude";
-import { sameBol, stockItems, type BolMatch } from "@/lib/incoming";
+import { NO_PACKING, paperwork, readFiles, sameBol, stockItems, type BolMatch, type ReportFile } from "@/lib/incoming";
 import { readBol, type BolRead } from "@/lib/inventory/bol";
 import { kickSync } from "@/lib/inventory/sync";
 import { emailAdminsReportWaiting, emailReceiverSentBack } from "@/lib/receiving-notify";
@@ -21,7 +21,7 @@ async function receiver() {
 const FILE = /^[A-Za-z0-9_-]+\/[A-Za-z0-9._-]+$/;
 
 /** Reads the BOL photos / PDF (already uploaded to inventory-files under the location) into a draft report. */
-export async function readBolAction(input: { branch: string; paths: string[] }): Promise<{ ok: true; read: BolRead } | { ok: false; error: string }> {
+export async function readBolAction(input: { branch: string; paths: string[]; kind?: "bol" | "packing" }): Promise<{ ok: true; read: BolRead } | { ok: false; error: string }> {
   const s = await receiver();
   if (!s) return { ok: false, error: "You don't have access to receiving." };
   const branch = String(input.branch ?? "");
@@ -33,7 +33,7 @@ export async function readBolAction(input: { branch: string; paths: string[] }):
   if (!b) return { ok: false, error: "Pick the location." };
   const items = await stockItems(s.supabase, branch);
   try {
-    const read = await readBol({ supabase: s.supabase, branchName: `${b.name}, ${b.state}`, items, paths });
+    const read = await readBol({ supabase: s.supabase, branchName: `${b.name}, ${b.state}`, items, paths, kind: input.kind === "packing" ? "packing" : input.kind === "bol" ? "bol" : undefined });
     return { ok: true, read };
   } catch (e) {
     console.error("BOL read failed", e);
@@ -52,11 +52,22 @@ export type ReportLine = { id?: number | null; product_id: string; qty: number; 
 export type ReportInput = {
   id: number | null;
   branch: string;
-  head: { vendor: string; bol_no: string; po_no: string; carrier: string; received_on: string; note: string; files: { path: string; name: string }[]; read_by_ai: boolean; ai_cost_cents: number };
+  head: { vendor: string; bol_no: string; po_no: string; carrier: string; received_on: string; note: string; files: ReportFile[]; read_by_ai: boolean; ai_cost_cents: number };
   lines: ReportLine[];
   /** The BOL # is already on another report here and the receiver confirmed this is a new load on it. */
   newLoad?: boolean;
+  /** No packing list came with the truck: why (the report is flagged for the admin). */
+  noPacking?: string;
+  /** Sent-back reports for this same truck that this report redoes: they're closed once this one is sent. */
+  replaces?: number[];
 };
+
+const KINDS = new Set(["bol", "packing", "other"]);
+const cleanFiles = (list: ReportFile[] | undefined, branch: string): ReportFile[] =>
+  (list ?? [])
+    .filter((f) => FILE.test(String(f?.path ?? "")) && f.path.startsWith(`${branch}/`))
+    .slice(0, 20)
+    .map((f) => ({ path: f.path, name: String(f.name ?? "").slice(0, 120) || "file", kind: KINDS.has(String(f.kind)) ? f.kind : "other" }));
 
 /**
  * Receive: the report is saved with the BOL. An admin's report goes straight into stock (FOAM LOTS / RECEIVED LOTS);
@@ -66,18 +77,38 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
   const s = await receiver();
   if (!s) return { ok: false, error: "You don't have access to receiving." };
   if (!hubAllows(s.profile, input.branch)) return { ok: false, error: HUB_LOCKED_MSG };
-  const files = (input.head.files ?? []).filter((f) => FILE.test(f.path)).map((f) => ({ path: f.path, name: String(f.name ?? "").slice(0, 120) }));
-  // Same BOL # as another report here: only as a new load on the same ticket, said out loud (and written on the report).
+  const files = cleanFiles(input.head.files, input.branch);
   let note = String(input.head.note ?? "");
+  // Both the BOL and the packing list (0067), on every report from a vendor: the BOL is the trucking paperwork
+  // (lot numbers are often written on it by hand), the packing list is the manufacturer's own lots and dates.
+  // Not for transfers between AMBIT locations, or an admin changing a report while approving it.
+  type Prior = { status: string; transfer_id: number | null; files: unknown };
+  const prior: Prior | null = input.id
+    ? ((await s.supabase.from("inbound_deliveries").select("status, transfer_id, files").eq("id", input.id).maybeSingle<Prior>()).data ?? null)
+    : null;
+  if (!prior?.transfer_id && (!prior || prior.status === "expected")) {
+    const pw = paperwork([...readFiles(prior?.files), ...files]);
+    if (!pw.bol) return { ok: false, error: "Add the BOL first: take a photo of it or upload the PDF (step 1 at the top)." };
+    const why = String(input.noPacking ?? "").trim().slice(0, 200);
+    if (!pw.packing) {
+      if (why.length < 3) return { ok: false, error: 'Add the packing list (step 2 at the top). If none came with this truck, tick "No packing list came with this truck" and say why.' };
+      if (!note.includes(NO_PACKING)) note = [`${NO_PACKING}${why}`, note].filter(Boolean).join(" · ");
+    }
+  }
+  // Same BOL # as another report here. A report an admin sent back for this same truck is closed once this one is
+  // sent (it never went into stock). Anything else: only as a new load on the same ticket, said out loud.
   const earlier = input.head.bol_no ? await sameBol(s.supabase, input.branch, input.head.bol_no, input.id) : [];
-  if (earlier.length) {
+  const want = new Set((input.replaces ?? []).map(Number));
+  const replaces = earlier.filter((m) => m.status === "sent_back" && want.has(m.id)).map((m) => m.id);
+  const dupes = earlier.filter((m) => !replaces.includes(m.id));
+  if (dupes.length) {
     if (!input.newLoad) {
       return {
         ok: false,
-        error: `BOL ${input.head.bol_no} is already on ${earlier.length === 1 ? "report" : "reports"} ${earlier.map((m) => `#${m.id}`).join(", ")}. If this is the same truck, don't send it again. If it's a new load on the same ticket, tick "This is a new load".`,
+        error: `BOL ${input.head.bol_no} is already on ${dupes.length === 1 ? "report" : "reports"} ${dupes.map((m) => `#${m.id}`).join(", ")}. If this is the same truck, don't send it again. If it's a new load on the same ticket, tick "This is a new load".`,
       };
     }
-    const tag = `Load ${earlier.length + 1} on BOL ${input.head.bol_no}`;
+    const tag = `Load ${dupes.length + 1} on BOL ${input.head.bol_no}`;
     if (!note.startsWith("Load ")) note = [tag, note].filter(Boolean).join(" · ");
   }
   const { data, error } = await s.supabase.rpc("inbound_receive_report", {
@@ -98,6 +129,15 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
   });
   if (error) return { ok: false, error: error.message };
   const id = Number(data);
+  // The sent-back report(s) this one redoes: closed, so the truck shows (and counts) once.
+  const closed: number[] = [];
+  for (const old of replaces) {
+    let r = await s.supabase.rpc("inbound_replace", { p_old: old, p_new: id });
+    if (r.error && /inbound_replace|function|schema cache/i.test(r.error.message)) r = await s.supabase.rpc("inbound_cancel", { p_id: old }); // before 0067
+    if (!r.error) closed.push(old);
+    else console.error("closing the sent-back report failed", old, r.error.message);
+  }
+  const also = closed.length ? ` Report ${closed.map((n) => `#${n}`).join(", ")} (sent back for this same truck) was closed.` : "";
   const { data: now } = await s.supabase.from("inbound_deliveries").select("status").eq("id", id).maybeSingle<{ status: string }>();
   revalidatePath("/inventory", "layout");
   revalidatePath("/");
@@ -105,12 +145,44 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
     const sent = await emailAdminsReportWaiting(s.supabase, id);
     redirect(
       `/inventory/incoming/${id}?msg=${encodeURIComponent(
-        `Sent to an admin for approval${sent.status === "sent" ? " (they were emailed)" : ""}. Stock and the spreadsheet update once it's approved.`,
+        `Sent to an admin for approval${sent.status === "sent" ? " (they were emailed)" : ""}. Stock and the spreadsheet update once it's approved.${also}`,
       )}`,
     );
   }
   kickSync(input.branch, "receiving report");
-  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent("Received. Stock updated; the spreadsheet catches up within 2 minutes.")}`);
+  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent(`Received. Stock updated; the spreadsheet catches up within 2 minutes.${also}`)}`);
+}
+
+/** A sent-back report that was redone as another report for the same truck: close it (nothing from it is in stock). */
+export async function closeRedone(form: FormData) {
+  const s = await receiver();
+  const old = Number(form.get("old"));
+  const now = Number(form.get("new"));
+  const back = `/inventory/incoming/${Number.isFinite(now) ? now : old}`;
+  if (!s || !Number.isFinite(old) || !Number.isFinite(now)) return;
+  let r = await s.supabase.rpc("inbound_replace", { p_old: old, p_new: now });
+  if (r.error && /inbound_replace|function|schema cache/i.test(r.error.message)) r = await s.supabase.rpc("inbound_cancel", { p_id: old }); // before 0067
+  revalidatePath("/inventory", "layout");
+  revalidatePath("/");
+  if (r.error) redirect(`${back}?err=${encodeURIComponent(r.error.message)}`);
+  redirect(`${back}?msg=${encodeURIComponent(`Report #${old} closed: redone on this report. It no longer shows as on the way.`)}`);
+}
+
+/** Add paperwork to a report already sent: the packing list that came later, a photo of damage. */
+export async function addReportFiles(input: { id: number; files: ReportFile[] }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await receiver();
+  if (!s) return { ok: false, error: "You don't have access to receiving." };
+  const id = Number(input.id);
+  const { data: d } = await s.supabase.from("inbound_deliveries").select("branch_id").eq("id", id).maybeSingle<{ branch_id: string }>();
+  if (!d) return { ok: false, error: "Report not found." };
+  if (!hubAllows(s.profile, d.branch_id)) return { ok: false, error: HUB_LOCKED_MSG };
+  const files = cleanFiles(input.files, d.branch_id);
+  if (!files.length) return { ok: false, error: "Add a photo or PDF." };
+  const { error } = await s.supabase.rpc("inbound_add_files", { p_id: id, p_files: files });
+  if (error) return { ok: false, error: /inbound_add_files|function|schema cache/i.test(error.message) ? "Adding paperwork to a report needs the 0067 database update. Ask Jeremiah to run it." : error.message };
+  revalidatePath(`/inventory/incoming/${id}`);
+  revalidatePath("/inventory", "layout");
+  return { ok: true };
 }
 
 /** Admin: approve a Receiving Report as it was sent. Stock and the spreadsheet update. */
@@ -118,6 +190,12 @@ export async function approveReceiving(form: FormData) {
   const s = await getSession();
   const id = Number(form.get("id"));
   if (!s?.profile || s.profile.role !== "admin" || !Number.isFinite(id)) return;
+  // A report done since BOLs and packing lists were separate, with no packing list: approved only on purpose.
+  const { data: d0 } = await s.supabase.from("inbound_deliveries").select("files, transfer_id").eq("id", id).maybeSingle<{ files: unknown; transfer_id: number | null }>();
+  const pw = paperwork(readFiles(d0?.files));
+  if (d0 && !d0.transfer_id && pw.labeled && !pw.packing && form.get("nopack_ok") !== "1") {
+    redirect(`/inventory/incoming/${id}?err=${encodeURIComponent('There\'s no packing list on this report. Add it under "Add paperwork", or tick "Approve without a packing list".')}`);
+  }
   const { error } = await s.supabase.rpc("inbound_approve", { p_id: id });
   const { data: d } = await s.supabase.from("inbound_deliveries").select("branch_id").eq("id", id).maybeSingle<{ branch_id: string }>();
   revalidatePath("/inventory", "layout");
