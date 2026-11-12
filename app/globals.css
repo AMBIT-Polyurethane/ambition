@@ -3556,3 +3556,23 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .credit-snap b { font-size: 14px; font-variant-numeric: tabular-nums; }
 @media (max-width: 520px) { .credit-snap { grid-template-columns: 1fr 1fr; } }
 .grid2.cr-charts { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+
+/* Reports (/reports): the list of reports, and print headers that only show on paper */
+.report-card { align-items: flex-start; }
+.report-card .s { white-space: normal; line-height: 1.4; margin-top: 2px; }
+.report-ico { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--red-soft); color: var(--red-text); }
+.print-only { display: none; }
+.report-print-head { margin: 0; font-size: 14px; }
+@media print {
+  /* Paper is always light, whatever theme or colors the screen uses. */
+  :root, :root[data-theme] {
+    --bg: #ffffff; --s1: #ffffff; --s2: #f4f4f5; --s3: #e4e4e7; --line: #dedee3; --line-hover: #c8c8cf;
+    --text: #0a0a0b; --text2: #3f3f46; --text3: #52525b; --red-text: #c4281b; --ok-text: #166534; --warn-text: #92400e;
+    --err-text: #9f1d12; --shadow: none;
+  }
+  .print-only { display: block !important; }
+  .rt-sort svg { display: none; }
+  .report-stats .pill { border: 1px solid #d4d4d8; color: #18181b; background: none; }
+  .tbl-wrap { overflow: visible !important; }
+  .tbl tr { break-inside: avoid; }
+}

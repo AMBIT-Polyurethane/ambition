@@ -11,12 +11,12 @@ type Sort = { col: number; dir: 1 | -1 } | null;
 type Rule = { text?: string; pick?: string; min?: string; max?: string };
 
 const isoDay = /(\d{4})-(\d{2})-(\d{2})/g;
-const show = (v: Cell, money: boolean) => {
+const show = (v: Cell, money: boolean, cents = false) => {
   if (v === null || v === undefined || v === "") return "";
-  // Money: whole dollars for big amounts, cents for prices under $1,000.
+  // Money: whole dollars for big amounts, cents for prices under $1,000 (always cents on a price list).
   if (typeof v === "number") {
     if (!money) return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
-    const d = Math.abs(v) < 1000 && !Number.isInteger(v) ? 2 : 0;
+    const d = cents || (Math.abs(v) < 1000 && !Number.isInteger(v)) ? 2 : 0;
     return v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: d, maximumFractionDigits: d });
   }
   return v.replace(isoDay, (_, y: string, m: string, d: string) => `${Number(m)}/${Number(d)}/${y.slice(2)}`);
@@ -32,6 +32,7 @@ export function ReportTable({
   flag,
   total,
   fileName,
+  cents = false,
 }: {
   head: string[];
   num: boolean[];
@@ -40,6 +41,8 @@ export function ReportTable({
   flag: (boolean | "err")[];
   total?: Cell[];
   fileName: string;
+  /** Money columns always show cents (a price list), never rounded to whole dollars. */
+  cents?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState<Record<number, Rule>>({});
@@ -136,7 +139,7 @@ export function ReportTable({
 
   return (
     <div className="col" style={{ gap: 10 }}>
-      <div className="row rt-bar" style={{ gap: 8, flexWrap: "wrap" }}>
+      <div className="row rt-bar no-print" style={{ gap: 8, flexWrap: "wrap" }}>
         <input className="input sm rt-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search every column" aria-label="Search every column" />
         <button type="button" className={`btn sm${open || active ? "" : " dark"}`} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <Filter size={15} /> Filter{active ? ` (${active})` : ""}
@@ -153,7 +156,7 @@ export function ReportTable({
       </div>
 
       {open ? (
-        <section className="card rt-filters">
+        <section className="card rt-filters no-print">
           <div className="rt-grid">
             {head.map((h, c) => (
               <label key={c} className="field">
@@ -207,13 +210,13 @@ export function ReportTable({
             <tbody>
               {view.map((i) => (
                 <tr key={i} className={flag[i] === "err" ? "err" : flag[i] ? "hl" : ""}>
-                  {rows[i].map((c, ci) => <td key={ci} className={num[ci] ? "num" : ""}>{show(c, money[ci])}</td>)}
+                  {rows[i].map((c, ci) => <td key={ci} className={num[ci] ? "num" : ""}>{show(c, money[ci], cents)}</td>)}
                 </tr>
               ))}
             </tbody>
             {shownTotal ? (
               <tfoot>
-                <tr>{shownTotal.map((c, ci) => <td key={ci} className={num[ci] ? "num" : ""}>{show(c, money[ci])}</td>)}</tr>
+                <tr>{shownTotal.map((c, ci) => <td key={ci} className={num[ci] ? "num" : ""}>{show(c, money[ci], cents)}</td>)}</tr>
               </tfoot>
             ) : null}
           </table>

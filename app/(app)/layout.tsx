@@ -33,6 +33,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         can(profile, "takeoff") && { href: "/ops", label: "AMBIT-OPS", icon: "ops" },
         seesInventory(profile) && { href: "/inventory", label: "Inventory", icon: "inventory" },
         (can(profile, "credit_check") || can(profile, "order_desk") || profile.role === "admin") && { href: "/credit", label: "Credit & collections", icon: "credit" },
+        // Reports: every report a person can open (the Sell Price List first), AMBIT employees only.
+        { href: "/reports", label: "Reports", icon: "reports" },
         (can(profile, "credit_check") || profile.role === "admin") && { href: "/tax", label: "Tax certificates", icon: "tax" },
         (can(profile, "complaints") || profile.role === "admin") && { href: "/complaints", label: "Complaint reports", icon: "complaints" },
         can(profile, "spray_log") && { href: "/spray-logs", label: "Contractor spray logs", icon: "spraylogs" },

@@ -446,6 +446,18 @@ have a light-mode copy of its video (`video_path_light`, uploaded under "Light-m
 player (`components/academy/lesson-video.tsx`) plays it for people using the app in Light mode (Appearance Light, or Auto
 on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place, keeping the spot, if the look changes.
 
+### Reports (`/reports`)
+
+One place for reports, for every AMBIT employee (menu "Reports", Home app "Reports"). `lib/reports.ts` lists the
+reports built here (`reportsFor`) and the ones that live elsewhere (`reportsElsewhere`: Inventory reports, Credit &
+collections) for the people who can open them; add a new report there. **Sell Price List**
+(`/reports/sell-prices`): active products priced like the order screen (`saleOn` sale price → "Sale"; customer-priced
+product or group → "Account pricing", no price; `list_price` → "List"; none → "No price set", highlighted). `?b=`
+narrows to one location's spreadsheet items (`inventory.on_sheet`, brands counted under their `stock_of` parent via
+`stock_parents()`) and adds that sheet's `inventory.sell_price`, highlighting differences. Uses the Inventory Hub's
+`ReportTable` (search, filters, sort, CSV) with `cents` (money always to the cent). Private label rows only reach
+admins (the products policy). No database change.
+
 ### Price requests in the app, customer credit (0066)
 
 `price_requests` / `price_request_lines`, `price_floors` (approvers only), rules in `app_settings.price_rules`.
