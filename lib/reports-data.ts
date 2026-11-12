@@ -750,7 +750,8 @@ async function lotTrace(c: Ctx): Promise<ReportOut> {
   const [inb, xfer, sold, back, onHand, ccr] = await Promise.all([
     c.db.from("inbound_lines").select("lot_no, sku, received_qty, qty, exp, delivery:inbound_deliveries!inner(id, vendor, branch_id, status, received_at, submitted_at, transfer_id)").ilike("lot_no", like).limit(500),
     c.db.from("inventory_transfer_lines").select("lot_no, sku, qty, transfer:inventory_transfers!inner(id, from_branch, to_branch, status, created_at, received_at)").ilike("lot_no", like).limit(500),
-    c.db.from("inventory_lines").select("lot_no, sku, qty, branch_id, state, ord:orders!inner(id, order_no, company_name, status, created_at, completed_at)").ilike("lot_no", like).limit(1000),
+    // Lines replaced by an order edit are "cancelled": only the live ones count.
+    c.db.from("inventory_lines").select("lot_no, sku, qty, branch_id, state, ord:orders!inner(id, order_no, company_name, status, created_at, completed_at)").ilike("lot_no", like).neq("state", "cancelled").limit(1000),
     c.db.from("order_returns").select("lot_no, sku, qty, condition, received_at, ord:orders!inner(id, order_no, company_name, created_at)").ilike("lot_no", like).limit(500),
     c.db.from("inventory_lots").select("lot_no, sku, branch_id, remaining, exp, use_by").ilike("lot_no", like).limit(200),
     c.db.from("complaint_reports").select("id, report_no, company_name, status, created_at, lot_numbers").ilike("lot_numbers", like).limit(200),
@@ -768,12 +769,12 @@ async function lotTrace(c: Ctx): Promise<ReportOut> {
     if (r.transfer.status === "cancelled") continue;
     ev.push({ day: dayOf(r.transfer.created_at), what: r.transfer.received_at ? "Transferred (received)" : "Transferred (on the way)", where: `${B(r.transfer.from_branch)} → ${B(r.transfer.to_branch)}`, who: "", lot: r.lot_no, sku: r.sku, qty: Number(r.qty), ref: `Transfer T-${r.transfer.id}`, link: `/inventory/transfers/${r.transfer.id}` });
   }
-  type S = { lot_no: string; sku: string; qty: number; branch_id: string; ord: { id: string; order_no: number; company_name: string; status: string; created_at: string; completed_at: string | null } };
+  type S = { lot_no: string; sku: string; qty: number; branch_id: string; state: string; ord: { id: string; order_no: number; company_name: string; status: string; created_at: string; completed_at: string | null } };
   const customers = new Set<string>();
   for (const r of (sold.data ?? []) as unknown as S[]) {
     if (r.ord.status === "cancelled") continue;
     customers.add(r.ord.company_name);
-    ev.push({ day: dayOf(r.ord.completed_at ?? r.ord.created_at), what: r.ord.status === "completed" ? "Sold (shipped / picked up)" : "Sold (reserved, not out yet)", where: B(r.branch_id), who: r.ord.company_name, lot: r.lot_no, sku: r.sku, qty: Number(r.qty), ref: orderNo(r.ord.order_no), link: `/orders/${r.ord.id}` });
+    ev.push({ day: dayOf(r.ord.completed_at ?? r.ord.created_at), what: r.state === "done" || r.ord.status === "completed" ? "Sold (shipped / picked up)" : "Sold (reserved, not out yet)", where: B(r.branch_id), who: r.ord.company_name, lot: r.lot_no, sku: r.sku, qty: Number(r.qty), ref: orderNo(r.ord.order_no), link: `/orders/${r.ord.id}` });
   }
   type Bk = { lot_no: string; sku: string; qty: number; condition: string; received_at: string | null; ord: { id: string; order_no: number; company_name: string; created_at: string } };
   for (const r of (back.data ?? []) as unknown as Bk[]) {
@@ -800,6 +801,7 @@ async function lotTrace(c: Ctx): Promise<ReportOut> {
     stats: [
       { t: `Lot ${lot}` },
       { t: `${customers.size} ${customers.size === 1 ? "customer" : "customers"}`, tone: "grey" },
+      { t: `${r2(ev.filter((e) => e.what.startsWith("Received")).reduce((x, e) => x + (e.qty ?? 0), 0))} received · ${r2(ev.filter((e) => e.what.startsWith("Sold")).reduce((x, e) => x + (e.qty ?? 0), 0))} sold`, tone: "grey" },
       ...(lots.size > 1 ? [{ t: `${lots.size} lot numbers match`, tone: "warn" as const }] : []),
       ...(ev.some((e) => e.what.startsWith("Complaint")) ? [{ t: "Has complaint reports", tone: "warn" as const }] : []),
     ],
