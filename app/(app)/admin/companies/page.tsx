@@ -46,6 +46,10 @@ function CompanyFields({ c, branches, staff }: { c?: Company; branches: Branch[]
       <label className="check" style={{ gridColumn: "1 / -1" }}>
         <input type="checkbox" name="needs_qb_setup" defaultChecked={c?.needs_qb_setup ?? false} /> Needs to be set up in QuickBooks
       </label>
+      <label className="check" style={{ gridColumn: "1 / -1" }}>
+        <input type="checkbox" name="distributor" defaultChecked={c?.distributor ?? false} /> Distributor partner
+        <span className="tiny muted" style={{ fontWeight: 400 }}>(on an expense receipt for them, staff list the distributor&apos;s own customers they saw)</span>
+      </label>
     </div>
   );
 }
@@ -54,11 +58,13 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const q = searchSafe(sp.q);
   const needs = sp.needs === "1";
+  const dist = sp.dist === "1"; // 0062: Distributor partners
   const rep = sp.rep ?? ""; // "" = anyone, "none" = no sales rep yet, or a person's id
   const { supabase } = await requireAdmin();
   let query = supabase.from("companies").select("*").order("name").limit(500);
   if (q) query = query.or(`name.ilike.%${q}%,account_no.ilike.%${q}%,city.ilike.%${q}%,contact_name.ilike.%${q}%`);
   if (needs) query = query.eq("needs_qb_setup", true);
+  if (dist) query = query.eq("distributor", true);
   if (rep === "none") query = query.is("sales_rep_id", null).eq("house_account", false);
   else if (rep === HOUSE) query = query.is("sales_rep_id", null).eq("house_account", true);
   else if (/^[0-9a-f-]{36}$/i.test(rep)) query = query.eq("sales_rep_id", rep);
@@ -71,11 +77,13 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
     supabase.from("profiles").select("id, full_name, email, job_role").in("role", ["employee", "admin"]).eq("status", "active").eq("demo", false).order("full_name"),
     supabase.from("companies").select("id", { count: "exact", head: true }).eq("active", true).is("sales_rep_id", null).eq("house_account", true),
   ]);
+  // Before migration 0062 there's no distributor column (the count just shows 0).
+  const { count: distCount } = await supabase.from("companies").select("id", { count: "exact", head: true }).eq("distributor", true);
   const companies = (data ?? []) as Company[];
   const br = (branches ?? []) as Branch[];
   const staff = (staffRows ?? []) as Staff[];
   const nameOf = new Map(staff.map((p) => [p.id, staffName(p)]));
-  const here = `/admin/companies?${new URLSearchParams(Object.entries({ q, needs: needs ? "1" : "", rep }).filter(([, v]) => v)).toString()}`;
+  const here = `/admin/companies?${new URLSearchParams(Object.entries({ q, needs: needs ? "1" : "", dist: dist ? "1" : "", rep }).filter(([, v]) => v)).toString()}`;
 
   return (
     <main className="shell wide">
@@ -91,11 +99,17 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
         </form>
       </details>
       <div className="chips" style={{ flexWrap: "wrap" }}>
-        <Link className={`chip${needs ? "" : " on"}`} href="/admin/companies">All customers · {total ?? 0}</Link>
+        <Link className={`chip${needs || dist || rep ? "" : " on"}`} href="/admin/companies">All customers · {total ?? 0}</Link>
         <Link className={`chip${needs ? " on" : ""}`} href="/admin/companies?needs=1">Needs QuickBooks setup · {needCount ?? 0}</Link>
         <Link className={`chip${rep === "none" ? " on" : ""}`} href="/admin/companies?rep=none">No sales rep · {noRep ?? 0}</Link>
         <Link className={`chip${rep === HOUSE ? " on" : ""}`} href={`/admin/companies?rep=${HOUSE}`}>House Accounts · {houseCount ?? 0}</Link>
+        <Link className={`chip${dist ? " on" : ""}`} href="/admin/companies?dist=1">Distributor partners · {distCount ?? 0}</Link>
       </div>
+      {dist ? (
+        <p className="small muted" style={{ margin: 0 }}>
+          When staff pick one of these as the customer on an expense receipt, the app asks which of the distributor&apos;s own customers they saw (name, business and phone). To add one: search for the customer, tap Edit, tick Distributor partner, Save.
+        </p>
+      ) : null}
       {needs ? (
         <p className="small muted" style={{ margin: 0 }}>
           Added by staff on the order screen. Set each one up in QuickBooks, add their account number here, untick “Needs to be set up in QuickBooks” and save.
@@ -135,6 +149,7 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
               <div className="grow">
                 <div className="t ellipsis">{c.name}{c.active ? "" : " (inactive)"}</div>
                 {c.needs_qb_setup ? <span className="pill warn" style={{ marginTop: 4 }}>New · set up in QuickBooks</span> : null}
+                {c.distributor ? <span className="pill" style={{ marginTop: 4 }}>Distributor partner</span> : null}
                 <div className="s">
                   {[c.account_no, c.city && c.state ? `${c.city}, ${c.state}` : c.state, c.sales_rep_id ? `Rep: ${nameOf.get(c.sales_rep_id) ?? "(no longer on staff)"}` : c.house_account ? "House Account" : null].filter(Boolean).join(" · ")}
                   {!c.sales_rep_id && !c.house_account && c.active ? <span className="faint"> · No sales rep</span> : null}

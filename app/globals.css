@@ -929,6 +929,21 @@ html:has(#ambit-splash:not(.out)), html:has(#ambit-splash:not(.out)) body { over
 .xr-results button:hover { background: var(--s2); }
 .xr-results button.typed { color: var(--text2); font-size: 13px; border-bottom: 0; }
 .xr-cust-on { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--s1); }
+/* 0062: split receipts, a distributor's customers, inventory bought on a receipt */
+.xr-split-btn { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; margin-top: 4px; padding: 6px 0; border: 0; background: none; color: var(--red-text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-align: left; }
+.xr-split { display: flex; flex-direction: column; gap: 8px; }
+.xr-line { display: flex; align-items: center; gap: 8px; }
+.xr-line .select { min-width: 0; }
+.xr-rest { width: 96px; flex: none; text-align: right; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text2); }
+.xr-rest.bad { color: var(--err-text); }
+.xr-ends { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; border: 1px dashed var(--line-hover); background: var(--s2); }
+.xr-end { display: grid; grid-template-columns: 1fr 1fr 130px auto; gap: 8px; align-items: center; }
+@media (max-width: 560px) { .xr-end { grid-template-columns: 1fr 1fr; } .xr-end .input:nth-child(3) { grid-column: 1 / 2; } }
+.xr-buy { border-color: var(--line-hover); }
+.xr-buy-lines { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.xr-buy-line { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--s1); }
+.xr-buy-line + .xr-buy-line { border-top: 1px solid var(--line); }
+.xr-results button b svg { vertical-align: -2px; }
 
 .xa-tabs a { height: 42px; display: grid; place-items: center; border-radius: 9px; color: var(--text2); font-size: 13px; font-weight: 700; }
 .xa-tabs a.on { background: var(--red); color: #fff; }

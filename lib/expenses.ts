@@ -1,9 +1,10 @@
 import "server-only";
 import type { Answer, Submission } from "@/lib/jotform";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CHARGE_COLS, REPORT_COLS, RECEIPT_COLS, addDays, chargeLabel, isMonth, monthSpan, monthView, type XCharge, type XReceipt, type XReport } from "@/lib/expense-kinds";
+import { CHARGE_COLS, REPORT_COLS, RECEIPT_COLS, RECEIPT_COLS_0050, addDays, chargeLabel, endCustomersText, isMonth, missing0062, monthSpan, monthView, splitOf, type XCharge, type XReceipt, type XReport } from "@/lib/expense-kinds";
 import { expensePdfName, renderExpensePdf, type PdfLine } from "@/lib/expense-doc/pdf";
 import { demoReceiptJpeg, isDemoPhoto } from "@/lib/expense-demo";
+import { money } from "@/lib/format";
 
 export * from "@/lib/expense-kinds";
 
@@ -93,13 +94,17 @@ export function toReceipt(s: Submission): Receipt {
 export async function loadMonth(supabase: SupabaseClient, userId: string, month: string) {
   if (!isMonth(month)) throw new Error("Pick a month.");
   const { from, next } = monthSpan(month);
-  const [rec, chg, rep] = await Promise.all([
-    supabase.from("expense_receipts").select(RECEIPT_COLS).eq("user_id", userId).is("deleted_at", null).gte("bought_on", addDays(from, -10)).lt("bought_on", addDays(next, 10)).limit(2000),
+  const receiptsFor = (cols: string) =>
+    supabase.from("expense_receipts").select(cols).eq("user_id", userId).is("deleted_at", null).gte("bought_on", addDays(from, -10)).lt("bought_on", addDays(next, 10)).limit(2000);
+  const [first, chg, rep] = await Promise.all([
+    receiptsFor(RECEIPT_COLS),
     supabase.from("expense_charges").select(CHARGE_COLS).eq("user_id", userId).eq("removed", false).gte("txn_date", addDays(from, -10)).lt("txn_date", addDays(next, 10)).limit(2000),
     supabase.from("expense_reports").select(REPORT_COLS).eq("user_id", userId).eq("month", from).maybeSingle(),
   ]);
+  // Before migration 0062 the split / end customer / inventory columns aren't there yet.
+  const rec = first.error && missing0062(first.error) ? await receiptsFor(RECEIPT_COLS_0050) : first;
   if (rec.error) throw new Error(rec.error.message);
-  const receipts = ((rec.data ?? []) as XReceipt[]).map((r) => ({ ...r, amount: Number(r.amount), tip: r.tip === null ? null : Number(r.tip) }));
+  const receipts = ((rec.data ?? []) as unknown as XReceipt[]).map((r) => ({ ...r, amount: Number(r.amount), tip: r.tip === null ? null : Number(r.tip) }));
   const charges = ((chg.data ?? []) as XCharge[]).map((c) => ({ ...c, amount: Number(c.amount) }));
   const report = (rep.data as XReport | null) ?? null;
   return { view: monthView(month, receipts, charges), report };
@@ -115,8 +120,8 @@ export function pdfLines(view: ReturnType<typeof monthView>): PdfLine[] {
       id: r.id,
       date: r.bought_on,
       vendor: r.vendor,
-      category: r.category,
-      what: [cust ? `For ${cust}` : "", r.purpose ?? "", r.attendees ? `With ${r.attendees}` : ""].filter(Boolean).join(" · "),
+      category: splitOf(r).length > 1 ? splitOf(r).map((l) => `${l.category} ${money(l.amount)}`).join(" + ") : r.category,
+      what: [cust ? `For ${cust}` : "", endCustomersText(r) ? `Saw ${endCustomersText(r)}` : "", r.purpose ?? "", r.attendees ? `With ${r.attendees}` : ""].filter(Boolean).join(" · "),
       paid: r.paid_with === "personal" ? "Personal" : "Card",
       amount: c ? Number(c.amount) : Number(r.amount),
       photos: r.photos,

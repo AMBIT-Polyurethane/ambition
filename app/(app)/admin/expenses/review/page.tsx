@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, CircleAlert, Download } from "lucide-react";
 import { requireExpenseApprover } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { dateShort, money } from "@/lib/format";
-import { chargeLabel, isMonth, loadMonth, monthLabel, reportBadge, shiftMonth, thisMonth, type XReport } from "@/lib/expenses";
+import { catsOf, chargeLabel, isMonth, loadMonth, monthLabel, reportBadge, shiftMonth, thisMonth, type XReport } from "@/lib/expenses";
 import { MonthSummary, OtherCharges, ReceiptList } from "@/components/expenses/month-lists";
 import { ChargeTools, ReviewForm, UndoExcuse, type Person } from "@/components/expenses/admin-bits";
 
@@ -33,7 +33,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
   const people: Person[] = ((staffRows ?? []) as { id: string; full_name: string | null; email: string }[]).map((p) => ({ id: p.id, name: p.full_name || p.email }));
   const mine = uid === profile.id;
   const lost = view.receipts.filter((r) => !r.photos.length);
-  const untied = view.receipts.filter((r) => !r.customer_name && (r.category === "Customer entertainment" || (r.category === "Meals" && (r.attendees ?? "").trim())));
+  const untied = view.receipts.filter((r) => !r.customer_name && (catsOf(r).has("Customer entertainment") || (catsOf(r).has("Meals") && (r.attendees ?? "").trim())));
 
   return (
     <main className="shell wide">

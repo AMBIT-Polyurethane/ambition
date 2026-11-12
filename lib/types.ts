@@ -22,6 +22,7 @@ export type Company = {
   needs_qb_setup?: boolean;
   sales_rep_id?: string | null; // 0028: the customer's sales rep (credited with their orders)
   house_account?: boolean; // 0060: a House Account (their orders credit no sales rep)
+  distributor?: boolean; // 0062: a 3rd-party Distributor Partner (expense receipts list the customers of theirs that were seen)
   created_by?: string | null;
 };
 

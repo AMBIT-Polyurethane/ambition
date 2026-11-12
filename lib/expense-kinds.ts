@@ -10,11 +10,18 @@ export const CATEGORIES = [
   "Airfare & travel",
   "Vehicle & equipment repair",
   "Tools & supplies",
+  "Inventory",
   "Shipping",
   "Customer entertainment",
-  "Training & events",
+  "Training events",
+  "Tradeshows",
+  "Lab expenses",
+  "R&D",
   "Other",
 ] as const;
+
+/** Stock for one of the warehouses: picked on the receipt, it becomes a Receiving Report or an expected delivery (0062). */
+export const INVENTORY = "Inventory";
 
 /** Meals and entertainment: who was there (the IRS asks), and the tip can be added after the receipt. */
 export const PEOPLE_CATS = new Set<string>(["Meals", "Customer entertainment"]);
@@ -40,9 +47,40 @@ export type XReceipt = {
   no_photo_reason: string | null;
   source: "app" | "jotform";
   created_at: string;
+  /** 0062: one receipt, several lines (fuel and lunch at the same stop). Null for a one-category receipt. */
+  lines?: ReceiptLine[] | null;
+  /** 0062: a distributor partner's customers seen on the trip. */
+  end_customers?: EndCustomer[] | null;
+  /** 0062: the Receiving Report or expected delivery for inventory bought on this receipt. */
+  inbound_id?: number | null;
 };
-export const RECEIPT_COLS =
+export type ReceiptLine = { category: string; amount: number };
+export type EndCustomer = { name: string; business: string; phone: string };
+export const RECEIPT_COLS_0050 =
   "id, user_id, bought_on, vendor, amount, tip, category, paid_with, card_last4, company_id, customer_name, purpose, attendees, notes, photos, no_photo_reason, source, created_at";
+export const RECEIPT_COLS = `${RECEIPT_COLS_0050}, lines, end_customers, inbound_id`;
+/** True when the database doesn't have the 0062 columns yet (so the screens can fall back to the older list). */
+export const missing0062 = (e: { message?: string } | null | undefined) => Boolean(e && /lines|end_customers|inbound_id|distributor/.test(e.message ?? "") && /column|schema cache/i.test(e.message ?? ""));
+
+/** A receipt's lines: its split, or the whole receipt in its one category. */
+export function splitOf(r: Pick<XReceipt, "category" | "amount" | "lines">): ReceiptLine[] {
+  const ls = Array.isArray(r.lines) ? r.lines.filter((l) => l && typeof l.category === "string" && Number.isFinite(Number(l.amount))) : [];
+  return ls.length > 1 ? ls.map((l) => ({ category: l.category, amount: Number(l.amount) })) : [{ category: r.category, amount: Number(r.amount) }];
+}
+/** "Fuel + Meals" for a split receipt, else its category. */
+export const catText = (r: Pick<XReceipt, "category" | "amount" | "lines">) => splitOf(r).map((l) => l.category).join(" + ");
+/** Every category on the receipt. */
+export const catsOf = (r: Pick<XReceipt, "category" | "amount" | "lines">) => new Set(splitOf(r).map((l) => l.category));
+/** "Jane Doe (Doe Insulation, 405-555-0100); ..." */
+export const endCustomersText = (r: Pick<XReceipt, "end_customers">) =>
+  (Array.isArray(r.end_customers) ? r.end_customers : [])
+    .map((c) => {
+      const extra = [c.business, c.phone].map((x) => (x ?? "").trim()).filter(Boolean).join(", ");
+      const who = (c.name ?? "").trim() || (c.business ?? "").trim();
+      return who ? (extra && extra !== who ? `${who} (${extra})` : who) : "";
+    })
+    .filter(Boolean)
+    .join("; ");
 
 export type XCharge = {
   id: string;
@@ -149,19 +187,26 @@ export function monthView(month: string, nearby: XReceipt[], charges: XCharge[])
   };
   let card = 0;
   let personal = 0;
+  /** A split receipt counts in each of its categories (the bank's amount shared out by line). */
+  const addSplit = (r: XReceipt, total: number) => {
+    const ls = splitOf(r);
+    const whole = ls.reduce((a, l) => a + l.amount, 0);
+    for (const l of ls) add(l.category, ls.length === 1 || !whole ? total : r2((total * l.amount) / whole));
+  };
   for (const r of receipts) {
     const c = chargeFor.get(r.id);
     if (c && c.kind !== "payment") continue; // counted with the charges below
     if (r.paid_with === "personal") personal += Number(r.amount);
     else card += Number(r.amount);
-    add(r.category, Number(r.amount));
+    addSplit(r, Number(r.amount));
   }
   const byId = new Map(nearby.map((r) => [r.id, r]));
   for (const c of mine) {
     if (c.kind === "other") continue;
     card += Number(c.amount);
     const r = c.receipt_id ? byId.get(c.receipt_id) : null;
-    add(r ? r.category : c.kind === "return" ? "Returns & credits" : c.kind === "fee" ? "Bank fees" : c.excused_note ? c.category ?? "Other" : "No receipt yet", Number(c.amount));
+    if (r) addSplit(r, Number(c.amount));
+    else add(c.kind === "return" ? "Returns & credits" : c.kind === "fee" ? "Bank fees" : c.excused_note ? c.category ?? "Other" : "No receipt yet", Number(c.amount));
   }
   return {
     receipts,

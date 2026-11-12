@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { plaidReady, syncAll } from "@/lib/plaid";
 import { todayCentral } from "@/lib/sale";
-import { CHARGE_COLS, RECEIPT_COLS, addDays, monthView, shiftMonth, type XCharge, type XReceipt } from "@/lib/expense-kinds";
+import { CHARGE_COLS, RECEIPT_COLS, RECEIPT_COLS_0050, addDays, missing0062, monthView, shiftMonth, type XCharge, type XReceipt } from "@/lib/expense-kinds";
 import { mailMissing, mailSubmitted, type Submitted } from "@/lib/expense-mail";
 
 // Every morning (vercel.json "crons"):
@@ -41,11 +41,16 @@ export async function GET(req: NextRequest) {
 
   // ---- last month: send it on its own, or remind
   if (dom >= 3) {
-    const [{ data: recs }, { data: chgs }, { data: reps }] = await Promise.all([
-      db.from("expense_receipts").select(RECEIPT_COLS).is("deleted_at", null).gte("bought_on", addDays(lastFrom, -10)).lt("bought_on", addDays(thisFrom, 10)).limit(20000),
+    // Before migration 0062 the newer receipt columns aren't there: fall back to the older list.
+    const recsFor = (cols: string) => db.from("expense_receipts").select(cols).is("deleted_at", null).gte("bought_on", addDays(lastFrom, -10)).lt("bought_on", addDays(thisFrom, 10)).limit(20000);
+    const [firstRecs, { data: chgs }, { data: reps }] = await Promise.all([
+      recsFor(RECEIPT_COLS),
       db.from("expense_charges").select(CHARGE_COLS).eq("removed", false).not("user_id", "is", null).gte("txn_date", addDays(lastFrom, -10)).lt("txn_date", addDays(thisFrom, 10)).limit(20000),
       db.from("expense_reports").select("user_id, status").eq("month", lastFrom),
     ]);
+    const recRes = firstRecs.error && missing0062(firstRecs.error) ? await recsFor(RECEIPT_COLS_0050) : firstRecs;
+    if (recRes.error) throw new Error(recRes.error.message);
+    const recs = recRes.data as unknown as XReceipt[] | null;
     const sent = new Map(((reps ?? []) as { user_id: string; status: string }[]).map((r) => [r.user_id, r.status]));
     const users = new Set<string>([
       ...((recs ?? []) as XReceipt[]).filter((r) => r.bought_on >= lastFrom && r.bought_on < thisFrom).map((r) => r.user_id),

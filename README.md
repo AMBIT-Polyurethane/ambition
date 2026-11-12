@@ -446,6 +446,19 @@ have a light-mode copy of its video (`video_path_light`, uploaded under "Light-m
 player (`components/academy/lesson-video.tsx`) plays it for people using the app in Light mode (Appearance Light, or Auto
 on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place, keeping the spot, if the look changes.
 
+### Expense receipts: more categories, split receipts, distributors, inventory (0062)
+
+Categories (`CATEGORIES` in `lib/expense-kinds.ts`) add Inventory, Training events, Tradeshows, Lab expenses and R&D
+("Training & events" receipts become Training events). A receipt can be split: `expense_receipts.lines` holds
+`[{category, amount}]` adding up to the total (`category` stays the biggest line); `splitOf()` / `catText()` and the
+dashboard (`expense_kpis`, by line, the bank's amount shared out) count each line in its own category; the AI read
+returns `lines` when a receipt mixes kinds. `companies.distributor` marks a Distributor Partner (Admin > Customers switch and
+filter); a receipt for one must list `end_customers` `[{name, business, phone}]`. An Inventory line asks for the warehouse,
+items (that warehouse's sheet, `buyableItems`) and "Picked up" / "It's being shipped"; `expense_inventory()` makes or updates
+the Receiving Report (`submitted`, waiting for an admin; an admin's own is received at once) or the expected delivery
+(`expected`), linked both ways (`expense_receipts.inbound_id`, `inbound_deliveries.expense_receipt_id`), and cancels it if
+Inventory comes off the receipt. The screens fall back to the older columns until 0062 is run.
+
 ### How To Use A.I. (employee walkthrough videos, 0061)
 
 `/how-to` lists the app walkthrough videos in `lib/howto.ts` (title, who it's for, job roles, length, step chapters); `/how-to/[slug]`

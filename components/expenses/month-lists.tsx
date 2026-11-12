@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Camera, CircleCheck, Clock, FileQuestion, Users } from "lucide-react";
 import { dateShort, money } from "@/lib/format";
-import { chargeLabel, receiptPhotoHref, type MonthView } from "@/lib/expense-kinds";
+import { catText, chargeLabel, endCustomersText, receiptPhotoHref, type MonthView } from "@/lib/expense-kinds";
 import { MissingCharge } from "@/components/expenses/month-bits";
 
 // The lists on a month: card charges with no receipt, the receipts (and whether the bank has shown each
@@ -54,12 +54,12 @@ export function ReceiptList({ view, editable, empty, backTo }: { view: MonthView
                 <span className="grow col" style={{ gap: 2, minWidth: 0 }}>
                   <span className="t ellipsis">{r.vendor || "Receipt"}</span>
                   <span className="s ellipsis">
-                    {dateShort(r.bought_on)} · {r.category}
+                    {dateShort(r.bought_on)} · {catText(r)}
                     {r.purpose ? ` · ${r.purpose}` : ""}
                   </span>
                   {r.customer_name || r.attendees ? (
                     <span className="xm-cust ellipsis">
-                      <Users size={12} /> {[r.customer_name, r.attendees].filter(Boolean).join(" · ")}
+                      <Users size={12} /> {[r.customer_name, endCustomersText(r) ? `saw ${endCustomersText(r)}` : "", r.attendees].filter(Boolean).join(" · ")}
                     </span>
                   ) : null}
                 </span>

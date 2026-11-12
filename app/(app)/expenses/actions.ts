@@ -9,7 +9,11 @@ import { DEFAULT_MODEL } from "@/lib/assistant/config";
 import { shrinkImage } from "@/lib/image-shrink";
 import { todayCentral } from "@/lib/sale";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
-import { CATEGORIES, PEOPLE_CATS, isMonth, loadMonth, monthLabel } from "@/lib/expenses";
+import { CATEGORIES, INVENTORY, PEOPLE_CATS, isMonth, loadMonth, missing0062, monthLabel, type EndCustomer, type ReceiptLine } from "@/lib/expenses";
+import { stockItems } from "@/lib/incoming";
+import { inventoryBranches } from "@/lib/widgets";
+import { emailAdminsReportWaiting } from "@/lib/receiving-notify";
+import { kickSync } from "@/lib/inventory/sync";
 import { mailSubmitted, type Submitted } from "@/lib/expense-mail";
 import { money } from "@/lib/format";
 
@@ -35,6 +39,8 @@ export type ReceiptRead = {
   card_last4: string | null;
   summary: string | null;
   note: string | null;
+  /** Two or more kinds of things on one receipt (fuel and food at a gas station): one line each. */
+  lines: ReceiptLine[] | null;
 };
 
 const FORM = {
@@ -52,8 +58,14 @@ const FORM = {
       card_last4: { type: "string", description: "Last 4 digits of the card used, if printed (e.g. XXXX1234). Empty if not shown." },
       summary: { type: "string", description: "A few words on what was bought, e.g. \"Lunch for 3\", \"Diesel 24 gal\", \"2 nights\"." },
       note: { type: "string", description: "Anything unclear (faded, cut off, two totals). Empty if all clear." },
+      lines: {
+        type: "array",
+        description:
+          "Only when the receipt clearly mixes kinds of purchases (e.g. fuel at the pump and food inside a gas station): one entry per category with its amount, tax shared out, adding up to the total. Otherwise an empty array.",
+        items: { type: "object", properties: { category: { type: "string", enum: [...CATEGORIES] }, amount: { type: "number" } }, required: ["category", "amount"] },
+      },
     },
-    required: ["vendor", "date", "total", "tip", "tip_blank", "category", "card_last4", "summary", "note"],
+    required: ["vendor", "date", "total", "tip", "tip_blank", "category", "card_last4", "summary", "note", "lines"],
   } as Record<string, unknown>,
 };
 
@@ -80,7 +92,7 @@ export async function readReceipt(paths: string[]): Promise<{ ok: true; read: Re
     const { data, usage } = await fillForm<Record<string, unknown>>({
       model: DEFAULT_MODEL,
       maxTokens: 800,
-      system: `You read store and restaurant receipts for AMBIT Polyurethane's employee expense reports. Read only what's printed or written; leave a field empty (or 0) if you can't read it. Today is ${todayCentral()} (receipts are from the last few weeks, almost never the future). Categories: Fuel (gas, diesel), Meals (food the employee bought, alone or with coworkers), Customer entertainment (meals or outings with customers), Lodging, Airfare & travel (flights, rental cars, rideshare, parking, tolls), Vehicle & equipment repair, Tools & supplies, Shipping, Training & events, Other. Restaurants: pick Meals unless the receipt clearly shows a customer outing.`,
+      system: `You read store and restaurant receipts for AMBIT Polyurethane's employee expense reports. Read only what's printed or written; leave a field empty (or 0) if you can't read it. Today is ${todayCentral()} (receipts are from the last few weeks, almost never the future). Categories: Fuel (gas, diesel), Meals (food the employee bought, alone or with coworkers), Customer entertainment (meals or outings with customers), Lodging, Airfare & travel (flights, rental cars, rideshare, parking, tolls), Vehicle & equipment repair, Tools & supplies (for the employee's own work), Inventory (products bought to stock an AMBIT warehouse), Shipping, Training events (classes, certifications, seminars), Tradeshows (booth fees, show registration), Lab expenses (testing and lab supplies), R&D (research and product development), Other. Restaurants: pick Meals unless the receipt clearly shows a customer outing. category is the biggest part of the receipt; when it mixes kinds (fuel and food), also fill lines.`,
       content,
       ...FORM,
     });
@@ -103,6 +115,13 @@ export async function readReceipt(paths: string[]): Promise<{ ok: true; read: Re
         card_last4: last4.length === 4 ? last4 : null,
         summary: s("summary", 120),
         note: s("note", 200),
+        lines: (() => {
+          const raw = Array.isArray(data.lines) ? (data.lines as { category?: unknown; amount?: unknown }[]) : [];
+          const ls = raw
+            .map((l) => ({ category: typeof l.category === "string" && (CATEGORIES as readonly string[]).includes(l.category) ? l.category : "", amount: cents(l.amount) ?? 0 }))
+            .filter((l) => l.category && l.amount > 0);
+          return ls.length > 1 && new Set(ls.map((l) => l.category)).size > 1 ? ls : null;
+        })(),
       },
     };
   } catch (e) {
@@ -119,10 +138,14 @@ export type ReceiptInput = {
   amount: number | string;
   tip?: number | string | null;
   category: string;
+  /** 0062: two or more lines on one receipt (they add up to the total). */
+  lines?: { category: string; amount: number | string }[] | null;
   paid_with: "card" | "personal";
   card_last4?: string | null;
   company_id?: string | null;
   customer_name?: string | null;
+  /** 0062: a distributor partner's own customers seen on the trip. */
+  end_customers?: EndCustomer[] | null;
   purpose?: string | null;
   attendees?: string | null;
   notes?: string | null;
@@ -131,9 +154,17 @@ export type ReceiptInput = {
   ai?: unknown;
   /** Made from a card charge ("Add receipt" next to it): link the two. */
   charge_id?: string | null;
+  /** 0062: inventory bought on this receipt (when one of its lines is Inventory). */
+  inventory?: InventoryBuy | null;
 };
+export type InventoryBuy = { branch: string; mode: "picked_up" | "shipped"; expected?: string | null; lines: { product_id: string; qty: number | string; lot_no?: string | null }[] };
+export type InventoryDone = { id: number; status: "submitted" | "expected" | "received"; branch: string };
 
-export type SaveResult = { ok: true; id: string; month: string; matched: { day: string; amount: number; label: string } | null } | { ok: false; error: string };
+export type SaveResult =
+  | { ok: true; id: string; month: string; matched: { day: string; amount: number; label: string } | null; inventory?: InventoryDone | null; warn?: string | null }
+  | { ok: false; error: string };
+
+const NEEDS_0062 = "Split receipts, distributor customers and inventory purchases need the 0062 database update first. Ask Jeremiah to run it.";
 
 export async function saveReceipt(d: ReceiptInput): Promise<SaveResult> {
   const { supabase, profile } = await requireEmployee();
@@ -145,15 +176,33 @@ export async function saveReceipt(d: ReceiptInput): Promise<SaveResult> {
   if (amount > 50000) return { ok: false, error: "That total looks too big. Check it." };
   const vendor = t(d.vendor, 80);
   if (!vendor) return { ok: false, error: "Type where it was bought." };
-  const category = (CATEGORIES as readonly string[]).includes(d.category) ? d.category : "Other";
+  const okCat = (c: unknown): c is string => typeof c === "string" && (CATEGORIES as readonly string[]).includes(c);
+
+  // One category, or a split: every line has a category and an amount, and they add up to the total.
+  let lines: ReceiptLine[] | null = null;
+  const raw = Array.isArray(d.lines) ? d.lines : [];
+  if (raw.length > 1) {
+    lines = [];
+    for (const l of raw.slice(0, 10)) {
+      const a = cents(l.amount);
+      if (!okCat(l.category)) return { ok: false, error: "Pick a category for every line." };
+      if (a === null || a <= 0) return { ok: false, error: `Type the amount for the ${l.category} line.` };
+      lines.push({ category: l.category, amount: a });
+    }
+    const sum = Math.round(lines.reduce((x, l) => x + l.amount, 0) * 100) / 100;
+    if (Math.abs(sum - amount) >= 0.01) return { ok: false, error: `The lines add up to ${money(sum)}, but the total is ${money(amount)}. Make them match.` };
+  }
+  const category = lines ? [...lines].sort((a, b) => b.amount - a.amount)[0].category : okCat(d.category) ? d.category : "Other";
+  const cats = new Set(lines ? lines.map((l) => l.category) : [category]);
   const tip = d.tip === null || d.tip === undefined || d.tip === "" ? null : cents(d.tip);
   const reason = t(d.no_photo_reason, 300);
 
-  let existing: { id: string; user_id: string; photos: string[] } | null = null;
+  let existing: { id: string; user_id: string; photos: string[]; inbound_id?: number | null } | null = null;
   if (d.id) {
-    const { data } = await supabase.from("expense_receipts").select("id, user_id, photos").eq("id", d.id).is("deleted_at", null).maybeSingle();
-    if (!data) return { ok: false, error: "That receipt wasn't found." };
-    existing = data as { id: string; user_id: string; photos: string[] };
+    let res = await supabase.from("expense_receipts").select("id, user_id, photos, inbound_id").eq("id", d.id).is("deleted_at", null).maybeSingle();
+    if (res.error && missing0062(res.error)) res = await supabase.from("expense_receipts").select("id, user_id, photos").eq("id", d.id).is("deleted_at", null).maybeSingle();
+    if (!res.data) return { ok: false, error: "That receipt wasn't found." };
+    existing = res.data as { id: string; user_id: string; photos: string[]; inbound_id?: number | null };
   }
   const owner = existing?.user_id ?? profile.id;
   // Photos: the owner's own uploads, plus whatever was already on the receipt (an approver fixing it).
@@ -165,15 +214,52 @@ export async function saveReceipt(d: ReceiptInput): Promise<SaveResult> {
   // The customer: one from the customer list (its name is saved with it), or a name typed in.
   let companyId = t(d.company_id, 40);
   let customer = t(d.customer_name, 120);
+  let distributor = false;
   if (companyId) {
-    const { data: co } = await supabase.from("companies").select("id, name").eq("id", companyId).maybeSingle();
-    if (co) customer = co.name as string;
-    else companyId = null;
+    let co = await supabase.from("companies").select("id, name, distributor").eq("id", companyId).maybeSingle();
+    if (co.error && missing0062(co.error)) co = (await supabase.from("companies").select("id, name").eq("id", companyId).maybeSingle()) as typeof co;
+    if (co.data) {
+      customer = co.data.name as string;
+      distributor = Boolean((co.data as { distributor?: boolean }).distributor);
+    } else companyId = null;
   }
-  const people = PEOPLE_CATS.has(category) ? t(d.attendees, 300) : null;
-  if (category === "Customer entertainment" && !customer) return { ok: false, error: "Customer entertainment: pick the customer it was for." };
+  const hasPeople = [...cats].some((c) => PEOPLE_CATS.has(c));
+  const people = hasPeople ? t(d.attendees, 300) : null;
+  if (cats.has("Customer entertainment") && !customer) return { ok: false, error: "Customer entertainment: pick the customer it was for." };
 
-  const row = {
+  // A distributor partner: which of their customers were seen.
+  let ends: EndCustomer[] | null = null;
+  if (distributor) {
+    ends = (Array.isArray(d.end_customers) ? d.end_customers : [])
+      .slice(0, 20)
+      .map((c) => ({ name: t(c?.name, 80) ?? "", business: t(c?.business, 120) ?? "", phone: (t(c?.phone, 30) ?? "").replace(/[^\d+()\-.\s x]/g, "") }))
+      .filter((c) => c.name || c.business || c.phone);
+    if (!ends.length) return { ok: false, error: `${customer} is a distributor partner: add the customer(s) of theirs you saw (name, business and phone).` };
+    if (ends.some((c) => !c.name && !c.business)) return { ok: false, error: "Each of the distributor's customers needs a name or a business name." };
+  }
+
+  // Inventory: which warehouse, what, and whether it's in hand or on its way.
+  const buying = cats.has(INVENTORY);
+  let buy: InventoryBuy | null = null;
+  let branchName = "";
+  if (buying) {
+    const b = d.inventory;
+    if (!b || !b.branch) return { ok: false, error: "Inventory: pick the warehouse it's for." };
+    const branches = await inventoryBranches(supabase, profile, { all: true });
+    const br = branches.find((x) => x.id === b.branch);
+    if (!br) return { ok: false, error: "Inventory: pick the warehouse it's for." };
+    branchName = br.name;
+    if (b.mode !== "picked_up" && b.mode !== "shipped") return { ok: false, error: "Inventory: say whether you have it or it's being shipped." };
+    const expected = b.mode === "shipped" ? t(b.expected, 10) : null;
+    if (b.mode === "shipped" && (!expected || !DAY.test(expected))) return { ok: false, error: "Inventory: pick the day it should get there." };
+    const items = (Array.isArray(b.lines) ? b.lines : [])
+      .map((l) => ({ product_id: t(l.product_id, 40) ?? "", qty: cents(l.qty) ?? 0, lot_no: t(l.lot_no, 60) }))
+      .filter((l) => l.product_id && l.qty > 0);
+    if (!items.length) return { ok: false, error: "Inventory: add the items you bought and how many." };
+    buy = { branch: br.id, mode: b.mode, expected, lines: items };
+  }
+
+  const base = {
     bought_on: day,
     vendor,
     amount,
@@ -190,22 +276,46 @@ export async function saveReceipt(d: ReceiptInput): Promise<SaveResult> {
     no_photo_reason: photos.length ? null : reason,
     ...(d.ai && typeof d.ai === "object" ? { ai: d.ai } : {}),
   };
+  const row = { ...base, lines, end_customers: ends };
 
   let id = existing?.id ?? null;
-  if (existing) {
-    const { error } = await supabase.from("expense_receipts").update(row).eq("id", existing.id);
-    if (error) return { ok: false, error: error.message };
-  } else {
-    const { data, error } = await supabase.from("expense_receipts").insert({ ...row, user_id: profile.id }).select("id").single();
-    if (error || !data) return { ok: false, error: error?.message ?? "Couldn't save the receipt." };
-    id = data.id as string;
+  const write = async (r: Record<string, unknown>) =>
+    existing
+      ? await supabase.from("expense_receipts").update(r).eq("id", existing.id).select("id").single()
+      : await supabase.from("expense_receipts").insert({ ...r, user_id: profile.id }).select("id").single();
+  let res = await write(row);
+  if (res.error && missing0062(res.error)) {
+    // The database doesn't have 0062 yet: a plain receipt still saves; a split, distributor or inventory one can't.
+    if (lines || ends || buying) return { ok: false, error: NEEDS_0062 };
+    res = await write(base);
+  }
+  if (res.error || !res.data) return { ok: false, error: res.error?.message ?? "Couldn't save the receipt." };
+  id = res.data.id as string;
+
+  // Inventory: a Receiving Report for an admin to approve (in hand), or an expected delivery (being shipped).
+  let inventory: InventoryDone | null = null;
+  let warn: string | null = null;
+  if (buy) {
+    const { data, error } = await supabase.rpc("expense_inventory", { p_receipt: id, p_branch: buy.branch, p_mode: buy.mode, p_expected: buy.expected, p_lines: buy.lines });
+    if (error) warn = `The receipt is saved, but the inventory wasn't: ${error.message} Open the receipt and try again.`;
+    else {
+      const out = data as { id: number; status: InventoryDone["status"] };
+      inventory = { id: Number(out.id), status: out.status, branch: branchName };
+      if (out.status === "submitted") await emailAdminsReportWaiting(supabase, inventory.id).catch(() => null);
+      if (out.status === "received") kickSync(buy.branch, "card purchase");
+      revalidatePath("/inventory", "layout");
+    }
+  } else if (existing?.inbound_id) {
+    // Inventory came off the receipt: cancel the report while it's still waiting.
+    await supabase.rpc("expense_inventory", { p_receipt: id, p_branch: null, p_mode: "none", p_expected: null, p_lines: [] });
+    revalidatePath("/inventory", "layout");
   }
 
   // Match it to its card charge: the one it was added from, or the closest fit.
   if (d.charge_id) {
     const { error } = await supabase.rpc("expense_link", { p_charge: d.charge_id, p_receipt: id });
     if (error) return { ok: false, error: `Saved, but couldn't attach it to that card charge: ${error.message}` };
-  } else if (row.paid_with === "card") {
+  } else if (base.paid_with === "card") {
     await supabase.rpc("expense_auto_match", { p_user: owner === profile.id ? profile.id : owner });
   }
   const { data: m } = await supabase.from("expense_charges").select("txn_date, amount, merchant, description").eq("receipt_id", id).maybeSingle();
@@ -215,6 +325,39 @@ export async function saveReceipt(d: ReceiptInput): Promise<SaveResult> {
     id: id!,
     month: day.slice(0, 7),
     matched: m ? { day: m.txn_date as string, amount: Number(m.amount), label: ((m.merchant as string) || (m.description as string) || "").trim() } : null,
+    inventory,
+    warn,
+  };
+}
+
+// ------------------------------------------------------------------ inventory picker
+
+export type BuyItem = { id: string; sku: string; name: string; unit: string; lot: boolean };
+
+/** The items on one warehouse's inventory sheet, for "what did you buy". */
+export async function buyableItems(branch: string): Promise<BuyItem[]> {
+  const { supabase, profile } = await requireEmployee();
+  const branches = await inventoryBranches(supabase, profile, { all: true });
+  if (!branches.some((b) => b.id === branch)) return [];
+  const items = await stockItems(supabase, branch);
+  return items.map((i) => ({ id: i.product_id, sku: i.sku, name: i.name, unit: i.unit, lot: Boolean(i.lots || i.track) }));
+}
+
+/** What's on a receipt's inventory report now (to edit it, or to show it's already in stock). */
+export async function receiptInventory(inboundId: number): Promise<{ branch: string; status: string; expected: string; lines: { product_id: string; sku: string; name: string; unit: string; qty: number; lot_no: string | null }[] } | null> {
+  const { supabase } = await requireEmployee();
+  const { data } = await supabase
+    .from("inbound_deliveries")
+    .select("branch_id, status, expected_on, inbound_lines(product_id, sku, name, unit, qty, lot_no)")
+    .eq("id", inboundId)
+    .maybeSingle();
+  if (!data) return null;
+  const x = data as unknown as { branch_id: string; status: string; expected_on: string; inbound_lines: { product_id: string; sku: string; name: string | null; unit: string | null; qty: number; lot_no: string | null }[] };
+  return {
+    branch: x.branch_id,
+    status: x.status,
+    expected: x.expected_on,
+    lines: (x.inbound_lines ?? []).map((l) => ({ product_id: l.product_id, sku: l.sku, name: l.name ?? l.sku, unit: l.unit ?? "each", qty: Number(l.qty), lot_no: l.lot_no })),
   };
 }
 

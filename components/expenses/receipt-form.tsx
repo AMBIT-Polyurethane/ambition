@@ -3,19 +3,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, CircleAlert, CircleCheck, FileText, ImagePlus, LoaderCircle, Search, Sparkles, Trash2, X } from "lucide-react";
+import { Camera, CircleAlert, CircleCheck, FileText, ImagePlus, LoaderCircle, Plus, Search, Sparkles, SplitSquareHorizontal, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { shrink } from "@/lib/photo-upload";
 import { money, dateShort } from "@/lib/format";
-import { CATEGORIES, PEOPLE_CATS, receiptPhotoHref, type XReceipt } from "@/lib/expense-kinds";
-import { deleteReceipt, readReceipt, saveReceipt, type ReceiptRead } from "@/app/(app)/expenses/actions";
+import { CATEGORIES, INVENTORY, PEOPLE_CATS, receiptPhotoHref, type EndCustomer, type XReceipt } from "@/lib/expense-kinds";
+import { deleteReceipt, readReceipt, saveReceipt, type InventoryDone, type ReceiptRead } from "@/app/(app)/expenses/actions";
+import { BuyInventory, type BuyDone, type BuyState } from "@/components/expenses/buy-inventory";
 import { UnlinkButton } from "@/components/expenses/month-bits";
 
 // Add or fix a receipt: snap it (the AI fills in the rest), say which customer it was for, save. Opened from
 // a card charge ("Add receipt" / "Lost receipt"), it's attached to that charge.
 
-/** [id, name, city, state] */
-export type MiniCustomer = [string, string, string | null, string | null];
+/** [id, name, city, state, distributor partner (0062)] */
+export type MiniCustomer = [string, string, string | null, string | null, boolean?];
+/** One line of a split receipt; the first line is "the rest" of the total. */
+type Line = { category: string; amount: string };
 
 type Photo = { path: string; preview: string | null; pdf: boolean };
 
@@ -33,6 +36,9 @@ export function ReceiptForm({
   readOnly,
   backHref,
   matched,
+  warehouses = [],
+  buyStart = null,
+  buyDone = null,
 }: {
   uid: string;
   today: string;
@@ -47,6 +53,10 @@ export function ReceiptForm({
   backHref?: string | null;
   /** Editing: the card charge it's matched to. */
   matched?: { id: string; txn_date: string; label: string; amount: number; card: string | null } | null;
+  /** 0062: the warehouses inventory can be bought for, and what's already on this receipt. */
+  warehouses?: { id: string; name: string }[];
+  buyStart?: BuyState | null;
+  buyDone?: BuyDone;
 }) {
   const router = useRouter();
   const r = receipt ?? null;
@@ -58,6 +68,13 @@ export function ReceiptForm({
   const [amount, setAmount] = useState(r ? String(r.amount) : charge ? charge.amount.toFixed(2) : "");
   const [tip, setTip] = useState(r?.tip ? String(r.tip) : "");
   const [category, setCategory] = useState(r?.category ?? "");
+  // A split receipt (fuel and lunch on one receipt): line 1 takes the rest of the total.
+  const [split, setSplit] = useState<Line[] | null>(() => {
+    const ls = Array.isArray(r?.lines) && r!.lines!.length > 1 ? r!.lines! : null;
+    return ls ? ls.map((l, i) => ({ category: l.category, amount: i === 0 ? "" : Number(l.amount).toFixed(2) })) : null;
+  });
+  const [ends, setEnds] = useState<EndCustomer[]>(() => (Array.isArray(r?.end_customers) && r!.end_customers!.length ? r!.end_customers! : [{ name: "", business: "", phone: "" }]));
+  const [buy, setBuy] = useState<BuyState>(buyStart ?? { branch: warehouses.length === 1 ? warehouses[0].id : "", mode: "", expected: "", lines: [] });
   const [paid, setPaid] = useState<"card" | "personal">(r?.paid_with ?? "card");
   const [card, setCard] = useState(r?.card_last4 ?? charge?.card ?? myCard ?? "");
   const [cust, setCust] = useState<{ id: string | null; name: string }>({ id: r?.company_id ?? null, name: r?.customer_name ?? "" });
@@ -68,7 +85,7 @@ export function ReceiptForm({
   const [ai, setAi] = useState<(ReceiptRead & { cents: number }) | null>(null);
   const [busy, setBusy] = useState<null | "upload" | "read" | "save" | "delete">(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ month: string; matched: { day: string; amount: number; label: string } | null } | null>(null);
+  const [saved, setSaved] = useState<{ month: string; matched: { day: string; amount: number; label: string } | null; inventory: InventoryDone | null; warn: string | null } | null>(null);
   const [sure, setSure] = useState(false);
   const touched = useRef(new Set<string>());
   const camRef = useRef<HTMLInputElement>(null);
@@ -85,6 +102,10 @@ export function ReceiptForm({
     if (x.total && !t.has("amount") && !charge) setAmount(x.total.toFixed(2));
     if (x.tip && !t.has("tip")) setTip(x.tip.toFixed(2));
     if (x.category && !t.has("category")) setCategory(x.category);
+    if (x.lines && x.lines.length > 1 && !t.has("category")) {
+      const ls = [...x.lines].sort((a, b) => b.amount - a.amount);
+      setSplit(ls.map((l, i) => ({ category: l.category, amount: i === 0 ? "" : l.amount.toFixed(2) })));
+    }
     if (x.card_last4 && !t.has("card")) setCard(x.card_last4);
     if (x.summary && !t.has("purpose") && !purpose) setPurpose(x.summary);
   };
@@ -135,14 +156,33 @@ export function ReceiptForm({
   };
 
   const cat = category || "Other";
-  const wantsPeople = PEOPLE_CATS.has(cat);
-  const wantsCustomer = CUSTOMER_HINT.has(cat);
   const amt = Number(amount);
+  // Split: every line but the first is typed; the first is whatever's left of the total.
+  const others = (split ?? []).slice(1).reduce((a, l) => a + (Number(l.amount) || 0), 0);
+  const rest = Math.round(((Number.isFinite(amt) ? amt : 0) - others) * 100) / 100;
+  const cats = new Set(split ? split.map((l) => l.category).filter(Boolean) : [cat]);
+  const wantsPeople = [...cats].some((c) => PEOPLE_CATS.has(c));
+  const wantsCustomer = [...cats].some((c) => CUSTOMER_HINT.has(c));
+  const buying = cats.has(INVENTORY);
+  const distributor = Boolean(cust.id && customers.find((c) => c[0] === cust.id)?.[4]);
   const off = charge && amount && Number.isFinite(amt) ? Math.round((charge.amount - amt) * 100) / 100 : 0;
 
   const save = async () => {
     setError(null);
-    if (!category) return setError("Pick a category.");
+    if (!split && !category) return setError("Pick a category.");
+    if (split) {
+      if (split.some((l) => !l.category)) return setError("Pick a category for every line.");
+      if (split.slice(1).some((l) => !(Number(l.amount) > 0))) return setError("Type the amount for every line.");
+      if (!(rest > 0)) return setError(`The lines add up to more than the total (${money(amt || 0)}). Check the amounts.`);
+    }
+    if (distributor && !ends.some((c) => c.name.trim() || c.business.trim())) return setError(`${cust.name} is a distributor partner: add the customer(s) of theirs you saw.`);
+    if (buying) {
+      if (!buy.branch) return setError("Inventory: pick the warehouse it's for.");
+      if (!buy.lines.length) return setError("Inventory: add the items you bought.");
+      if (buy.lines.some((l) => !(Number(l.qty) > 0))) return setError("Inventory: type how many of each item.");
+      if (!buy.mode) return setError("Inventory: tap Picked up, or It's being shipped.");
+      if (buy.mode === "shipped" && !buy.expected) return setError("Inventory: pick the day it should get there.");
+    }
     if (!lost && !photos.length) return setError("Add a photo of the receipt (or tap Lost receipt).");
     if (lost && !reason.trim()) return setError("Say why there's no receipt.");
     if (wantsCustomer && !cust.name.trim() && !noCustomer) return setError('Which customer was it for? Pick one, or tap "Not for a customer".');
@@ -153,7 +193,13 @@ export function ReceiptForm({
       vendor,
       amount,
       tip: wantsPeople ? tip : null,
-      category: cat,
+      category: split ? split[0].category : cat,
+      lines: split ? split.map((l, i) => ({ category: l.category, amount: i === 0 ? rest : Number(l.amount) })) : null,
+      end_customers: distributor ? ends : null,
+      inventory:
+        buying && buyDone?.status !== "received"
+          ? { branch: buy.branch, mode: buy.mode as "picked_up" | "shipped", expected: buy.mode === "shipped" ? buy.expected : null, lines: buy.lines.map((l) => ({ product_id: l.id, qty: l.qty, lot_no: l.lot_no || null })) }
+          : null,
       paid_with: paid,
       card_last4: card,
       company_id: noCustomer ? null : cust.id,
@@ -168,7 +214,7 @@ export function ReceiptForm({
     });
     setBusy(null);
     if (!res.ok) return setError(res.error);
-    setSaved({ month: res.month, matched: res.matched });
+    setSaved({ month: res.month, matched: res.matched, inventory: res.inventory ?? null, warn: res.warn ?? null });
     router.refresh();
   };
 
@@ -198,7 +244,23 @@ export function ReceiptForm({
           ) : (
             <span className="small muted">Marked paid with your own money, so it&apos;s paid back to you.</span>
           )}
+          {saved.inventory ? (
+            <span className="small" style={{ marginTop: 6 }}>
+              <b>Inventory: </b>
+              {saved.inventory.status === "received"
+                ? `added to ${saved.inventory.branch}'s stock.`
+                : saved.inventory.status === "expected"
+                  ? `on ${saved.inventory.branch}'s expected deliveries. The warehouse receives it when it arrives.`
+                  : `sent to an admin to approve (Receiving Report #${saved.inventory.id}). It goes into ${saved.inventory.branch}'s stock once it's approved.`}
+            </span>
+          ) : null}
         </div>
+        {saved.warn ? (
+          <div className="alert warn small" role="alert" style={{ textAlign: "left" }}>
+            <CircleAlert size={17} style={{ flex: "none", marginTop: 1 }} />
+            <span>{saved.warn}</span>
+          </div>
+        ) : null}
         <div className="row wrap" style={{ gap: 10, justifyContent: "center" }}>
           {r || charge ? null : (
             <a className="btn sm" href="/expenses/add">
@@ -346,16 +408,75 @@ export function ReceiptForm({
           <input className="input" value={vendor} onChange={(e) => (mark("vendor"), setVendor(e.target.value))} placeholder="Store, restaurant, hotel…" />
         </label>
 
-        <div className="field">
-          <span className="label">Category</span>
-          <div className="xr-cats">
-            {CATEGORIES.map((c) => (
-              <button key={c} type="button" className={`chip sm${category === c ? " on" : ""}`} onClick={() => (mark("category"), setCategory(c))}>
-                {c}
+        {split ? (
+          <div className="field">
+            <span className="label">Lines on this receipt</span>
+            <div className="xr-split">
+              {split.map((l, i) => (
+                <div key={i} className="xr-line">
+                  <select
+                    className="select sm grow"
+                    value={l.category}
+                    aria-label={`Category for line ${i + 1}`}
+                    onChange={(e) => (mark("category"), setSplit(split.map((x, k) => (k === i ? { ...x, category: e.target.value } : x))))}
+                  >
+                    <option value="" disabled>Category…</option>
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  {i === 0 ? (
+                    <span className={`xr-rest${rest > 0 ? "" : " bad"}`} title="The rest of the total">{amount ? money(rest) : "the rest"}</span>
+                  ) : (
+                    <input
+                      className="input sm"
+                      inputMode="decimal"
+                      style={{ width: 96 }}
+                      value={l.amount}
+                      placeholder="0.00"
+                      aria-label={`Amount for line ${i + 1}`}
+                      onChange={(e) => setSplit(split.map((x, k) => (k === i ? { ...x, amount: e.target.value.replace(/[^\d.]/g, "") } : x)))}
+                    />
+                  )}
+                  {i > 0 ? (
+                    <button type="button" className="iconbtn sm" aria-label={`Remove line ${i + 1}`} onClick={() => setSplit(split.length > 2 ? split.filter((_, k) => k !== i) : null)}>
+                      <X size={15} />
+                    </button>
+                  ) : (
+                    <span style={{ width: 32 }} />
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="chip sm" onClick={() => setSplit([...split, { category: "", amount: "" }])}>
+                <Plus size={14} /> Add a line
               </button>
-            ))}
+              <button type="button" className="chip sm" onClick={() => (setCategory(split[0].category || category), setSplit(null))}>
+                Back to one category
+              </button>
+            </div>
+            <span className="tiny muted">The first line is whatever&apos;s left of the total. Each line counts in its own category.</span>
           </div>
-        </div>
+        ) : (
+          <div className="field">
+            <span className="label">Category</span>
+            <div className="xr-cats">
+              {CATEGORIES.map((c) => (
+                <button key={c} type="button" className={`chip sm${category === c ? " on" : ""}`} onClick={() => (mark("category"), setCategory(c))}>
+                  {c}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="xr-split-btn"
+              onClick={() => (mark("category"), setSplit([{ category: category || "", amount: "" }, { category: "", amount: "" }]))}
+            >
+              <SplitSquareHorizontal size={15} /> More than one kind on this receipt? (like fuel and lunch) Split it
+            </button>
+          </div>
+        )}
 
         <CustomerField
           customers={customers}
@@ -371,6 +492,27 @@ export function ReceiptForm({
             setCust({ id: null, name: "" });
           }}
         />
+
+        {distributor ? (
+          <div className="field xr-ends">
+            <span className="label">{cust.name} is a distributor partner: which of their customers did you see?</span>
+            {ends.map((c, i) => (
+              <div key={i} className="xr-end">
+                <input className="input sm" value={c.name} placeholder="Name" aria-label={`Customer ${i + 1} name`} onChange={(e) => setEnds(ends.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} />
+                <input className="input sm" value={c.business} placeholder="Business name" aria-label={`Customer ${i + 1} business`} onChange={(e) => setEnds(ends.map((x, k) => (k === i ? { ...x, business: e.target.value } : x)))} />
+                <input className="input sm" value={c.phone} placeholder="Phone" inputMode="tel" aria-label={`Customer ${i + 1} phone`} onChange={(e) => setEnds(ends.map((x, k) => (k === i ? { ...x, phone: e.target.value } : x)))} />
+                {ends.length > 1 ? (
+                  <button type="button" className="iconbtn sm" aria-label={`Remove customer ${i + 1}`} onClick={() => setEnds(ends.filter((_, k) => k !== i))}>
+                    <X size={15} />
+                  </button>
+                ) : null}
+              </div>
+            ))}
+            <button type="button" className="chip sm" style={{ alignSelf: "flex-start" }} onClick={() => setEnds([...ends, { name: "", business: "", phone: "" }])}>
+              <Plus size={14} /> Add another of their customers
+            </button>
+          </div>
+        ) : null}
 
         {wantsPeople ? (
           <div className="grid2 xr-people">
@@ -415,6 +557,8 @@ export function ReceiptForm({
           <textarea className="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
       </section>
+
+      {buying ? <BuyInventory warehouses={warehouses} value={buy} onChange={setBuy} done={buyDone} today={today} /> : null}
 
       {error ? (
         <div className="alert err small" role="alert">

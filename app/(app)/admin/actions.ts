@@ -169,10 +169,16 @@ export async function saveCompany(form: FormData) {
     needs_qb_setup: form.get("needs_qb_setup") === "on",
     sales_rep_id: n(form, "sales_rep_id") === "house" ? null : n(form, "sales_rep_id"),
     house_account: n(form, "sales_rep_id") === "house", // 0060: House Account (no sales rep gets credit)
+    distributor: form.get("distributor") === "on", // 0062: Distributor partner
   };
   if (!row.name) return;
-  if (id) await supabase.from("companies").update(row).eq("id", id);
-  else await supabase.from("companies").insert(row);
+  const write = (r: Record<string, unknown>) => (id ? supabase.from("companies").update(r).eq("id", id) : supabase.from("companies").insert(r));
+  const { error } = await write(row);
+  // Before migration 0062 there's no distributor column: save the rest.
+  if (error && /distributor/.test(error.message)) {
+    const { distributor: _skip, ...rest } = row; // eslint-disable-line @typescript-eslint/no-unused-vars
+    await write(rest);
+  }
   revalidatePath("/admin/companies");
 }
 
