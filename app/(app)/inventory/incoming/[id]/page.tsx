@@ -283,7 +283,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
           <div className="tbl-wrap">
             <table className="tbl">
               <thead>
-                <tr><th>SKU</th><th>Item</th><th>Lot / Batch #</th><th className="num">{transfer ? "Sent" : "On BOL"}</th><th className="num">Received</th>{anyDamaged ? <th className="num">Damaged</th> : null}</tr>
+                <tr><th>SKU</th><th>Item</th><th>Lot / Batch #</th><th className="num">{transfer ? "Sent" : "On BOL"}</th><th className="num">{d.status === "cancelled" ? "Counted (not in stock)" : "Received"}</th>{anyDamaged ? <th className="num">Damaged</th> : null}</tr>
               </thead>
               <tbody>
                 {lines.map((l) => {
@@ -299,7 +299,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
                       </td>
                       <td>{l.lot_no ?? ""}</td>
                       <td className="num">{Number(l.qty)}</td>
-                      <td className="num"><b>{got === null ? "" : got}</b> {l.unit ? <span className="tiny faint">{plural(l.unit, got ?? 0)}</span> : null}</td>
+                      <td className="num">{d.status === "cancelled" ? <span className="faint">{got === null ? "" : got}</span> : <b>{got === null ? "" : got}</b>} {l.unit ? <span className="tiny faint">{plural(l.unit, got ?? 0)}</span> : null}</td>
                       {anyDamaged ? <td className="num">{Number(l.damaged_qty ?? 0) > 0 ? <b className="red">{Number(l.damaged_qty)}</b> : ""}</td> : null}
                     </tr>
                   );
