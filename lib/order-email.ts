@@ -4,6 +4,7 @@ import { DELIVERY_LABEL, dateShort, dateTime, escapeHtml as h, firstName, money,
 import { foamLoads, rowPrice, splitNote } from "@/lib/order-doc/loads";
 import { wrapEmail } from "@/lib/email";
 import type { OrderDoc } from "@/lib/order-doc/types";
+import type { AddonPick } from "@/lib/order-addons";
 
 const td = "padding:6px 0;font-size:14px;font-weight:600;white-space:pre-wrap;";
 
@@ -188,7 +189,28 @@ ${notOrderHtml}
 }
 
 /** To the customer: please check and approve the order AMBIT put together for you. */
-export function buildApprovalRequestEmail(doc: OrderDoc, approveUrl: string) {
+/** "Popular at OKC: add to this order" (0065): the location's most ordered items, each linking to the add page. */
+function addonsHtml(picks: AddonPick[], addUrl: string, branchName: string): string {
+  if (!picks.length) return "";
+  const rows = picks
+    .map(
+      (p) => `<tr>
+<td style="padding:9px 8px;border-bottom:1px solid #e4e4e7;"><b style="font-size:14px;">${h(p.name)}</b><br><span style="font-size:12px;color:#71717a;">${h(p.sku)}</span></td>
+<td style="padding:9px 8px;border-bottom:1px solid #e4e4e7;text-align:right;font-size:14px;white-space:nowrap;">${p.account || p.price === null ? '<span style="color:#71717a;">Account pricing</span>' : `<b>${h(money(p.price))}</b> <span style="font-size:12px;color:#71717a;">/ ${h(p.unit)}</span>`}</td>
+<td style="padding:9px 8px;border-bottom:1px solid #e4e4e7;text-align:right;"><a href="${h(`${addUrl}?add=${p.id}`)}" style="display:inline-block;border:1.5px solid #E33527;color:#E33527;text-decoration:none;font-weight:800;font-size:12px;letter-spacing:1px;padding:6px 12px;border-radius:6px;">ADD</a></td>
+</tr>`,
+    )
+    .join("");
+  return `<div style="margin:24px 0 0;padding:16px;border-radius:10px;background:#fafafa;border:1px solid #e4e4e7;">
+<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">NEED ANYTHING ELSE?</div>
+<div style="font-size:17px;font-weight:800;margin:4px 0 6px;">Most ordered at ${h(branchName)}</div>
+<p style="font-size:13px;color:#52525b;margin:0 0 8px;line-height:1.5;">Add any of these to this order before you approve it. They go on the same pickup or delivery.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+<p style="margin:14px 0 0;">${button(addUrl, "ADD ITEMS TO THIS ORDER")}</p>
+</div>`;
+}
+
+export function buildApprovalRequestEmail(doc: OrderDoc, approveUrl: string, addons: AddonPick[] = []) {
   const o = doc.order;
   const no = orderNo(o.order_no);
   const rep = o.placed_by_name ?? "Your AMBIT rep";
@@ -214,6 +236,7 @@ export function buildApprovalRequestEmail(doc: OrderDoc, approveUrl: string) {
 <p style="margin:0 0 22px;">${button(approveUrl, "REVIEW AND APPROVE")}</p>
 ${detailTable(rows)}
 ${itemsTable(doc, false)}
+${addonsHtml(addons, `${approveUrl}/add`, doc.branch ? doc.branch.name : "AMBIT")}
 ${notOrderHtml}
 <p style="font-size:13px;color:#52525b;margin:16px 0 0;line-height:1.5;">Something not right? Open the link and tap <b>Request changes</b>, or contact ${h(rep)}${contact ? ` at ${h(contact)}` : ""}. The link works until ${h(until)}. The order is attached as a PDF if you'd like to print it.</p>`;
 
@@ -229,6 +252,7 @@ ${notOrderHtml}
     "",
     "Items:",
     ...doc.items.map((i) => `- ${i.name}  x ${qtyText(Number(i.qty), i.unit)}${i.line_total !== null ? `  ${money(i.line_total)}` : i.customer_priced ? "  Account pricing" : ""}`),
+    ...(addons.length ? ["", `Need anything else? Most ordered at ${doc.branch ? doc.branch.name : "AMBIT"} (add them here: ${approveUrl}/add):`, ...addons.map((p) => `- ${p.name}  ${p.account || p.price === null ? "Account pricing" : `${money(p.price)} / ${p.unit}`}`)] : []),
     "",
     `${NOT_ORDER_TITLE}.`,
     NOT_ORDER_FINE,

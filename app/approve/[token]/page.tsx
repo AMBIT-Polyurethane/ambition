@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { NOT_ORDER_FINE, NOT_ORDER_TITLE } from "@/lib/order-doc/wording";
-import { CircleAlert, CircleCheck, Clock, FileDown } from "lucide-react";
+import { CircleAlert, CircleCheck, Clock, FileDown, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { docFromJson } from "@/lib/order-doc/load";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
@@ -12,11 +12,17 @@ export const metadata: Metadata = { title: "Approve your order", robots: { index
 export const dynamic = "force-dynamic";
 
 /** The page the customer opens from the approval email. No account needed: the link itself is the key. */
-export default async function ApprovePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function ApprovePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { token } = await params;
+  const sp = await searchParams;
   const supabase = await createClient();
-  const { data } = await supabase.rpc("order_approval_view", { p_token: token });
+  const [{ data }, addon] = await Promise.all([
+    supabase.rpc("order_approval_view", { p_token: token }),
+    // Customers can add items before approving (0065).
+    supabase.rpc("order_addon_options", { p_token: "x".repeat(20) }),
+  ]);
   const doc = docFromJson(data);
+  const canAdd = !addon.error;
 
   if (!doc) {
     return (
@@ -41,6 +47,11 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
         <div className="muted">{o.company_name}{o.account_no ? ` · ${o.account_no}` : ""}</div>
       </div>
 
+      {sp.added && doc.state === "pending" ? (
+        <div className="alert ok"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} />
+          <span>Added to your order. Check the list below, then approve it at the bottom of the page.</span>
+        </div>
+      ) : null}
       {doc.state === "approved" ? (
         <div className="alert ok"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} />
           <span>Approved by {o.approved_by_name ?? "you"} on {dateTime(o.approved_at)}. AMBIT has your order and a copy is in your email.</span>
@@ -117,6 +128,9 @@ export default async function ApprovePage({ params }: { params: Promise<{ token:
         <div className="tiny muted" style={{ marginTop: 4 }}>{NOT_ORDER_FINE}</div>
       </div>
 
+      {doc.state === "pending" && canAdd ? (
+        <a href={`/approve/${token}/add`} className="btn ghost block"><Plus size={16} /> Need anything else? Add items</a>
+      ) : null}
       <a href={`/approve/${token}/pdf`} target="_blank" rel="noopener" className="btn dark block"><FileDown size={16} /> Download the order (PDF)</a>
 
       {doc.state === "pending" ? <ApproveForm token={token} defaultName={doc.company?.contact_name ?? ""} rep={rep} /> : null}

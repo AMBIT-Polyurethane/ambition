@@ -269,6 +269,31 @@ Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work o
   },
   {
     who: "staff",
+    title: "Partial receipts (part of a PO came in, the rest is still coming)",
+    body: `Open the Receiving Report (Inventory Hub > Receiving) once it's sent or received and tap "Partial receipt: the rest is still coming". Items that came up short are filled in; add anything else still coming on that PO (search the item, type how many), pick the expected date and Save. The rest becomes an expected delivery listed under Receiving > "Waiting on the rest of the order" (and a "Partial orders" card on the Inventory Hub dashboard). When it shows up, open it and receive it like any delivery. "Not partial after all" cancels the follow-up.`,
+  },
+  {
+    who: "staff",
+    title: "Quick picks on the order screen (customer's most ordered, most popular at the location)",
+    body: `When you order for a customer, above the full product list a "Quick picks" box shows that customer's most ordered items in the last 90 days (how many and on how many orders, and when they last ordered) and the location's most popular items. Tap ADD right there. "Hide" folds it away.`,
+  },
+  {
+    who: "staff",
+    title: "Customers adding items from the approval email",
+    body: `The approval email a customer gets now lists up to 10 of the location's most ordered items with prices (spray foam shows Account pricing; other items only if they have a list price) under "Need anything else?". They tap ADD (or "Add items to this order"), pick quantities and add them before approving. Added lines show "Added by the customer from the approval email" on the order, and the order's team chat gets a note.`,
+  },
+  {
+    who: "staff",
+    title: "Returns and exchanges (drum swaps, wrong items, credits)",
+    body: `Orders > "Return / exchange" (or "Return or exchange items from this order" on an order). Pick Exchange (items come back and others go out; the customer pays the difference) or Return (items come back for credit). Coming back: pick each item, how many, Good (back into stock) or Damaged, the credit each (it starts at what they paid), and for spray foam and lot-tracked items the Lot / Batch #, Mfg and Exp dates from the label. For an exchange add what goes out and pickup or delivery. Save: an exchange is a normal order for the replacement (it goes through the order desk; the note says what's coming back); a return has no credit check. When the items come back, open the order and tap "Receive the returned items": it makes a Receiving Report with the lots and dates filled in, and good items go back into stock once it's approved.`,
+  },
+  {
+    who: "all",
+    title: "Colors (customize your dashboard)",
+    body: `Profile > Colors: pick a preset (AMBIT, Blush, Lavender, Ocean, Sage, Sunset, Teal, Slate) or any color (Any color, or slide the Color wheel), tick "Soft background" for a light wash of the color, then "Save my colors". Only you see them, on every device you sign in on. Soft colors look best with Appearance set to Light. "Back to AMBIT red" undoes it.`,
+  },
+  {
+    who: "staff",
     title: "Waiting on customer payment (credit check)",
     body: `At the Credit check step accounting can tap "Waiting on customer payment" when the order can't be released until the customer pays. The order shows a "Waiting on payment" tag on the Order desk and the orders list, and its team chat gets a note. When the payment comes in, tap "Release order" ("Customer Has Already Paid" is ticked for you) or "Payment's in: take off Waiting on customer payment". The last step of an order is now "Picked up" (pickup) or "Shipped out" (delivery).`,
   },

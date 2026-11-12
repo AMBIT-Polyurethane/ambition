@@ -1,4 +1,5 @@
 import { TabBar } from "@/components/tabbar";
+import { colorsCss, readColors } from "@/lib/theme-colors";
 import { Sidebar, type SideItem } from "@/components/sidebar";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can, roleLabel, seesInventory } from "@/lib/access";
@@ -92,9 +93,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // they have a workspace open (Admin -> AMBIT-OPS).
   const aiAdmin = profile.role === "admin" && !!profile.ops_workspace;
   const intel = ops || aiAdmin;
+  // Profile > Colors (0065): this person's accent color and soft background.
+  const userCss = colorsCss(readColors((profile as { theme?: unknown }).theme));
 
   return (
     <div className="app-frame">
+      {userCss ? <style id="user-colors" dangerouslySetInnerHTML={{ __html: userCss }} /> : null}
       <Sidebar items={items.filter(Boolean) as SideItem[]} name={name} sub={sub} />
       <div className="app-main">{children}</div>
       <TabBar

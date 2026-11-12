@@ -446,6 +446,28 @@ have a light-mode copy of its video (`video_path_light`, uploaded under "Light-m
 player (`components/academy/lesson-video.tsx`) plays it for people using the app in Light mode (Appearance Light, or Auto
 on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place, keeping the spot, if the look changes.
 
+### Reorder points, reorder requests, payment wait, deleting DMs (0064)
+
+`inventory.rop_app` marks a reorder point set in the app (Stock > Set reorder points, `inventory_set_rop`): the sync then writes it
+to the sheet's Reorder Point column instead of reading it. `sold_by_product(branch, days)` feeds "Sold 60 days" and the suggestions
+(`lib/inventory/reorder.ts`: 1 to 8 weeks of sales). Admins and CRMs send `reorder_request()`s (`reorder_requests`, `reorder_request_lines`)
+to purchasing (`app_settings.purchasing`, falling back to the payroll contact, Al Rearick): email + push, `/inventory/reorders`,
+`reorder_request_set()` marks them ordered. `order_pay_waiting()` (credit_check) sets `orders.pay_waiting_at`; a trigger clears it on
+release. Chat: `chat_hide()` sets `chat_members.hidden_at` and `cleared_before` (messages up to then stay hidden for that person); a new
+message clears `hidden_at`; admins use `chat_hidden_list()` / `chat_restore()` at `/chat/deleted`.
+
+### Partial receipts, returns and exchanges, customer add-ons, colors (0065)
+
+`inbound_mark_partial()` makes the follow-up expected delivery (`rest_of` / `rest_id`) for what's still coming on a PO
+(`components/inventory/partial-receipt.tsx`; Receiving lists them under "Waiting on the rest of the order"). Returns and exchanges:
+`orders.kind` (sale / return / exchange), `order_returns` (lot, mfg, exp, condition, credit); `/orders/return` (exchange = `placeOrder`
+for the replacement, return = `place_return_order()` with credit released), `order_set_returns()`, and `receiveReturn` turns the
+lines into a Receiving Report (`inbound_receive_report`) then `order_returns_received()`. Approval email: `lib/order-addons.ts` lists the
+location's most ordered items (foam at account pricing, others only with a list price); `/approve/[token]/add` uses
+`order_addon_options()` and `order_add_items_by_link()` (anon, token-checked, `order_items.added_by_customer`). Order screen Quick
+picks: `customerFavorites()` (90 days, else a year) and `sold_by_product(…, 90)` per location. Colors: `profiles.theme`
+(`set_my_theme()`), `lib/theme-colors.ts` writes the CSS variables in the app layout; Profile > Colors previews live.
+
 ### Team Chat, phone notifications, personal card purchases, holidays (0063)
 
 **Chat** (employees only): `chat_channels` (kind `channel` / `dm` / `order`), `chat_members` (notify all / mentions / none,

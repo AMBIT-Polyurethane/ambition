@@ -4,9 +4,10 @@ import { todayCentral } from "@/lib/sale";
 import { closuresAround } from "@/lib/holidays";
 import { HowToChip } from "@/components/howto-chip";
 import { orderBoardCounts } from "@/lib/chat";
+import { OrderReturnsCard, type ReturnLine } from "@/components/order-returns-card";
 import { OrderChatButton } from "@/components/chat/order-button";
 import { notFound } from "next/navigation";
-import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, RefreshCw } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, RefreshCw, Repeat } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
@@ -76,6 +77,12 @@ export default async function OrderDetailPage({
     // (Prices are no longer carried over from the customer's last order: the CFO asked to type each one from the invoice.)
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
+  // Returns and exchanges (0065): what's coming back.
+  const kind = ((order as { kind?: string }).kind ?? "sale") as "sale" | "return" | "exchange";
+  const { data: retRows } = emp && kind !== "sale" ? await supabase.from("order_returns").select("*").eq("order_id", id).order("id") : { data: null };
+  const retOrig = emp && (order as { return_of?: string | null }).return_of
+    ? (await supabase.from("orders").select("id, order_no").eq("id", (order as { return_of?: string }).return_of!).maybeSingle()).data
+    : null;
   // The Sales rep box: admins and the order desk pick who gets credit for the order (and can make them the customer's rep).
   const canSetRep = emp && (profile.role === "admin" || can(profile, "order_desk"));
   const { data: staffRows } = canSetRep
@@ -214,10 +221,29 @@ export default async function OrderDetailPage({
         </div>
       ) : null}
 
+      {emp && kind !== "sale" && retRows?.length ? (
+        <OrderReturnsCard
+          orderId={order.id}
+          kind={kind}
+          reason={(order as { return_reason?: string | null }).return_reason ?? null}
+          originalNo={retOrig ? Number(retOrig.order_no) : null}
+          originalId={retOrig ? (retOrig.id as string) : null}
+          lines={retRows as ReturnLine[]}
+          outTotal={Number(order.est_subtotal ?? 0)}
+          outAccount={Boolean(order.has_customer_pricing)}
+          canReceive={can(profile, "receiving") || can(profile, "inventory")}
+        />
+      ) : null}
+
       {canEdit ? (
         <Link href={`/orders/${order.id}/edit`} className="btn dark block edit-order-top">
           <PencilLine size={17} /> {order.status === "completed" ? "Correct this order (admin)" : "Edit order"}
           <span className="tiny faint">{order.status === "completed" ? "Already picked up or shipped out: fixes stock and the invoice" : "Add items, change or remove quantities"}</span>
+        </Link>
+      ) : null}
+      {emp && kind === "sale" && order.status !== "cancelled" && (can(profile, "ordering") || can(profile, "order_desk")) ? (
+        <Link href={`/orders/return?order=${order.id}`} className="btn ghost block">
+          <Repeat size={16} /> Return or exchange items from this order
         </Link>
       ) : null}
 
@@ -363,6 +389,7 @@ export default async function OrderDetailPage({
                   <div className="grow">
                     <div className="name">{l.name}</div>
                     <div className="desc">{l.sku} · {qtyText(row.qty, l.unit)}</div>
+                    {(l as { added_by_customer?: boolean }).added_by_customer && ri === 0 ? <div className="stock-tag vary">Added by the customer from the approval email</div> : null}
                     {note ? <div className="tiny faint">{note}</div> : null}
                     {stock ? <div className={`stock-tag ${stock.cls}`}>{stock.text}</div> : null}
                     {emp && l.ordered_sku && !shownVary.has(l.id) && shownVary.add(l.id) ? (

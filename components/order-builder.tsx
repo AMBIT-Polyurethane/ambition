@@ -8,8 +8,8 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, readLots, writeLots, NO_LOTS, type Cart, type LotPicks } from "@/lib/cart";
-import { money } from "@/lib/format";
-import { customerDetails, customerRep, placeOrder } from "@/app/(app)/order/actions";
+import { money, plural } from "@/lib/format";
+import { customerDetails, customerFavorites, customerRep, placeOrder, type Favorite } from "@/app/(app)/order/actions";
 import { HOUSE, RepOptions, staffName, type Staff } from "@/components/rep-options";
 import { CustomerPicker } from "@/components/customer-picker";
 import { addressOnFile, unpackCustomer, type OrderCustomer, type PackedCustomer } from "@/lib/customers";
@@ -99,6 +99,8 @@ type Props = {
   stock?: StockMap;
   /** Staff: each location's ISO and resin lots (custom foam order picks exact drums). */
   lots?: Record<string, FoamLot[]>;
+  /** Staff: each location's most ordered items in the last 90 days (product id, orders it was on). */
+  popular?: Record<string, { id: string; n: number }[]>;
   /** Staff: everyone who can get credit for an order (the required Sales rep box). */
   staff?: Staff[];
 };
@@ -313,6 +315,22 @@ export function OrderBuilder(props: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
+
+  // The customer's most ordered items (last 90 days), for the box above the catalog.
+  const [favs, setFavs] = useState<{ id: string; days: number; items: Favorite[] } | null>(null);
+  useEffect(() => {
+    if (!isEmployee || !companyId) return setFavs(null);
+    if (favs?.id === companyId) return;
+    let stop = false;
+    customerFavorites(companyId).then((r) => {
+      if (!stop && r) setFavs({ id: companyId, ...r });
+    });
+    return () => {
+      stop = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
+  const [showPop, setShowPop] = useState(true);
 
   // The customer's sales rep (or House Account) fills in the Sales rep box; a different customer starts it over.
   useEffect(() => {
@@ -1103,6 +1121,66 @@ export function OrderBuilder(props: Props) {
   }
 
   // ----------------------------------------------------------------- catalog
+  const productRow = (p: CatalogProduct, why?: string) => {
+    const qty = cart[p.id] ?? 0;
+    return (
+      <div key={p.id} className="product">
+        {thumb(p)}
+        <div className="grow">
+          <div className="name">{p.name}</div>
+          <div className="desc">{p.description ? p.description : p.sku}</div>
+          {why ? <div className="pop-why">{why}</div> : null}
+          <PriceLine p={p} />
+          <StockTag s={stockHere?.[p.id]} staff={isEmployee} />
+          {p.sqft ? <SqftBox p={p} qty={qty} onQty={(n) => setQty(p.id, n)} /> : null}
+        </div>
+        {qty > 0 ? (
+          <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
+        ) : (
+          <button type="button" className="add" onClick={() => setQty(p.id, 1)} aria-label={`Add ${p.name}`}>ADD</button>
+        )}
+      </div>
+    );
+  };
+  // Staff, before searching: this customer's most ordered items (90 days), then what sells most at this location.
+  const usable = (id: string) => byId.has(id) && carried(id);
+  const favRows = isEmployee && favs?.id === companyId ? favs.items.filter((f) => usable(f.id)) : [];
+  const popRows = isEmployee && branchId ? (props.popular?.[branchId] ?? []).filter((x) => usable(x.id) && !favRows.some((f) => f.id === x.id)).slice(0, 8) : [];
+  const short = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
+  const popBox =
+    !q.trim() && catNow === "all" && (favRows.length || popRows.length) ? (
+      <section className="pop-box">
+        <div className="row between" style={{ gap: 8 }}>
+          <span className="eyebrow">Quick picks</span>
+          <button type="button" className="linkbtn small" onClick={() => setShowPop((v) => !v)}>{showPop ? "Hide" : "Show"}</button>
+        </div>
+        {showPop ? (
+          <>
+            {favRows.length ? (
+              <div className="col" style={{ gap: 6 }}>
+                <b className="small">{customer ? `${customer.name}'s` : "This customer's"} most ordered{favs && favs.days > 90 ? " (last 12 months)" : " · last 90 days"}</b>
+                <div className="list">
+                  {favRows.map((f) => {
+                    const p = byId.get(f.id)!;
+                    return productRow(p, `${qtyText(f.qty)} ${plural(p.unit, f.qty)} on ${f.orders} ${f.orders === 1 ? "order" : "orders"} · last ${short(f.last)}`);
+                  })}
+                </div>
+              </div>
+            ) : null}
+            {popRows.length ? (
+              <div className="col" style={{ gap: 6 }}>
+                <b className="small">Most popular at {branch?.name ?? "this location"} · last 90 days</b>
+                <div className="list">
+                  {popRows.map((x) => productRow(byId.get(x.id)!, `On ${x.n} ${x.n === 1 ? "order" : "orders"} here`))}
+                </div>
+              </div>
+            ) : null}
+            <div className="eyebrow" style={{ marginTop: 4 }}>Everything {branch ? `at ${branch.name}` : ""}</div>
+          </>
+        ) : null}
+      </section>
+    ) : null;
+
   return (
     <main className="shell" style={{ paddingBottom: "calc(var(--tabbar) + env(safe-area-inset-bottom) + 100px)" }}>
       <div className="sticky-top">
@@ -1145,6 +1223,8 @@ export function OrderBuilder(props: Props) {
       {notice ? <div className="alert info">{notice}</div> : null}
       {offNote}
 
+      {popBox}
+
       {shown.length === 0 ? (
         <div className="card muted small center">
           {products.length === 0
@@ -1154,28 +1234,7 @@ export function OrderBuilder(props: Props) {
               : "No products match your search."}
         </div>
       ) : (
-        <div className="list">
-          {shown.map((p) => {
-            const qty = cart[p.id] ?? 0;
-            return (
-              <div key={p.id} className="product">
-                {thumb(p)}
-                <div className="grow">
-                  <div className="name">{p.name}</div>
-                  <div className="desc">{p.description ? p.description : p.sku}</div>
-                  <PriceLine p={p} />
-                  <StockTag s={stockHere?.[p.id]} staff={isEmployee} />
-                  {p.sqft ? <SqftBox p={p} qty={qty} onQty={(n) => setQty(p.id, n)} /> : null}
-                </div>
-                {qty > 0 ? (
-                  <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
-                ) : (
-                  <button type="button" className="add" onClick={() => setQty(p.id, 1)} aria-label={`Add ${p.name}`}>ADD</button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <div className="list">{shown.map((p) => productRow(p))}</div>
       )}
 
       {cartBar}

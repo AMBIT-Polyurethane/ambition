@@ -48,6 +48,39 @@ export async function customerRep(id: string): Promise<{ rep: string | null; hou
   return { rep: data?.sales_rep_id ?? null, house: Boolean(data?.house_account) && !data?.sales_rep_id };
 }
 
+/** Staff picked a customer: the items they order most (last 90 days; their last year if nothing that recent). */
+export type Favorite = { id: string; qty: number; orders: number; last: string };
+export async function customerFavorites(id: string): Promise<{ days: number; items: Favorite[] } | null> {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile) || !/^[0-9a-f-]{36}$/i.test(id)) return null;
+  for (const days of [90, 365]) {
+    const since = new Date(Date.now() - days * 86400_000).toISOString();
+    const { data, error } = await s.supabase
+      .from("order_items")
+      .select("product_id, qty, order:orders!inner(id, company_id, status, created_at)")
+      .eq("order.company_id", id)
+      .neq("order.status", "cancelled")
+      .gte("order.created_at", since)
+      .not("product_id", "is", null)
+      .range(0, 4999);
+    if (error) return null;
+    const by = new Map<string, Favorite & { ids: Set<string> }>();
+    for (const r of (data ?? []) as unknown as { product_id: string; qty: number; order: { id: string; created_at: string } }[]) {
+      const f = by.get(r.product_id) ?? { id: r.product_id, qty: 0, orders: 0, last: "", ids: new Set<string>() };
+      f.qty += Number(r.qty);
+      f.ids.add(r.order.id);
+      if (r.order.created_at > f.last) f.last = r.order.created_at;
+      by.set(r.product_id, f);
+    }
+    const items = [...by.values()]
+      .map(({ ids, ...f }) => ({ ...f, orders: ids.size, qty: Math.round(f.qty * 100) / 100 }))
+      .sort((a, b) => b.orders - a.orders || b.qty - a.qty)
+      .slice(0, 10);
+    if (items.length) return { days, items };
+  }
+  return { days: 90, items: [] };
+}
+
 export type CustomerRequestResult = { ok: true; message: string } | { ok: false; error: string };
 
 /** Staff who can't add customers: the details go to the credit team, who vet them and add the customer. */

@@ -28,6 +28,10 @@ type Row = {
   read_by_ai: boolean;
   files: { path: string; name: string }[] | null;
   lines: { sku: string; qty: number; received_qty: number | null }[];
+  /** 0065: this delivery is the rest of a partial order (the report it follows), or a report marked partial. */
+  rest_of?: number | null;
+  partial?: boolean;
+  po_no?: string | null;
 };
 
 /** Receiving: trucks and transfers on the way, and the Receiving Reports done lately. */
@@ -39,15 +43,13 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
   const branch = branches.find((b) => b.id === sp.b) ?? branches[0];
   if (!branch) return <main className="shell"><TopBar title="Receiving" back="/inventory" /><Empty icon="truck" title="No location has live inventory yet" /></main>;
   const today = todayCentral();
-  const { data } = await supabase
-    .from("inbound_deliveries")
-    .select("id, vendor, expected_on, ref, bol_no, status, received_at, received_by_name, submitted_at, submitted_by_name, sent_back_note, transfer_id, read_by_ai, files, lines:inbound_lines(sku, qty, received_qty)")
-    .eq("branch_id", branch.id)
-    .neq("status", "cancelled")
-    .order("expected_on", { ascending: true })
-    .limit(300);
-  const rows = (data ?? []) as Row[];
-  const coming = rows.filter((r) => r.status === "expected");
+  const COLS = "id, vendor, expected_on, ref, bol_no, status, received_at, received_by_name, submitted_at, submitted_by_name, sent_back_note, transfer_id, read_by_ai, files, lines:inbound_lines(sku, qty, received_qty)";
+  const q = (cols: string) => supabase.from("inbound_deliveries").select(cols).eq("branch_id", branch.id).neq("status", "cancelled").order("expected_on", { ascending: true }).limit(300);
+  let res = await q(`${COLS}, rest_of, partial, po_no`);
+  if (res.error && /rest_of|partial/.test(res.error.message)) res = await q(COLS); // before 0065
+  const rows = (res.data ?? []) as unknown as Row[];
+  const rests = rows.filter((r) => r.status === "expected" && r.rest_of);
+  const coming = rows.filter((r) => r.status === "expected" && !r.rest_of);
   const waiting = rows.filter((r) => r.status === "submitted").sort((a, b) => (a.submitted_at ?? "").localeCompare(b.submitted_at ?? ""));
   const got = rows.filter((r) => r.status === "received").sort((a, b) => (b.received_at ?? "").localeCompare(a.received_at ?? "")).slice(0, 40);
   const item = (r: Row) => {
@@ -59,7 +61,9 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
           <div className="row between" style={{ gap: 8 }}>
             <span className="t ellipsis">{r.vendor}</span>
             {r.status === "received" ? (
-              <span className={short ? "pill warn" : "pill ok"}>{short ? "Short · " : ""}Received {dateShort(r.received_at)}</span>
+              <span className={short || r.partial ? "pill warn" : "pill ok"}>{r.partial ? "Partial · " : short ? "Short · " : ""}Received {dateShort(r.received_at)}</span>
+            ) : r.status === "expected" && r.rest_of ? (
+              <span className="pill warn">Rest of {r.po_no ? `PO ${r.po_no}` : "an order"}{r.expected_on < today ? " · late" : ` · ${dateShort(r.expected_on)}`}</span>
             ) : r.status === "submitted" ? (
               <span className="pill warn">Waiting for approval</span>
             ) : r.sent_back_note ? (
@@ -110,6 +114,13 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
             {profile.role === "admin" ? "Open each one, check it, and approve it. Stock and the spreadsheet update when you do." : "An admin approves these. Stock and the spreadsheet update then."}
           </p>
           <div className="list">{waiting.map(item)}</div>
+        </>
+      ) : null}
+      {rests.length ? (
+        <>
+          <div className="eyebrow">Waiting on the rest of the order · {rests.length}</div>
+          <p className="tiny faint" style={{ margin: 0 }}>Partial receipts: part of the PO came in, these items are still coming. Open one and receive it when it shows up.</p>
+          <div className="list">{rests.map(item)}</div>
         </>
       ) : null}
       <div className="eyebrow">On the way to {branch.name}</div>

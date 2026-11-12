@@ -9,6 +9,7 @@ import { saleOn, todayCentral } from "@/lib/sale";
 import { packCustomer } from "@/lib/customers";
 import { smartDraft } from "@/lib/reorder";
 import { stockRows } from "@/lib/inventory/carried";
+import { soldByProduct } from "@/lib/inventory/reorder";
 import type { Staff } from "@/components/rep-options";
 import type { Branch, Category, Company, Product } from "@/lib/types";
 
@@ -44,6 +45,17 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       ? supabase.from("profiles").select("id, full_name, email, job_role").in("role", ["employee", "admin"]).eq("status", "active").eq("demo", false).order("full_name")
       : Promise.resolve({ data: null }),
   ]);
+  // Staff: what sells most at each location (last 90 days), for the "Most popular" box on the order screen.
+  const popular: Record<string, { id: string; n: number }[]> = {};
+  if (emp) {
+    await Promise.all(
+      ((branches ?? []) as Branch[]).map(async ({ id: b }) => {
+        const { data } = await supabase.rpc("sold_by_product", { p_branch: b, p_days: 90 });
+        const rows = ((data ?? []) as { product_id: string; qty: number; orders: number }[]).sort((x, y) => y.orders - x.orders || Number(y.qty) - Number(x.qty));
+        if (rows.length) popular[b] = rows.slice(0, 16).map((r) => ({ id: r.product_id, n: r.orders }));
+      }),
+    );
+  }
   const lots: Record<string, FoamLot[]> = {};
   for (const r of ((lotsRes.data ?? []) as (Omit<FoamLot, "id" | "available" | "remaining"> & { lot_id: number; branch_id: string; available: number | string; remaining: number | string })[])) {
     (lots[r.branch_id] ??= []).push({
@@ -184,6 +196,7 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       reorderCompany={reorderData?.company_id ?? null}
       initialSearch={sp.q ?? ""}
       stock={stock}
+      popular={popular}
       lots={emp ? lots : undefined}
       staff={emp ? ((staffRes.data ?? []) as Staff[]) : undefined}
     />

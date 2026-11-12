@@ -4,7 +4,7 @@ import { OrderChatButton } from "@/components/chat/order-button";
 import { ChevronRight, Clock, OctagonAlert, X } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
-import { seesOrders } from "@/lib/access";
+import { can, seesOrders } from "@/lib/access";
 import { STAGES, addDays, centralStart, deskAccess, stageOf, waitingSince } from "@/lib/order-desk";
 import { dateShort, money, orderNo, searchSafe } from "@/lib/format";
 import { todayCentral } from "@/lib/sale";
@@ -138,6 +138,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             <span className="row" style={{ gap: 8, marginLeft: "auto" }}>
               {keeper ? <Link href="/orders/deleted" className="btn sm">Deleted orders{deletedCount ? ` (${deletedCount})` : ""}</Link> : null}
               {access ? <Link href="/orders/desk" className="btn sm dark">Order desk</Link> : null}
+              {access && (can(profile, "ordering") || can(profile, "order_desk")) ? <Link href="/orders/return" className="btn sm dark">Return / exchange</Link> : null}
             </span>
           ) : null
         }
@@ -188,6 +189,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <span className="t">{orderNo(o.order_no)}</span>
                     <span className="row" style={{ gap: 6 }}>
                       {emp ? <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} /> : null}
+                      {(o as { kind?: string }).kind === "return" || (o as { kind?: string }).kind === "exchange" ? <span className="pill kind-pill">{(o as { kind?: string }).kind === "return" ? "Return" : "Exchange"}</span> : null}
                       {emp && o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill warn">Waiting on payment</span> : null}
                       {emp && stageOf(o) ? (
                         <span className={STAGES[stageOf(o)!].pill}>{STAGES[stageOf(o)!].short}</span>

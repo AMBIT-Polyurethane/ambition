@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ArrowLeftRight, ChevronRight, ClipboardCheck, FileDown, Hourglass, ScanLine, Tags, Truck } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, ChevronRight, ClipboardCheck, FileDown, Hourglass, PackageOpen, ScanLine, Send, Tags, Truck } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { can, hubLock, seesInventory } from "@/lib/access";
 import { dateShort, plural } from "@/lib/format";
@@ -56,6 +56,14 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
   const many = hub.scope.length > 1;
   const q = `b=${pick}`;
   const hereBranch = pick === "all" ? (profile.branch_id && live.some((b) => b.id === profile.branch_id) ? profile.branch_id : live[0].id) : pick;
+  // Partial receipts (0065) and reorder requests (0064) waiting, for the tool cards.
+  const scopeIds = pick === "all" ? live.map((b) => b.id) : [pick];
+  const [restRes, rrRes] = await Promise.all([
+    supabase.from("inbound_deliveries").select("id", { count: "exact", head: true }).in("branch_id", scopeIds).eq("status", "expected").not("rest_of", "is", null),
+    supabase.from("reorder_requests").select("id", { count: "exact", head: true }).in("branch_id", scopeIds).eq("status", "open"),
+  ]);
+  const restWaiting = restRes.error ? 0 : (restRes.count ?? 0);
+  const reorderOpen = rrRes.error ? 0 : (rrRes.count ?? 0);
 
   // Charts
   const weeks = hub.weeks.map((w) => ({ label: w.label, values: [Math.round(w.shipped), Math.round(w.received)] }));
@@ -251,6 +259,20 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
             <Truck size={20} />
             <span className="grow"><b>Receiving</b><span className="tiny faint">On the way and received</span></span>
             <ChevronRight size={16} />
+          </Link>
+        ) : null}
+        {(can(profile, "receiving") || can(profile, "inventory")) && restWaiting ? (
+          <Link href={`/inventory/incoming?b=${hereBranch}`} className="inv-tool">
+            <PackageOpen size={20} />
+            <span className="grow"><b>Partial orders: waiting on the rest</b><span className="tiny faint">{restWaiting} {restWaiting === 1 ? "order is" : "orders are"} still missing items</span></span>
+            <span className="dot-badge static">{restWaiting}</span>
+          </Link>
+        ) : null}
+        {can(profile, "inventory") ? (
+          <Link href={`/inventory/reorders${pick === "all" ? "" : `?b=${pick}`}`} className="inv-tool">
+            <Send size={20} />
+            <span className="grow"><b>Reorder requests</b><span className="tiny faint">{reorderOpen ? `${reorderOpen} waiting on purchasing` : "Asked of purchasing"}</span></span>
+            {reorderOpen ? <span className="dot-badge static">{reorderOpen}</span> : <ChevronRight size={16} />}
           </Link>
         ) : null}
       </div>

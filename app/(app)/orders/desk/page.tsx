@@ -151,6 +151,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
                         <span className="row" style={{ gap: 6, flex: "none" }}>
                           <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} />
                           {o.pay_prepaid ? <span className="pill ok">Paid</span> : null}
+                          {(o as { kind?: string }).kind === "return" || (o as { kind?: string }).kind === "exchange" ? <span className="pill kind-pill">{(o as { kind?: string }).kind === "return" ? "Return" : "Exchange"}</span> : null}
                           {o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill warn">Waiting on payment</span> : null}
                           {o.pay_cod ? <span className="pill red">COD only</span> : null}
                           {o.pay_no_checks ? <span className="pill red">No checks</span> : null}

@@ -59,3 +59,14 @@ export async function saveHomeApps(layout: { order: string[]; hidden: string[] }
   revalidatePath("/");
   return { ok: "Saved. Your home screen is updated." };
 }
+
+/** Profile > Colors (0065): this person's accent color and soft background, on every device they sign in on. */
+export async function saveColors(c: { accent: string; soft: boolean; preset: string | null } | null): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s?.profile) return { ok: false, error: "Please sign in again." };
+  const theme = c && /^#[0-9a-f]{6}$/i.test(c.accent) ? { accent: c.accent.toUpperCase(), soft: Boolean(c.soft), preset: c.preset ? String(c.preset).slice(0, 20) : null } : null;
+  const { error } = await s.supabase.rpc("set_my_theme", { p_theme: theme ?? {} });
+  if (error) return { ok: false, error: /set_my_theme|function|schema cache/i.test(error.message) ? "Colors need the 0065 database update first. Ask Jeremiah to run it." : error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

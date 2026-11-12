@@ -13,6 +13,7 @@ import { Submit } from "@/components/forms";
 import { PrintButton } from "@/components/print-button";
 import { IncomingForm } from "@/components/incoming-forms";
 import { ReceivingForm } from "@/components/inventory/receiving-form";
+import { PartialReceipt } from "@/components/inventory/partial-receipt";
 import { cancelIncoming } from "@/app/(app)/inventory/count-actions";
 import { approveReceiving, sendBackReceiving } from "@/app/(app)/inventory/hub-actions";
 
@@ -44,7 +45,17 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
   const links = await Promise.all(
     files.map(async (f) => ({ ...f, url: (await supabase.storage.from("inventory-files").createSignedUrl(f.path, 3600)).data?.signedUrl ?? null })),
   );
-  const [items, vendors] = expected || (waiting && admin) ? await Promise.all([stockItems(supabase, d.branch_id), vendorNames(supabase)]) : [[], []];
+  // Partial receipts (0065): this report's follow-up (the rest of the PO), or the report this one is the rest of.
+  const canPartial = !d.transfer_id && (d.status === "submitted" || d.status === "received") && d.partial !== undefined;
+  const [items, vendors] = expected || (waiting && admin) || canPartial ? await Promise.all([stockItems(supabase, d.branch_id), vendorNames(supabase)]) : [[], []];
+  const restRow = d.rest_id
+    ? (await supabase.from("inbound_deliveries").select("id, status, expected_on, lines:inbound_lines(qty, sku)").eq("id", d.rest_id).maybeSingle()).data as
+        | { id: number; status: string; expected_on: string; lines: { qty: number; sku: string }[] }
+        | null
+    : null;
+  const restOf = d.rest_of
+    ? ((await supabase.from("inbound_deliveries").select("id, po_no, bol_no, received_at, submitted_at").eq("id", d.rest_of).maybeSingle()).data as { id: number; po_no: string | null; bol_no: string | null; received_at: string | null; submitted_at: string | null } | null)
+    : null;
   const formLines = lines.map((l) => ({
     id: l.id, product_id: l.product_id, sku: l.sku, name: l.name, unit: l.unit, qty: Number(l.qty),
     received_qty: l.received_qty === null ? null : Number(l.received_qty), damaged_qty: Number(l.damaged_qty ?? 0),
@@ -71,6 +82,16 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
         <Link href={`/inventory/transfers/${transfer}`} className="alert info small" style={{ textDecoration: "none" }}>
           <ArrowLeftRight size={16} style={{ flex: "none", marginTop: 2 }} />
           <span>Transfer T-{transfer} from another AMBIT location. The lots come with the drums. Open the transfer</span>
+        </Link>
+      ) : null}
+
+      {restOf ? (
+        <Link href={`/inventory/incoming/${restOf.id}`} className="alert warn small" style={{ textDecoration: "none" }}>
+          <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
+          <span>
+            <b>The rest of a partial order.</b> Part of {restOf.po_no ? `PO ${restOf.po_no}` : "this order"} came on Receiving Report #{restOf.id}
+            {restOf.submitted_at ? ` (${dateShort(restOf.submitted_at)})` : ""}; this is what was still coming. Receive it here when it arrives.
+          </span>
         </Link>
       ) : null}
 
@@ -241,6 +262,16 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
           {anyDamaged ? <p className="tiny faint" style={{ margin: 0 }}>Damaged items didn&apos;t go into stock.</p> : null}
         </article>
       )}
+
+      {canPartial ? (
+        <PartialReceipt
+          id={d.id}
+          lines={formLines}
+          items={items}
+          today={todayCentral()}
+          rest={restRow ? { id: restRow.id, status: restRow.status, expected_on: restRow.expected_on, lines: (restRow.lines ?? []).map((l) => `${Number(l.qty)} ${l.sku}`).join(" · ") } : null}
+        />
+      ) : null}
 
       {waiting && admin ? (
         <section className="col no-print" style={{ gap: 10 }}>

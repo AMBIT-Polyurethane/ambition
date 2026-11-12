@@ -29,3 +29,14 @@ export async function requestChangesByLink(token: string, note: string): Promise
   revalidatePath(`/approve/${token}`);
   return { ok: true };
 }
+
+/** The customer adds items from the approval email's "Need anything else?" (0065), before approving. */
+export async function addItemsByLink(token: string, items: { product_id: string; qty: number }[]): Promise<LinkResult> {
+  const supabase = await createClient();
+  const clean = items.filter((i) => /^[0-9a-f-]{36}$/i.test(i.product_id) && Number(i.qty) > 0).slice(0, 60).map((i) => ({ product_id: i.product_id, qty: Math.min(1000, Number(i.qty)) }));
+  if (!clean.length) return { ok: false, error: "Pick at least one item." };
+  const { error } = await supabase.rpc("order_add_items_by_link", { p_token: token, p_items: clean });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/approve/${token}`);
+  return { ok: true };
+}

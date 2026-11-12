@@ -5,6 +5,8 @@ import { ListLink, TopBar } from "@/components/ui";
 import { ProfileForm } from "@/components/profile-form";
 import { ThemePicker } from "@/components/theme-picker";
 import { PushToggle } from "@/components/push-toggle";
+import { ColorPicker } from "@/components/color-picker";
+import { readColors } from "@/lib/theme-colors";
 import { DeleteAccount } from "@/components/delete-account";
 import { getTheme } from "@/lib/theme-server";
 import { CertForm } from "@/components/tax/cert-form";
@@ -84,6 +86,8 @@ export default async function ProfilePage() {
       ) : null}
 
       <ThemePicker current={theme} />
+
+      <ColorPicker current={readColors((profile as { theme?: unknown }).theme)} />
 
       {emp ? (
         <section className="section">

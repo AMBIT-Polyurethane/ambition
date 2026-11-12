@@ -8,6 +8,7 @@ import { pdfFileName, renderOrderPdf, type PdfAudience } from "@/lib/order-doc/p
 import type { OrderDoc } from "@/lib/order-doc/types";
 import { ACCOUNTING_EMAIL, ORDERS_EMAIL } from "@/lib/env";
 import { currentOrigin } from "@/lib/origin";
+import { popularAddons } from "@/lib/order-addons";
 
 /**
  * Staff orders need the customer's OK before they go to orders@. This is on once email can reach
@@ -75,7 +76,10 @@ export async function sendApprovalRequest(supabase: SupabaseClient, orderId: str
   if (!doc) return { status: "failed", error: "Order not found" };
   const origin = await currentOrigin();
   const approveUrl = `${origin}/approve/${token}`;
-  const mail = buildApprovalRequestEmail(doc, approveUrl);
+  // The location's most ordered items, to add before approving (0065: the add page needs that update).
+  const addons = await popularAddons(supabase, doc.order.branch_id, doc.items.map((i) => i.sku)).catch(() => []);
+  const { error: addonErr } = await supabase.rpc("order_addon_options", { p_token: "x".repeat(20) });
+  const mail = buildApprovalRequestEmail(doc, approveUrl, addonErr ? [] : addons);
   const result = await sendEmail({
     to: [email],
     cc: doc.order.placed_by_email ? [doc.order.placed_by_email] : [],
