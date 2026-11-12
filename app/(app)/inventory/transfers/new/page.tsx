@@ -28,7 +28,7 @@ export default async function NewTransferPage({ searchParams }: { searchParams: 
   const label = new Map(((names ?? []) as { id: string; name: string; state: string }[]).map((b) => [b.id, `${b.name}, ${b.state}`]));
   return (
     <main className="shell">
-      <TopBar title="Send stock" back={`/inventory/transfers?b=${branch.id}`} />
+      <TopBar title="Send stock" back={`/inventory/transfers?b=${branch.id}`} howTo="transfers" />
       {branches.length > 1 ? (
         <div className="chips">
           <span className="tiny faint" style={{ alignSelf: "center" }}>From</span>

@@ -4,6 +4,7 @@ import { initials } from "@/lib/format";
 import { ListLink, TopBar } from "@/components/ui";
 import { ProfileForm } from "@/components/profile-form";
 import { ThemePicker } from "@/components/theme-picker";
+import { PushToggle } from "@/components/push-toggle";
 import { DeleteAccount } from "@/components/delete-account";
 import { getTheme } from "@/lib/theme-server";
 import { CertForm } from "@/components/tax/cert-form";
@@ -83,6 +84,13 @@ export default async function ProfilePage() {
       ) : null}
 
       <ThemePicker current={theme} />
+
+      {emp ? (
+        <section className="section">
+          <div className="eyebrow">Notifications</div>
+          <div className="card"><PushToggle /></div>
+        </section>
+      ) : null}
 
       <div className="list">
         <ListLink href="/orders" icon="cart" title={emp ? "Orders" : "My orders"} sub="History and reorder" />

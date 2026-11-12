@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Camera, CircleCheck, Clock, FileQuestion, Users } from "lucide-react";
 import { dateShort, money } from "@/lib/format";
 import { catText, chargeLabel, endCustomersText, receiptPhotoHref, type MonthView } from "@/lib/expense-kinds";
-import { MissingCharge } from "@/components/expenses/month-bits";
+import { MissingCharge, UndoPersonal } from "@/components/expenses/month-bits";
+
+const PERSONAL = /^Personal purchase/;
 
 // The lists on a month: card charges with no receipt, the receipts (and whether the bank has shown each
 // one), and other card activity (returns, fees, "no receipt needed"). Used by the employee's own Expenses
@@ -100,7 +102,7 @@ export function ReceiptList({ view, editable, empty, backTo }: { view: MonthView
 }
 
 /** Returns, fees and charges an approver said need no receipt. */
-export function OtherCharges({ view }: { view: MonthView }) {
+export function OtherCharges({ view, locked = true }: { view: MonthView; locked?: boolean }) {
   const other = view.charges.filter((c) => !c.receipt_id && (c.kind !== "purchase" || c.excused_note) && c.kind !== "other");
   if (!other.length) return null;
   return (
@@ -112,10 +114,12 @@ export function OtherCharges({ view }: { view: MonthView }) {
             <span className="grow col" style={{ gap: 1, minWidth: 0 }}>
               <span className="t ellipsis" style={{ fontSize: 14 }}>{chargeLabel(c)}</span>
               <span className="s ellipsis">
-                {dateShort(c.txn_date)} · {c.kind === "return" ? "Return / credit" : c.kind === "fee" ? "Bank fee" : `No receipt needed: ${c.excused_note}`}
+                {dateShort(c.txn_date)} ·{" "}
+                {c.kind === "return" ? "Return / credit" : c.kind === "fee" ? "Bank fee" : PERSONAL.test(c.excused_note ?? "") ? "Personal purchase: payroll takes it out of your paycheck" : `No receipt needed: ${c.excused_note}`}
               </span>
             </span>
             <b className="nowrap">{money(Number(c.amount))}</b>
+            {!locked && PERSONAL.test(c.excused_note ?? "") ? <UndoPersonal chargeId={c.id} /> : null}
           </div>
         ))}
       </div>

@@ -18,7 +18,7 @@ export default async function NewIncomingPage({ searchParams }: { searchParams: 
   const [items, vendors] = await Promise.all([stockItems(supabase, branch.id), vendorNames(supabase)]);
   return (
     <main className="shell">
-      <TopBar title="Expected delivery" back={`/inventory/incoming?b=${branch.id}`} />
+      <TopBar title="Expected delivery" back={`/inventory/incoming?b=${branch.id}`} howTo="receive-inventory" />
       <p className="small muted" style={{ margin: 0 }}>A truck that&apos;s on its way. It shows on the warehouse calendar, and when it arrives, one tap adds it to stock.</p>
       <IncomingForm items={items} branches={[branch, ...branches.filter((b) => b.id !== branch.id)]} vendors={vendors} />
     </main>

@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { HowToChip } from "@/components/howto-chip";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Icon } from "@/components/icons";
 import { docState } from "@/lib/order-doc/types";
 import type { Order } from "@/lib/types";
 
-export function TopBar({ title, back, right }: { title: string; back?: string; right?: React.ReactNode }) {
+/** howTo: a walkthrough video's slug (lib/howto.ts): shows the AMBIT molecule "How to" chip for it. */
+export function TopBar({ title, back, right, howTo }: { title: string; back?: string; right?: React.ReactNode; howTo?: string }) {
   return (
     <header className="topbar">
       {back ? (
@@ -13,6 +15,7 @@ export function TopBar({ title, back, right }: { title: string; back?: string; r
         </Link>
       ) : null}
       <h1 className="title ellipsis" style={{ margin: 0 }}>{title}</h1>
+      {howTo ? <HowToChip slug={howTo} /> : null}
       {right}
     </header>
   );

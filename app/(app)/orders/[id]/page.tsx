@@ -1,4 +1,10 @@
 import Link from "next/link";
+import { holidaySettings } from "@/lib/holidays-server";
+import { todayCentral } from "@/lib/sale";
+import { closuresAround } from "@/lib/holidays";
+import { HowToChip } from "@/components/howto-chip";
+import { orderBoardCounts } from "@/lib/chat";
+import { OrderChatButton } from "@/components/chat/order-button";
 import { notFound } from "next/navigation";
 import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, RefreshCw } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
@@ -200,6 +206,14 @@ export default async function OrderDetailPage({
         <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div>
       ) : null}
 
+      {emp ? <OrderChatButton orderId={order.id} count={(await orderBoardCounts(supabase, [order.id])).get(order.id) ?? 0} big /> : null}
+      {emp ? (
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <HowToChip slug="order-desk" label="How to: order desk" />
+          <HowToChip slug="close-out-an-order" label="How to: close it out" />
+        </div>
+      ) : null}
+
       {canEdit ? (
         <Link href={`/orders/${order.id}/edit`} className="btn dark block edit-order-top">
           <PencilLine size={17} /> {order.status === "completed" ? "Correct this order (admin)" : "Edit order"}
@@ -317,6 +331,7 @@ export default async function OrderDetailPage({
       ) : null}
       {emp ? (
         <OrderDeskCard
+          closures={closuresAround(todayCentral(), await holidaySettings(supabase))}
           order={order}
           desk={can(profile, "order_desk")}
           credit={can(profile, "credit_check")}

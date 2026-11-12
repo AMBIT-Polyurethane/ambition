@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ClipboardCheck, FileSignature, FileText, GraduationCap, House, ShoppingCart, SquareKanban, User } from "lucide-react";
+import { ClipboardCheck, FileSignature, FileText, GraduationCap, House, MessagesSquare, ShoppingCart, SquareKanban, User } from "lucide-react";
 import { cartCount, onCartChange, readCart } from "@/lib/cart";
 import { AiTabButton } from "@/components/ops/ai/ai-button";
 
@@ -37,7 +37,8 @@ const CREW_TABS = [
  * for an AMBIT admin working in a workspace, only on the OPS screens). With it the bar keeps four tabs,
  * two each side; Profile moves to the top of OPS Home (and the menu).
  */
-export function TabBar({ showOrder = true, mode = "default", ai = false }: { showOrder?: boolean; mode?: "default" | "ops" | "crew"; ai?: false | "always" | "ops" }) {
+/** chat: AMBIT employees get Chat (with its unread badge) in place of Docs, which stays on Home and in the menu. */
+export function TabBar({ showOrder = true, mode = "default", ai = false, chat = false }: { showOrder?: boolean; mode?: "default" | "ops" | "crew"; ai?: false | "always" | "ops"; chat?: number | false }) {
   const path = usePathname() || "/";
   const [count, setCount] = useState(0);
 
@@ -48,6 +49,11 @@ export function TabBar({ showOrder = true, mode = "default", ai = false }: { sho
   }, []);
 
   let tabs = mode === "ops" ? OPS_TABS.filter((t) => showOrder || t.href !== "/order") : mode === "crew" ? CREW_TABS : TABS.filter((t) => showOrder || t.href !== "/order");
+  if (chat !== false && mode === "default") {
+    const c = { href: "/chat", label: "Chat", icon: MessagesSquare, match: (p: string) => p.startsWith("/chat") };
+    tabs = tabs.flatMap((t) => (t.href === "/docs" ? [c] : [t]));
+    if (!tabs.some((t) => t.href === "/chat")) tabs.splice(Math.min(2, tabs.length), 0, c);
+  }
   const withAi = ai === "always" || (ai === "ops" && (path === "/ops" || path.startsWith("/ops/")));
   if (withAi) {
     const drop = mode === "crew" ? "/academy" : mode === "ops" && tabs.length > 4 ? "/profile" : tabs.length > 4 ? "/academy" : null;
@@ -67,6 +73,7 @@ export function TabBar({ showOrder = true, mode = "default", ai = false }: { sho
               <I size={22} strokeWidth={on ? 2.2 : 1.8} />
               {t.label}
               {t.href === "/order" && count > 0 ? <span className="badge">{count}</span> : null}
+              {t.href === "/chat" && chat ? <span className="badge">{chat > 99 ? "99+" : chat}</span> : null}
             </Link>
           );
         })}

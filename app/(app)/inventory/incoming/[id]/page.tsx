@@ -61,6 +61,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
       <TopBar
         title={expected ? d.vendor : "Receiving Report"}
         back={`/inventory/incoming?b=${d.branch_id}`}
+        howTo={twins.length ? "loads-and-duplicates" : "receive-inventory"}
         right={<span className={d.status === "received" ? "pill ok" : d.status === "cancelled" ? "pill grey" : waiting || late ? "pill warn" : "pill"}>{d.status === "received" ? "Received" : d.status === "cancelled" ? "Cancelled" : waiting ? "Waiting for approval" : late ? "Late" : "On the way"}</span>}
       />
       {sp.msg ? <div className="alert ok small" role="status"><CircleCheck size={18} style={{ flex: "none" }} /><span>{sp.msg}</span></div> : null}

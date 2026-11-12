@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { canSeePayroll } from "@/lib/payroll";
 import { BarChart3, Camera, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, Clock, Download } from "lucide-react";
 import { isExpenseApprover, requireEmployee } from "@/lib/session";
 import { TopBar } from "@/components/ui";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function ExpensesPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, profile } = await requireEmployee();
+  const payrollLink = await canSeePayroll(supabase, profile);
   const now = thisMonth();
   const month = isMonth(sp.m) && sp.m <= now ? sp.m : now;
   const label = monthLabel(month);
@@ -63,7 +65,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
 
   return (
     <main className="shell">
-      <TopBar title="Expenses" back="/" />
+      <TopBar title="Expenses" back="/" right={payrollLink ? <Link href="/expenses/payroll" className="btn sm dark">Paycheck deductions</Link> : null} />
 
       <section className="exp-hero">
         <span className="kick">Company card</span>
@@ -151,7 +153,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           <MonthSummary view={view} label={label} />
           <MissingList view={view} locked={locked} />
           <ReceiptList view={view} editable={!locked} empty={month === now ? "No receipts yet this month. Tap Add a receipt after each purchase." : `No receipts for ${label}.`} />
-          <OtherCharges view={view} />
+          <OtherCharges view={view} locked={locked} />
         </>
       ) : null}
 

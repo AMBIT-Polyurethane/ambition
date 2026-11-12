@@ -86,7 +86,7 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
 
   return (
     <main className="shell">
-      <TopBar title="Receiving" back={`/inventory?b=${branch.id}`} />
+      <TopBar title="Receiving" back={`/inventory?b=${branch.id}`} howTo="receive-inventory" />
       <HubNav profile={profile} active="receiving" branch={branch.id} />
       {sp.msg ? <div className="alert ok small" role="status">{sp.msg}</div> : null}
       {branches.length > 1 ? (

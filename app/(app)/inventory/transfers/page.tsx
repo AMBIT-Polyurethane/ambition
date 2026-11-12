@@ -68,7 +68,7 @@ export default async function TransfersPage({ searchParams }: { searchParams: Pr
 
   return (
     <main className="shell">
-      <TopBar title="Transfers" back={`/inventory?b=${branch.id}`} />
+      <TopBar title="Transfers" back={`/inventory?b=${branch.id}`} howTo="transfers" />
       <HubNav profile={profile} active="transfers" branch={branch.id} />
       {sp.msg ? <div className="alert ok small" role="status">{sp.msg}</div> : null}
       {branches.length > 1 ? (

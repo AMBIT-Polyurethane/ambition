@@ -446,6 +446,31 @@ have a light-mode copy of its video (`video_path_light`, uploaded under "Light-m
 player (`components/academy/lesson-video.tsx`) plays it for people using the app in Light mode (Appearance Light, or Auto
 on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place, keeping the spot, if the look changes.
 
+### Team Chat, phone notifications, personal card purchases, holidays (0063)
+
+**Chat** (employees only): `chat_channels` (kind `channel` / `dm` / `order`), `chat_members` (notify all / mentions / none,
+`last_read_id`), `chat_messages` (threads via `parent_id`, `mentions`, `files` in the private `chat-files` bucket under the
+conversation's id, pins, edits, soft deletes, a full-text `search` column), `chat_reactions`, `chat_todos`. Who sees what:
+`chat_can_see()` (open channels and order boards: every employee; private channels: members and admins; DMs: members).
+Every write goes through `chat_*` functions (`chat_post`, `chat_dm`, `chat_order`, `chat_create_channel` (admins),
+`chat_set_members`, `chat_react`, `chat_pin`, `chat_read`, `chat_search`, `chat_overview`, `chat_unread_total`...).
+Screens: `/chat`, `/chat/[id]` (`components/chat/room.tsx`: live with Supabase Realtime on `chat_messages`/`chat_reactions`,
+polling every 5 s without it, typing via a broadcast channel, drafts kept per conversation in localStorage), `/chat/new`,
+`/chat/todos`; order boards from `OrderChatButton` on the desk, the orders list and each order (`/orders/no/[n]` opens ORD-n).
+AI (`app/(app)/chat/actions.ts`, Claude Haiku): @mentions become to-dos (`tidyTodos`), "Catch me up", "write my reply"
+from the mic or a suggestion (`chatDraft`), and "Find anything" (`chatAsk` over `chat_search`). Home: Chat app with the
+unread badge, the "My to-dos" card; the phone tab bar shows Chat for employees in place of Docs.
+**Push** (`lib/push.ts`, `web-push`): the server makes its VAPID keys once and keeps them in `app_secrets` (service key
+only); devices subscribe from Profile or Chat (`components/push-toggle.tsx`, `public/sw.js` push + notificationclick). Sent for
+DMs, @mentions, thread replies and conversations set to "Every message"; dead subscriptions are dropped.
+**Personal purchases**: `expense_mark_personal()` marks a card charge personal (excused, `personal_repay`), `lib/payroll.ts`
+emails the payroll contact (`app_settings.payroll`, Al Rearick) with the employee cc'd and pushes to them;
+`/expenses/payroll` lists them and `expense_repay_withheld()` marks them taken out.
+**Holidays** (`lib/holidays.ts`): holiday dates for any year, closed days (`app_settings.holidays`, Admin > Holidays; weekend
+rule for fixed dates), seasons and greetings. Home shows `HolidayCard` and `Festive` (once a day per device, never with
+reduced motion); order Needed by and desk scheduling warn on closed days (`ClosedWarning`, `ClosedDateInput`).
+**How-to chips**: `TopBar howTo="<slug>"` / `HowToChip` link task screens to their walkthrough video.
+
 ### Expense receipts: more categories, split receipts, distributors, inventory (0062)
 
 Categories (`CATEGORIES` in `lib/expense-kinds.ts`) add Inventory, Training events, Tradeshows, Lab expenses and R&D

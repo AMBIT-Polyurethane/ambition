@@ -7,6 +7,7 @@ import { assistantAccess } from "@/lib/assistant/settings";
 import { opsCan, opsMember, opsRoleLabel } from "@/lib/ops/roles";
 import { AiPanel } from "@/components/ops/ai/panel";
 import { serverVoiceOn, voiceLabel } from "@/lib/ops/ai/voice-server";
+import { unreadTotal } from "@/lib/chat";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ops = opsMember(profile);
   const ai = await assistantAccess(supabase, profile);
   const ask: SideItem | false = ai.on && { href: "/assistant", label: "Ask AMBIT", icon: "assistant", badge: ai.unread };
+  // Team Chat (0063): AMBIT employees only. The badge is unread direct messages and @mentions.
+  const chatUnread = emp ? await unreadTotal(supabase) : 0;
   const items: (SideItem | false)[] = emp
     ? [
         { href: "/", label: "Home", icon: "home" },
         ask,
+        { href: "/chat", label: "Chat", icon: "chat", badge: chatUnread || undefined },
         can(profile, "ordering") && { href: "/order", label: "Order", icon: "cart" },
         // One place for orders: the Order Desk (with "View orders" for the full list).
         !!deskAccess(profile) && { href: "/orders/desk", label: "Order desk", icon: "desk" },
@@ -97,6 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         showOrder={ops ? opsCan.order(profile.ops_role) : profile.role === "customer" || can(profile, "ordering")}
         mode={ops ? (opsCan.fieldOnly(profile.ops_role) ? "crew" : "ops") : "default"}
         ai={ops ? "always" : aiAdmin ? "ops" : false}
+        chat={emp && !ops ? chatUnread : false}
       />
       {intel ? <AiPanel name={name} field={ops && opsCan.fieldOnly(profile.ops_role)} canEdit={ops ? opsCan.editCrm(profile.ops_role) : true} voice={{ server: serverVoiceOn(), label: voiceLabel() }} /> : null}
     </div>

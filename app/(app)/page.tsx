@@ -1,4 +1,10 @@
 import Link from "next/link";
+import { holidaySettings } from "@/lib/holidays-server";
+import { todayCentral } from "@/lib/sale";
+import { addDaysIso, closureText, closuresAround, greetingOn, seasonOn } from "@/lib/holidays";
+import { Festive, HolidayCard } from "@/components/holiday";
+import { myTodos, unreadTotal } from "@/lib/chat";
+import { TodoList } from "@/components/chat/todos";
 import { unstable_cache } from "next/cache";
 import { Bell, CalendarClock, ChevronRight, Landmark, Plus, RefreshCw, Sparkles, UserCheck } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -122,6 +128,21 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     return iso === tomorrow ? "tomorrow" : d.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
   };
 
+  // Holidays (0063): the seasonal card, the greeting and the closed days coming up in the next two weeks.
+  const holiday = await (async () => {
+    const s = await holidaySettings(supabase);
+    const today = todayCentral();
+    // The next closure within two weeks, with the days right after it (Thanksgiving Thursday and Friday).
+    const ahead = closuresAround(today, s).filter((c) => c.date >= today);
+    const firstRun: typeof ahead = [];
+    if (ahead.length && ahead[0].date <= addDaysIso(today, 14)) {
+      for (const c of ahead) {
+        if (firstRun.length && c.date !== addDaysIso(firstRun[firstRun.length - 1].date, 1)) break;
+        firstRun.push(c);
+      }
+    }
+    return { touches: s.touches, today, season: seasonOn(today), greeting: greetingOn(today), closed: firstRun.length ? closureText(firstRun) : null };
+  })();
   const apps = arrangeApps(
     await homeApps(supabase, profile, {
       desk: needPo + toSchedule + needCredit,
@@ -129,6 +150,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       tax: taxWork,
       due: due?.length ?? 0,
       inventory: emp && can(profile, "inventory") ? await reorderCount(supabase, profile.branch_id) : 0,
+      chat: emp ? await unreadTotal(supabase) : 0,
     }),
     parseLayout(profile.home_apps),
   );
@@ -186,6 +208,25 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       </section>
     )),
   });
+  // My to-dos (0063): what people asked of me in chat (@mentions), plus my own.
+  if (emp) {
+    const todos = await myTodos(supabase, profile.id, { limit: 6 });
+    if (todos.length) {
+      cards.push({
+        key: "todos",
+        title: "My to-dos",
+        node: show("todos", () => (
+          <section className="section">
+            <div className="row between" style={{ alignItems: "baseline" }}>
+              <span className="sec-title">My to-dos</span>
+              <Link href="/chat/todos" className="sec-link">All</Link>
+            </div>
+            <div className="card"><TodoList todos={todos} adding={false} compact /></div>
+          </section>
+        )),
+      });
+    }
+  }
   if (canOrder) {
     cards.push({
       key: "order",
@@ -312,6 +353,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <Link href="/profile" className="avatar grad" aria-label="Profile">{initials(profile.full_name, profile.email)}</Link>
         </div>
       </header>
+
+      {holiday.touches ? (
+        <>
+          <HolidayCard season={holiday.season} greeting={holiday.greeting} name={firstName(profile.full_name, profile.email)} closed={holiday.closed} today={holiday.today} />
+          <Festive season={holiday.season} today={holiday.today} />
+        </>
+      ) : null}
 
       <div className="col" style={{ gap: 2 }}>
         <h1 className="hello">{greeting()}, {firstName(profile.full_name, profile.email)}</h1>

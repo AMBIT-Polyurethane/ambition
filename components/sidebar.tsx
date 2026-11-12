@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  MessagesSquare,
   CirclePlay,
   Blocks,
   ClipboardCheck,
@@ -55,6 +56,7 @@ const ICONS = {
   docs: FileText,
   academy: GraduationCap,
   howto: CirclePlay,
+  chat: MessagesSquare,
   directory: Users,
   tax: Landmark,
   complaints: MessageSquareWarning,

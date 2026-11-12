@@ -1,5 +1,6 @@
 import { Check, CircleAlert, CircleCheck, FileText, Image as ImageIcon, MailX } from "lucide-react";
 import { Submit } from "@/components/forms";
+import { ClosedDateInput } from "@/components/holiday";
 import { approveWithoutEmail, creditDecision, notifyOverride, resendScheduledEmail, scheduleOrder } from "@/app/(app)/orders/actions";
 import { CompleteForm, NumbersForm } from "@/components/order-file-forms";
 import { PayBoxes } from "@/components/pay-boxes";
@@ -55,7 +56,10 @@ export function OrderDeskCard({
   lastPrices = null,
   payDefaults = null,
   edits = [],
+  closures = [],
 }: {
+  /** Days AMBIT is closed (0063), so the date box can warn. */
+  closures?: { date: string; name: string }[];
   order: Order;
   /** The order's lines, with spray foam marked (ISO or resin) so ISO can be priced per foam set. */
   lines?: (OrderItem & { foam?: FoamSide; price_parts?: PricePart[] | null })[];
@@ -295,7 +299,7 @@ export function OrderDeskCard({
             <form action={scheduleOrder} className="col" style={{ gap: 8 }}>
               <input type="hidden" name="id" value={o.id} />
               <div className="grid2">
-                <input className="input sm" type="date" name="date" required min={today} defaultValue={o.scheduled_for ?? o.needed_by ?? ""} aria-label="Date" />
+                <ClosedDateInput name="date" min={today} defaultValue={o.scheduled_for ?? o.needed_by ?? ""} closures={closures} />
                 <input className="input sm" name="note" defaultValue={o.schedule_note ?? ""} placeholder="Note for the customer (optional)" aria-label="Note" />
               </div>
               <Submit className="btn sm" pendingText="Saving…">{o.scheduled_for ? "Change date & email customer" : "Schedule & email customer"}</Submit>

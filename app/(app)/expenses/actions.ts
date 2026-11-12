@@ -13,6 +13,7 @@ import { CATEGORIES, INVENTORY, PEOPLE_CATS, isMonth, loadMonth, missing0062, mo
 import { stockItems } from "@/lib/incoming";
 import { inventoryBranches } from "@/lib/widgets";
 import { emailAdminsReportWaiting } from "@/lib/receiving-notify";
+import { payrollContact, tellPayroll } from "@/lib/payroll";
 import { kickSync } from "@/lib/inventory/sync";
 import { mailSubmitted, type Submitted } from "@/lib/expense-mail";
 import { money } from "@/lib/format";
@@ -412,4 +413,49 @@ export async function submitMonth(_prev: SubmitState, form: FormData): Promise<S
   const done = `${monthLabel(month)} is sent for approval (${money(s.total)}).`;
   if (res.status === "sent") return { ok: `${done} ${who ? `${who} got an email.` : ""}` };
   return { warn: `${done} The approvers can see it in AMBIT Intelligence, but the email didn't go out${res.error ? ` (${res.error.slice(0, 100)})` : ""}.` };
+}
+
+// ------------------------------------------------------------------ personal purchases (0063)
+
+/** "This was a personal purchase": payroll takes it out of my next paycheck (undo while it's still waiting). */
+export async function markPersonal(chargeId: string, note: string, on: boolean): Promise<{ ok: true; told?: string } | { ok: false; error: string }> {
+  const { supabase, profile } = await requireEmployee();
+  const { error } = await supabase.rpc("expense_mark_personal", { p_charge: chargeId, p_note: note, p_on: on });
+  if (error) return { ok: false, error: /expense_mark_personal|function/.test(error.message) ? "This needs the 0063 database update first. Ask Jeremiah to run it." : error.message };
+  revalidatePath("/expenses");
+  if (!on) return { ok: true };
+  const { data: c } = await supabase.from("expense_charges").select("user_id, txn_date, amount, merchant, description, card_last4").eq("id", chargeId).maybeSingle();
+  if (!c) return { ok: true };
+  const { data: emp } = await supabase.from("profiles").select("full_name, email").eq("id", c.user_id as string).maybeSingle();
+  const db = serviceReady() ? serviceClient() : supabase;
+  const pay = await payrollContact(db);
+  const res = await tellPayroll(db, {
+    employee: (emp?.full_name as string | null) || (emp?.email as string) || profile.full_name || profile.email,
+    employeeEmail: (emp?.email as string) || profile.email,
+    amount: Number(c.amount),
+    day: c.txn_date as string,
+    merchant: ((c.merchant as string) || (c.description as string) || "Card purchase").trim(),
+    card: (c.card_last4 as string | null) ?? null,
+    note: note.trim() || null,
+  });
+  return { ok: true, told: res.status === "sent" ? pay.name : undefined };
+}
+
+/** Payroll: it came out of their paycheck (or undo). */
+export async function markWithheld(chargeId: string, on: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { supabase } = await requireEmployee();
+  const { error } = await supabase.rpc("expense_repay_withheld", { p_charge: chargeId, p_on: on });
+  revalidatePath("/expenses/payroll");
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/** Admins: who handles paycheck deductions. */
+export async function savePayrollContact(form: FormData): Promise<void> {
+  const { supabase, profile } = await requireEmployee();
+  if (profile.role !== "admin") return;
+  const name = String(form.get("name") ?? "").trim().slice(0, 80);
+  const email = String(form.get("email") ?? "").trim().toLowerCase().slice(0, 120);
+  if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+  await supabase.from("app_settings").upsert({ key: "payroll", value: { name, email }, updated_at: new Date().toISOString(), updated_by_name: profile.full_name ?? profile.email });
+  revalidatePath("/expenses/payroll");
 }

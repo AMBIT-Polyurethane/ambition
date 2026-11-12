@@ -39,6 +39,8 @@ export async function homeApps(
     ? [
         ask,
         can(profile, "ordering") && { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
+        // Team Chat (0063), with unread direct messages and @mentions.
+        { key: "chat", label: "Chat", href: "/chat", icon: "chat", color: APP_COLOR.blue, badge: badges.chat || undefined },
         // Walkthrough videos of the app: AMBIT employees only (contractors never get this app).
         { key: "howto", label: "How To Use A.I.", href: "/how-to", icon: "play", color: APP_COLOR.indigo },
         !!desk && { key: "desk", label: "Order desk", href: "/orders/desk", icon: "truck", color: APP_COLOR.orange },

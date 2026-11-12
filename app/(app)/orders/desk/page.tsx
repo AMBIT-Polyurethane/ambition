@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { orderBoardCounts } from "@/lib/chat";
+import { OrderChatButton } from "@/components/chat/order-button";
 import { ChevronRight } from "lucide-react";
 import { redirect } from "next/navigation";
 import { List } from "lucide-react";
@@ -75,6 +77,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
     rows = ((await q).data ?? []) as Order[];
   }
   const branches = new Map(branchList.map((b) => [b.id, b]));
+  const chatCounts = await orderBoardCounts(supabase, rows.map((o) => o.id));
   const keep = (t: string) => {
     const q = new URLSearchParams();
     if (range !== "30") q.set("r", range);
@@ -89,6 +92,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
       <TopBar
         title="Order desk"
         back="/"
+        howTo="order-desk"
         right={
           <Link href={mine ? "/orders?status=mine" : "/orders"} className="btn sm">
             <List size={16} /> View orders
@@ -145,6 +149,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
                       <div className="row between" style={{ gap: 8 }}>
                         <span className="t">{orderNo(o.order_no)} · <span style={{ fontWeight: 600 }}>{o.company_name}</span></span>
                         <span className="row" style={{ gap: 6, flex: "none" }}>
+                          <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} />
                           {o.pay_prepaid ? <span className="pill ok">Paid</span> : null}
                           {o.pay_cod ? <span className="pill red">COD only</span> : null}
                           {o.pay_no_checks ? <span className="pill red">No checks</span> : null}

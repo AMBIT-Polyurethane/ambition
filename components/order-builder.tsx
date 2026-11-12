@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { HowToChip } from "@/components/howto-chip";
+import { ClosedWarning } from "@/components/holiday";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
@@ -75,6 +77,8 @@ type Props = {
   /** Staff: every customer, packed small (see lib/customers). */
   companies: PackedCustomer[] | null;
   isEmployee: boolean;
+  /** Days AMBIT is closed (0063): the Needed by date warns on them. */
+  closures?: { date: string; name: string }[];
   /** Staff with "Add new customers" (admins, the credit team); others send a request. */
   canAddCustomers?: boolean;
   /** Staff orders go to the customer to approve before AMBIT orders gets them. */
@@ -574,6 +578,7 @@ export function OrderBuilder(props: Props) {
       <main className="shell">
         <header className="topbar">
           <h1 className="title" style={{ margin: 0 }}>Order for a customer</h1>
+          {isEmployee ? <HowToChip slug="enter-an-order" /> : null}
         </header>
         {isEmployee ? <Link href="/order/intake" className="home-alert">
           <span className="ic"><ClipboardPaste size={19} /></span>
@@ -663,6 +668,7 @@ export function OrderBuilder(props: Props) {
             <ChevronLeft size={22} />
           </button>
           <h1 className="title" style={{ margin: 0 }}>Review order</h1>
+          {isEmployee ? <HowToChip slug="enter-an-order" /> : null}
         </header>
 
         {isEmployee ? (
@@ -866,6 +872,7 @@ export function OrderBuilder(props: Props) {
             <label className="field">
               <span className="label">Needed by</span>
               <input className="input" type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
+              <ClosedWarning date={neededBy} closures={props.closures ?? []} />
             </label>
           </div>
           <label className="field">

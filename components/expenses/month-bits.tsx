@@ -3,8 +3,8 @@
 import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera, CircleAlert, CircleCheck, FileQuestion, Link2, Send, Unlink } from "lucide-react";
-import { linkCharge, submitMonth, type SubmitState } from "@/app/(app)/expenses/actions";
+import { Camera, CircleAlert, CircleCheck, FileQuestion, Link2, LoaderCircle, Send, Unlink, UserRound } from "lucide-react";
+import { linkCharge, markPersonal, submitMonth, type SubmitState } from "@/app/(app)/expenses/actions";
 import { Submit } from "@/components/forms";
 import { dateShort, money } from "@/lib/format";
 import { daysApart, receiptPhotoHref, type XReceipt } from "@/lib/expense-kinds";
@@ -20,6 +20,8 @@ export function MissingCharge({
   locked: boolean;
 }) {
   const [picking, setPicking] = useState(false);
+  const [personal, setPersonal] = useState(false);
+  const [why, setWhy] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -59,8 +61,38 @@ export function MissingCharge({
           <Link className="btn sm dark" href={`/expenses/add?charge=${charge.id}&lost=1`}>
             <FileQuestion size={15} /> Lost receipt
           </Link>
+          <button type="button" className="btn sm dark" onClick={() => setPersonal((p) => !p)} aria-expanded={personal}>
+            <UserRound size={15} /> Personal purchase
+          </button>
         </div>
       )}
+      {personal ? (
+        <div className="xm-pick">
+          <b className="small">This was a personal purchase</b>
+          <span className="tiny muted">
+            By mistake, or your own card was lost on the road? Payroll takes {money(charge.amount)} out of your next paycheck, and it comes off your expense report. Payroll gets an email now.
+          </span>
+          <input className="input sm" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Note for payroll (optional): grabbed the wrong card" />
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  setErr(null);
+                  const r = await markPersonal(charge.id, why, true);
+                  if (!r.ok) setErr(r.error);
+                  else router.refresh();
+                })
+              }
+            >
+              {pending ? <LoaderCircle size={15} className="spin" /> : null} Yes, take it out of my paycheck
+            </button>
+            <button type="button" className="btn sm dark" onClick={() => setPersonal(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : null}
       {picking ? (
         <div className="xm-pick">
           <span className="tiny muted">Which receipt is it?</span>
@@ -126,5 +158,29 @@ export function SubmitMonth({ month, blocked, locked }: { month: string; blocked
       {state?.warn ? <div className="alert warn small" role="status" style={{ margin: 0, flexBasis: "100%" }}><span>{state.warn}</span></div> : null}
       {state?.error ? <div className="alert err small" role="alert" style={{ margin: 0, flexBasis: "100%" }}><CircleAlert size={17} style={{ flex: "none", marginTop: 1 }} /><span>{state.error}</span></div> : null}
     </>
+  );
+}
+
+/** Undo "personal purchase" (only while payroll hasn't taken it out yet). */
+export function UndoPersonal({ chargeId }: { chargeId: string }) {
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      className="btn sm dark"
+      title={err ?? "Not personal after all"}
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          const r = await markPersonal(chargeId, "", false);
+          if (!r.ok) setErr(r.error);
+          else router.refresh();
+        })
+      }
+    >
+      {pending ? <LoaderCircle size={14} className="spin" /> : null} {err ? "Can't undo" : "Undo"}
+    </button>
   );
 }

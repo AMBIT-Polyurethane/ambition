@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { orderBoardCounts } from "@/lib/chat";
+import { OrderChatButton } from "@/components/chat/order-button";
 import { ChevronRight, Clock, OctagonAlert, X } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
@@ -112,6 +114,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const summary = [what, when, branchName].filter(Boolean).join(" · ");
   const keepDesk = sp.from_desk === "1";
   const clearHref = `/orders${filter !== "all" && access !== "mine" ? `?status=${filter}` : ""}`;
+  const chatCounts = emp ? await orderBoardCounts(supabase, orders.map((o) => o.id)) : new Map<string, number>();
   const chipHref = (id: string) => {
     const u = new URLSearchParams();
     u.set("status", id);
@@ -184,6 +187,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   <div className="row between" style={{ gap: 8 }}>
                     <span className="t">{orderNo(o.order_no)}</span>
                     <span className="row" style={{ gap: 6 }}>
+                      {emp ? <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} /> : null}
                       {emp && stageOf(o) ? (
                         <span className={STAGES[stageOf(o)!].pill}>{STAGES[stageOf(o)!].short}</span>
                       ) : (

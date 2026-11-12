@@ -93,7 +93,7 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
 
   return (
     <main className="shell wide">
-      <TopBar title="Inventory Hub" back="/" />
+      <TopBar title="Inventory Hub" back="/" howTo="see-stock" />
       <HubNav profile={profile} active="dashboard" branch={pick} />
 
       {live.length > 1 ? (

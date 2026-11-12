@@ -26,7 +26,7 @@ export default async function NewReceivingPage({ searchParams }: { searchParams:
   ]);
   return (
     <main className="shell">
-      <TopBar title="New Receiving Report" back={`/inventory/incoming?b=${branch.id}`} />
+      <TopBar title="New Receiving Report" back={`/inventory/incoming?b=${branch.id}`} howTo="receive-inventory" />
       {branches.length > 1 ? (
         <div className="chips">
           {branches.map((x) => (
