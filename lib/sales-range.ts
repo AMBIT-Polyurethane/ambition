@@ -32,7 +32,7 @@ export function dayLabel(day: string, withYear = true): string {
 }
 
 /** The range a link asks for (?r=last_month, or ?from=…&to=…), with "This month" when it asks for nothing usable. */
-export function salesRange(sp: { r?: string; from?: string; to?: string }, today: string): SalesRange {
+export function salesRange(sp: { r?: string; from?: string; to?: string }, today: string, fallback: RangeKey = "month"): SalesRange {
   const [y, m] = today.split("-").map(Number);
   const preset = (key: RangeKey): SalesRange => {
     const label = RANGE_PRESETS.find((p) => p.key === key)?.label ?? "This month";
@@ -69,5 +69,5 @@ export function salesRange(sp: { r?: string; from?: string; to?: string }, today
         : `Through ${dayLabel(to!)}`;
     return { key: "custom", from, to, label };
   }
-  return preset((RANGE_PRESETS.some((p) => p.key === sp.r) ? sp.r : "month") as RangeKey);
+  return preset((RANGE_PRESETS.some((p) => p.key === sp.r) ? sp.r : fallback) as RangeKey);
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Download, Filter, X } from "lucide-react";
 
@@ -21,6 +22,8 @@ const show = (v: Cell, money: boolean, cents = false) => {
   }
   return v.replace(isoDay, (_, y: string, m: string, d: string) => `${Number(m)}/${Number(d)}/${y.slice(2)}`);
 };
+/** Columns of words (item names, customers, notes) get room so they don't wrap a word to a line. */
+const WIDE = /^(item|customer|notes?|where it comes from|what came in|what happened|items|vendor|reason|resolution|still coming|customer \/ vendor|usually buys|top customer)$/i;
 const plain = (v: Cell) => (v === null || v === undefined ? "" : String(v));
 const numOf = (v: Cell) => (typeof v === "number" ? v : v !== null && v !== "" && !Number.isNaN(Number(v)) ? Number(v) : null);
 
@@ -33,6 +36,8 @@ export function ReportTable({
   total,
   fileName,
   cents = false,
+  links,
+  linkCol,
 }: {
   head: string[];
   num: boolean[];
@@ -43,6 +48,9 @@ export function ReportTable({
   fileName: string;
   /** Money columns always show cents (a price list), never rounded to whole dollars. */
   cents?: boolean;
+  /** A page for each row (the order, the report...), opened from the column `linkCol`. */
+  links?: (string | null)[];
+  linkCol?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [rules, setRules] = useState<Record<number, Rule>>({});
@@ -210,7 +218,11 @@ export function ReportTable({
             <tbody>
               {view.map((i) => (
                 <tr key={i} className={flag[i] === "err" ? "err" : flag[i] ? "hl" : ""}>
-                  {rows[i].map((c, ci) => <td key={ci} className={num[ci] ? "num" : ""}>{show(c, money[ci], cents)}</td>)}
+                  {rows[i].map((c, ci) => (
+                    <td key={ci} className={num[ci] ? "num" : WIDE.test(head[ci]) ? "rt-wide" : ""}>
+                      {links?.[i] && ci === linkCol && c !== null && c !== "" ? <Link href={links[i]!} className="rt-link">{show(c, money[ci], cents)}</Link> : show(c, money[ci], cents)}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

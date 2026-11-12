@@ -9,14 +9,25 @@ import { RANGE_PRESETS, type RangeKey } from "@/lib/sales-range";
  * The date filter on a person's sales list: a button showing the current range that opens quick picks (This month,
  * Last month, …) and a From / To pair for any other dates. Everything is in the link, so a range can be shared.
  */
-export function RangeFilter({ base, current, label, from, to, today }: {
+export function RangeFilter({ base, current, label, from, to, today, keep, title = "Show sales from", start = "month" }: {
   base: string; // the page's path, e.g. /sales-goals/<id>
   current: RangeKey;
   label: string;
   from: string | null;
   to: string | null;
   today: string;
+  /** Other things in the link to keep when the dates change (a report's location: { b: "okc" }). */
+  keep?: Record<string, string>;
+  /** The words over the quick picks. */
+  title?: string;
+  /** The range a bare link means (the page's default). */
+  start?: RangeKey;
 }) {
+  const kept = Object.entries(keep ?? {}).filter(([, v]) => v);
+  const link = (r: string) => {
+    const q = new URLSearchParams([...(r === start ? [] : [["r", r]]), ...kept]);
+    return q.size ? `${base}?${q}` : base;
+  };
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
@@ -42,7 +53,7 @@ export function RangeFilter({ base, current, label, from, to, today }: {
     <div className="range-pick" ref={box}>
       <button
         type="button"
-        className={`btn sm dark range-btn${current !== "month" ? " on" : ""}`}
+        className={`btn sm dark range-btn${current !== start ? " on" : ""}`}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((o) => !o)}
@@ -53,12 +64,12 @@ export function RangeFilter({ base, current, label, from, to, today }: {
       </button>
       {open ? (
         <div className="range-menu" role="dialog" aria-label="Choose the dates">
-          <span className="tiny faint range-title">Show sales from</span>
+          <span className="tiny faint range-title">{title}</span>
           <div className="range-presets">
             {RANGE_PRESETS.map((p) => (
               <Link
                 key={p.key}
-                href={p.key === "month" ? base : `${base}?r=${p.key}`}
+                href={link(p.key)}
                 className={`chip sm${current === p.key ? " on" : ""}`}
                 onClick={() => setOpen(false)}
               >
@@ -67,6 +78,7 @@ export function RangeFilter({ base, current, label, from, to, today }: {
             ))}
           </div>
           <form action={base} method="get" className="range-custom">
+            {kept.map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
             <label className="field">
               <span className="label">From</span>
               <input className="input sm" type="date" name="from" defaultValue={current === "custom" ? from ?? "" : ""} max={today} />

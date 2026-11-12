@@ -448,15 +448,19 @@ on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place,
 
 ### Reports (`/reports`)
 
-One place for reports, for every AMBIT employee (menu "Reports", Home app "Reports"). `lib/reports.ts` lists the
-reports built here (`reportsFor`) and the ones that live elsewhere (`reportsElsewhere`: Inventory reports, Credit &
-collections) for the people who can open them; add a new report there. **Sell Price List**
-(`/reports/sell-prices`): active products priced like the order screen (`saleOn` sale price → "Sale"; customer-priced
-product or group → "Account pricing", no price; `list_price` → "List"; none → "No price set", highlighted). `?b=`
-narrows to one location's spreadsheet items (`inventory.on_sheet`, brands counted under their `stock_of` parent via
-`stock_parents()`) and adds that sheet's `inventory.sell_price`, highlighting differences. Uses the Inventory Hub's
-`ReportTable` (search, filters, sort, CSV) with `cents` (money always to the cent). Private label rows only reach
-admins (the products policy). No database change.
+One place for reports, for every AMBIT employee (menu "Reports", Home app "Reports"). `lib/reports.ts` is the list
+(`REPORT_DEFS`: key, group, title, blurb, icon, default date range, location chips, `soon` for Coming soon) with who
+can open each (`canSee`; sales dollars via `salesScope`: admins, `prf_approve`, `credit_check` = all, `job_role
+sales_rep` = only orders with their `sales_rep_id`; `ordersScope` adds `order_desk`; inventory reports follow
+`seesInventory` and a warehouse manager's `hubLock`). `lib/reports-data.ts` builds each one (`BUILDERS[key](ctx)` →
+head / num / money / rows / flag / total / stats / note / links), read as the signed-in person so RLS still applies;
+`app/(app)/reports/[key]` shows it with `RangeFilter` (now takes `keep` and `start`), location chips, the customer
+picker (price sheet) or lot box (lot trace), and the Inventory Hub's `ReportTable` (now with `links`/`linkCol` and
+`cents`). Sales follow the Sales goals rules (`salesOrders()`: not cancelled, not `kind = 'return'`, by `created_at`
+in Central time, `sum(line_total)`). **Sell Price List** keeps its own page (`/reports/sell-prices`): active products
+priced like the order screen, `?b=` narrows to a location's sheet items (brands under their `stock_of` parent) and
+compares `inventory.sell_price` (against the regular price during a sale). Vendor POs is Coming soon (no data yet).
+Print: a light page whatever the theme (`@media print` resets the colors). No database change.
 
 ### Price requests in the app, customer credit (0066)
 
