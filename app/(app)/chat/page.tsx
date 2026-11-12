@@ -6,6 +6,7 @@ import { myTodos, overview } from "@/lib/chat";
 import { ChatList } from "@/components/chat/list";
 import { AskChat } from "@/components/chat/ask";
 import { PushToggle } from "@/components/push-toggle";
+import { HowToChip } from "@/components/howto-chip";
 
 export const metadata = { title: "Chat" };
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
         </div>
         {sp.msg ? <div className="alert ok small" role="status"><CircleCheck size={16} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
         <Link href="/chat/new" className="btn"><MessageSquarePlus size={17} /> New message</Link>
+        <HowToChip slug="team-chat" label="How to use Chat" />
         <AskChat aiReady={claudeReady()} />
         <div className="card"><PushToggle /></div>
         {profile.role === "admin" ? (

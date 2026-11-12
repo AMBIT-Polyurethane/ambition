@@ -428,6 +428,68 @@ export const HOWTO: HowToVideo[] = [
         "label": "Done"
       }
     ]
+  },
+  {
+    "n": 8,
+    "slug": "team-chat",
+    "title": "How to Use Team Chat",
+    "who": "All AMBIT employees",
+    "roles": [
+      "admin",
+      "crm",
+      "sales_rep",
+      "tech",
+      "warehouse",
+      "accounting"
+    ],
+    "blurb": "Messages, @mentions and to-dos, reactions, the mic and Catch me up, order boards, and phone notifications.",
+    "seconds": 78,
+    "chapters": [
+      {
+        "t": 3.6,
+        "label": "Open Chat"
+      },
+      {
+        "t": 10.1,
+        "label": "Your conversations"
+      },
+      {
+        "t": 16.1,
+        "label": "Message someone"
+      },
+      {
+        "t": 21.9,
+        "label": "Tag someone"
+      },
+      {
+        "t": 28.3,
+        "label": "Send it"
+      },
+      {
+        "t": 33.7,
+        "label": "React"
+      },
+      {
+        "t": 38.7,
+        "label": "Talk instead of typing"
+      },
+      {
+        "t": 48.1,
+        "label": "Catch me up"
+      },
+      {
+        "t": 53.8,
+        "label": "Order boards"
+      },
+      {
+        "t": 61.1,
+        "label": "My to-dos"
+      },
+      {
+        "t": 66.4,
+        "label": "Phone notifications"
+      }
+    ]
   }
 ];
 
