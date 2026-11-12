@@ -1,4 +1,5 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { PRF_FORM_ID } from "@/lib/jotform";
 import { ExternalLink } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { TopBar } from "@/components/ui";
@@ -14,6 +15,11 @@ export default async function GoPage({ params }: { params: Promise<{ id: string 
   const { data } = await supabase.from("links").select("*").eq("id", id).maybeSingle<LinkRow>();
   if (!data?.url || !/^https?:\/\//.test(data.url)) notFound();
   if (profile.role !== "customer" && data.perm && !can(profile, data.perm as Perm)) notFound();
+  // The Price Request Form lives in the app now (0066): open the app's own form instead of Jotform.
+  if (data.url.includes(PRF_FORM_ID) && profile.role !== "customer") {
+    const { error } = await supabase.from("price_requests").select("id", { head: true, count: "exact" }).limit(1);
+    if (!error) redirect("/price-requests/new");
+  }
 
   // Jotform fills fields whose unique name matches a URL parameter, so pass who is signed in.
   const u = new URL(data.url);

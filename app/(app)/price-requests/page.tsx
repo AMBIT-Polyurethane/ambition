@@ -6,6 +6,8 @@ import { PrfList } from "@/components/prf-list";
 import { JotformError, PRF_FORM_ID, formUrl, jotformReady, prfFields, prfPricing, prfSubmissions, toItems, type RepLink } from "@/lib/jotform";
 import { can } from "@/lib/access";
 import { linkRepName, unlinkRepName } from "./actions";
+import { PrNativeList, lineCounts } from "@/components/pr-native-list";
+import type { PrRow } from "@/lib/price-requests";
 
 export const metadata = { title: "My price requests" };
 export const dynamic = "force-dynamic";
@@ -15,18 +17,30 @@ export default async function PriceRequestsPage() {
   const admin = profile.role === "admin";
   const approver = can(profile, "prf_approve");
 
+  // Price requests made in the app (0066); older ones are in Jotform below.
+  const nativeRes = await supabase.from("price_requests").select("*").eq("created_by", profile.id).order("created_at", { ascending: false }).limit(100);
+  const native = (nativeRes.error ? [] : nativeRes.data ?? []) as PrRow[];
+  const counts = await lineCounts(supabase, native.map((r) => r.id));
   const { data: prfLink } = await supabase.from("links").select("id").ilike("url", `%${PRF_FORM_ID}%`).limit(1).maybeSingle();
-  const newHref = prfLink ? `/go/${prfLink.id}` : formUrl();
+  const newHref = nativeRes.error ? (prfLink ? `/go/${prfLink.id}` : formUrl()) : "/price-requests/new";
+  const external = nativeRes.error && !prfLink;
   const newBtn = (
-    <Link className="btn sm" href={newHref} {...(prfLink ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
+    <Link className="btn sm" href={newHref} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
       <Plus size={15} /> New
     </Link>
   );
+  const nativeBlock = native.length ? (
+    <section className="section">
+      <div className="eyebrow">In the app</div>
+      <PrNativeList rows={native} counts={counts} />
+    </section>
+  ) : null;
 
   if (!jotformReady()) {
     return (
       <main className="shell">
-        <TopBar title="My price requests" back="/" />
+        <TopBar title="My price requests" back="/" right={nativeRes.error ? null : newBtn} />
+        {nativeBlock}
         <div className="card col">
           <b>Almost ready</b>
           <span className="small muted">
@@ -83,6 +97,8 @@ export default async function PriceRequestsPage() {
         }
       />
 
+      {nativeBlock}
+      {nativeBlock ? <div className="eyebrow">Earlier requests (Jotform)</div> : null}
       {error ? <div className="alert err">{error}</div> : null}
 
       {admin && unmatched.length ? (

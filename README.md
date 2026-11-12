@@ -446,6 +446,16 @@ have a light-mode copy of its video (`video_path_light`, uploaded under "Light-m
 player (`components/academy/lesson-video.tsx`) plays it for people using the app in Light mode (Appearance Light, or Auto
 on a light phone or computer: `lookFor()` in `lib/theme.ts`) and swaps in place, keeping the spot, if the look changes.
 
+### Price requests in the app, customer credit (0066)
+
+`price_requests` / `price_request_lines`, `price_floors` (approvers only), rules in `app_settings.price_rules`.
+`price_request_submit()` approves lines that pass `price_rule_check()` (not under the floor; within the % under list for the
+product group; groups in `never` always go to a manager); `price_request_decide()` for approvers; emails and pushes in
+`lib/price-requests.ts`. Screens: `/price-requests/new`, `/price-requests/n/[id]`, `/price-requests/rules`; the Jotform
+requests stay listed below. Credit: `companies.credit_limit`, `ar_*` (imported aging and `ar_as_of`), `terms`; `customer_payments`,
+`collection_notes`; `credit_overview()` = imported balance + shipped since − paid since (payments come off the oldest bucket
+first). `/credit` (dashboard), `/credit/[id]`, `/credit/import` (QuickBooks A/R Aging Summary / Customer Contact List, .xlsx or .csv).
+
 ### Reorder points, reorder requests, payment wait, deleting DMs (0064)
 
 `inventory.rop_app` marks a reorder point set in the app (Stock > Set reorder points, `inventory_set_rop`): the sync then writes it

@@ -57,7 +57,10 @@ export function OrderDeskCard({
   payDefaults = null,
   edits = [],
   closures = [],
+  creditInfo = null,
 }: {
+  /** The customer's credit right now (0066), shown at the credit check. */
+  creditInfo?: { limit: number | null; balance: number; pastDue: number; over90: number; available: number | null; lastPaid: string | null; lastPaidAmount: number | null; asOf: string | null; companyId: string } | null;
   /** Days AMBIT is closed (0063), so the date box can warn. */
   closures?: { date: string; name: string }[];
   order: Order;
@@ -235,6 +238,20 @@ export function OrderDeskCard({
         ) : st === "credit" ? (
           <>
             {/^Check again/.test(o.credit_note ?? "") ? <b>{o.credit_note}</b> : "Waiting on accounting."}
+            {creditInfo ? (
+              <>
+                <span className="credit-snap">
+                  <span><span className="tiny faint">Credit line</span><b>{creditInfo.limit !== null ? money(creditInfo.limit) : "–"}</b></span>
+                  <span><span className="tiny faint">Owes</span><b>{money(creditInfo.balance)}</b></span>
+                  <span><span className="tiny faint">Past due</span><b className={creditInfo.pastDue ? "red" : ""}>{creditInfo.pastDue ? money(creditInfo.pastDue) : "–"}{creditInfo.over90 ? ` (${money(creditInfo.over90)} 90+)` : ""}</b></span>
+                  <span><span className="tiny faint">Available</span><b className={creditInfo.available !== null && creditInfo.available < 0 ? "red" : ""}>{creditInfo.available !== null ? money(creditInfo.available) : "–"}</b></span>
+                </span>
+                <span className="tiny faint">
+                  {creditInfo.lastPaid ? `Last payment ${dateShort(creditInfo.lastPaid)}${creditInfo.lastPaidAmount ? ` (${money(creditInfo.lastPaidAmount)})` : ""}` : "No payment entered yet"}
+                  {" · "}<a href={`/credit/${creditInfo.companyId}?pay=1&order=${o.id}#pay`}>Record a payment</a> · <a href={`/credit/${creditInfo.companyId}`}>Credit page</a>
+                </span>
+              </>
+            ) : null}
             {waitingPay ? (
               <>
                 <br />

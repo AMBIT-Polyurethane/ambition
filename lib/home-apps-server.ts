@@ -46,6 +46,7 @@ export async function homeApps(
         !!desk && { key: "desk", label: "Order desk", href: "/orders/desk", icon: "truck", color: APP_COLOR.orange },
         seesInventory(profile) && { key: "inventory", label: "Inventory", href: "/inventory", icon: "boxes", color: APP_COLOR.cyan },
         can(profile, "takeoff") && { key: "ops", label: "AMBIT-OPS", href: "/ops", icon: "ops", color: APP_COLOR.sky },
+        (can(profile, "credit_check") || can(profile, "order_desk") || admin) && { key: "credit", label: "Credit", href: "/credit", icon: "credit", color: APP_COLOR.emerald },
         (can(profile, "credit_check") || admin) && { key: "tax", label: "Tax certificates", href: "/tax", icon: "tax", color: APP_COLOR.emerald, folder: taxFront ? undefined : "admin" },
         can(profile, "ordering") && { key: "intake", label: "Paste an order", href: "/order/intake", icon: "intake", color: APP_COLOR.fuchsia, folder: "sales" },
         can(profile, "ordering") && { key: "due", label: "Due to order", href: "/orders/due", icon: "due", color: APP_COLOR.steel, folder: "sales" },

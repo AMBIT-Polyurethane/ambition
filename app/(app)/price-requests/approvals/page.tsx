@@ -5,6 +5,8 @@ import { Empty, TopBar } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { dateShort, jfDate, searchSafe } from "@/lib/format";
 import { JotformError, jotformReady, prfFields, prfPricing, prfSubmissions, toItems, type RepLink } from "@/lib/jotform";
+import { PrNativeList, lineCounts } from "@/components/pr-native-list";
+import type { PrRow } from "@/lib/price-requests";
 
 export const metadata = { title: "Price approvals" };
 export const dynamic = "force-dynamic";
@@ -20,14 +22,29 @@ type Review = { submission_id: string; approved_by_name: string | null; approved
 /** Admins: every price request, the ones waiting for prices first. */
 export default async function PriceApprovalsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const { supabase } = await requirePerm("prf_approve");
+  const { supabase, profile } = await requirePerm("prf_approve");
   const tab = TABS.some(([k]) => k === sp.tab) ? (sp.tab as (typeof TABS)[number][0]) : "pending";
   const q = searchSafe(sp.q).toLowerCase();
+  // In the app (0066): waiting first (oldest at the top), then the latest answered.
+  let nq = supabase.from("price_requests").select("*").order("created_at", { ascending: tab === "pending" }).limit(150);
+  if (tab === "pending") nq = nq.eq("status", "pending");
+  else if (tab === "approved") nq = nq.in("status", ["approved", "partly"]);
+  const nativeRes = await nq;
+  const native = ((nativeRes.error ? [] : nativeRes.data ?? []) as PrRow[]).filter((r) => !q || `${r.company_name} ${r.rep_name ?? ""} ${r.contact ?? ""}`.toLowerCase().includes(q));
+  const ncounts = await lineCounts(supabase, native.map((r) => r.id));
+  const rulesBtn = profile.role === "admin" && !nativeRes.error ? <Link href="/price-requests/rules" className="btn sm dark">Rules</Link> : null;
+  const nativeBlock = native.length ? (
+    <section className="section">
+      <div className="eyebrow">In the app · {native.length}</div>
+      <PrNativeList rows={native} counts={ncounts} showRep />
+    </section>
+  ) : null;
 
   if (!jotformReady()) {
     return (
       <main className="shell">
-        <TopBar title="Price approvals" back="/" />
+        <TopBar title="Price approvals" back="/" right={rulesBtn} />
+        {nativeBlock}
         <div className="alert warn">The app needs a Jotform key first. Add JOTFORM_API_KEY in Vercel, then redeploy.</div>
       </main>
     );
@@ -65,7 +82,7 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
 
   return (
     <main className="shell">
-      <TopBar title="Price approvals" back="/" />
+      <TopBar title="Price approvals" back="/" right={rulesBtn} />
       {error ? <div className="alert err">{error}</div> : null}
 
       <div className="chips">
@@ -81,6 +98,8 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
         <input className="input" name="q" defaultValue={q} placeholder="Search customer, contact or rep" aria-label="Search price requests" />
       </form>
 
+      {nativeBlock}
+      {nativeBlock ? <div className="eyebrow">From Jotform</div> : null}
       {shown.length === 0 ? (
         <Empty icon="tag" title={tab === "pending" ? "Nothing waiting for approval" : "No price requests match"} />
       ) : (

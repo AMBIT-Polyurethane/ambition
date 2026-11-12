@@ -269,6 +269,16 @@ Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work o
   },
   {
     who: "staff",
+    title: "Price requests in the app (and automatic approval)",
+    body: `[My price requests](/price-requests) > New: pick the customer (or "New prospect"), add each product, type the price you need (and the volume), say why, pick how long it's good for, then "Send price request". Each line shows how far under list it is. When the rules are on, lines that meet them are approved right away; the rest go to a manager (Price approvals), who approves each as asked, at another price, or says no; the rep gets an email and a phone notification. Approved prices that are still good show on the customer's orders ("Approved prices for …") so the order desk can price from them. Admins set the rules in Price approvals > Rules: turn automatic approval on, the most % under list (overall and by product group), groups that always need a manager, and floor prices per product (reps never see floors; products with no list price, like spray foam, are approved automatically only at or above their floor).`,
+  },
+  {
+    who: "staff",
+    title: "Credit & collections (credit lines, balances, payments)",
+    body: `[Credit & collections](/credit) (admins, accounting and the order desk): total owed, past due, 90+ days, accounts over their credit line, payments in the last 30 days, days to collect, the aging bar, payments by week, largest past due, follow-ups and promises to pay, and a worklist (Needs attention, Over or near limit, Follow-ups due, Every account) by location and rep. Balances come from QuickBooks: Import balances (accounting/admins) takes the A/R Aging Summary export, and the Customer Contact List with Credit Limit for credit lines. After that, orders shipped since are added and payments entered in the app come off (oldest past due first). Open a customer to Record a payment (amount, date, how, check #, order or invoice), add collection notes (call, email, promise to pay with an amount, hold, release, with a follow-up date), and set the credit line and terms. At the Credit check step the order shows the customer's credit line, what they owe, past due and what's available, with "Record a payment".`,
+  },
+  {
+    who: "staff",
     title: "Partial receipts (part of a PO came in, the rest is still coming)",
     body: `Open the Receiving Report (Inventory Hub > Receiving) once it's sent or received and tap "Partial receipt: the rest is still coming". Items that came up short are filled in; add anything else still coming on that PO (search the item, type how many), pick the expected date and Save. The rest becomes an expected delivery listed under Receiving > "Waiting on the rest of the order" (and a "Partial orders" card on the Inventory Hub dashboard). When it shows up, open it and receive it like any delivery. "Not partial after all" cancels the follow-up.`,
   },

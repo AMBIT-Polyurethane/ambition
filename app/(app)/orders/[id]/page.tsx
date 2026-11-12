@@ -5,6 +5,7 @@ import { closuresAround } from "@/lib/holidays";
 import { HowToChip } from "@/components/howto-chip";
 import { orderBoardCounts } from "@/lib/chat";
 import { OrderReturnsCard, type ReturnLine } from "@/components/order-returns-card";
+import { canCredit, creditFor } from "@/lib/credit";
 import { OrderChatButton } from "@/components/chat/order-button";
 import { notFound } from "next/navigation";
 import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, RefreshCw, Repeat } from "lucide-react";
@@ -77,6 +78,15 @@ export default async function OrderDetailPage({
     // (Prices are no longer carried over from the customer's last order: the CFO asked to type each one from the invoice.)
   ]);
   const lines = (items ?? []) as (OrderItem & { product: { image_url: string | null; category_id: string | null } | null })[];
+  // Approved price requests (0066) for this customer that are still good: the order desk prices from them.
+  const today0066 = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const prRes = emp && order.company_id && order.status !== "cancelled"
+    ? await supabase.from("price_requests").select("id, valid_until, decided_by_name, lines:price_request_lines(name, sku, unit, approved_price, status)").eq("company_id", order.company_id).in("status", ["approved", "partly"]).gte("valid_until", today0066).order("created_at", { ascending: false }).limit(5)
+    : { data: null, error: null };
+  const approvedPrices = ((prRes.error ? [] : prRes.data ?? []) as { id: number; valid_until: string; lines: { name: string; sku: string; unit: string | null; approved_price: number | null; status: string }[] }[])
+    .flatMap((r) => r.lines.filter((l) => l.status === "approved" && l.approved_price !== null).map((l) => ({ ...l, req: r.id, until: r.valid_until })));
+  // The customer's credit (0066), for the credit check.
+  const credit = emp && order.company_id && (order.stage === "credit" || order.stage === "hold") && canCredit(profile) ? await creditFor(supabase, order.company_id) : null;
   // Returns and exchanges (0065): what's coming back.
   const kind = ((order as { kind?: string }).kind ?? "sale") as "sale" | "return" | "exchange";
   const { data: retRows } = emp && kind !== "sale" ? await supabase.from("order_returns").select("*").eq("order_id", id).order("id") : { data: null };
@@ -219,6 +229,23 @@ export default async function OrderDetailPage({
           <HowToChip slug="order-desk" label="How to: order desk" />
           <HowToChip slug="close-out-an-order" label="How to: close it out" />
         </div>
+      ) : null}
+
+      {approvedPrices.length ? (
+        <details className="card">
+          <summary className="small"><b>Approved prices for {order.company_name}</b> <span className="muted">· {approvedPrices.length} from price requests</span></summary>
+          <div className="list" style={{ marginTop: 10 }}>
+            {approvedPrices.map((l, i) => (
+              <Link key={i} href={`/price-requests/n/${l.req}`} className="item" style={{ padding: "8px 12px" }}>
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="t ellipsis" style={{ fontSize: 14 }}>{l.name}</div>
+                  <div className="s ellipsis">{l.sku} · PR-{1000 + l.req} · good through {l.until}</div>
+                </div>
+                <b>{money(Number(l.approved_price))}<span className="tiny faint"> / {l.unit ?? "each"}</span></b>
+              </Link>
+            ))}
+          </div>
+        </details>
       ) : null}
 
       {emp && kind !== "sale" && retRows?.length ? (
@@ -368,6 +395,7 @@ export default async function OrderDetailPage({
           lines={lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) }))}
           payDefaults={company ? { cod: Boolean(company.pay_cod), noChecks: Boolean(company.pay_no_checks) } : null}
           edits={edits}
+          creditInfo={credit ? { limit: credit.credit_limit, balance: credit.balance, pastDue: credit.past_due, over90: credit.over_90, available: credit.available, lastPaid: credit.last_paid, lastPaidAmount: credit.last_paid_amount, asOf: credit.as_of, companyId: credit.company_id } : null}
         />
       ) : null}
 
