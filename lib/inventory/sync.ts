@@ -101,6 +101,8 @@ type Inv = {
   synced_on_hand: number | null;
   sheet_pending: number;
   reorder_point: number | null;
+  /** Set in the app (0064): the app is in charge of the reorder point and writes it to the sheet. */
+  rop_app?: boolean;
   max_qty: number | null;
   unit_weight: number | null;
   sell_price: number | null;
@@ -455,7 +457,13 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
         if ((item.counted ?? null) !== (row.last_counted ?? null)) patch.last_counted = item.counted;
         if ((item.countedBy || null) !== (row.counted_by || null)) patch.counted_by = item.countedBy || null;
       }
-      if (!same(item.rop, num(row.reorder_point))) patch.reorder_point = item.rop;
+      if (row.rop_app) {
+        // Set in the app (0064): the sheet's Reorder Point column shows the app's number.
+        if (count.cols.rop && !same(item.rop, num(row.reorder_point))) {
+          await wb.write(countTab, item.row, count.cols.rop, [[row.reorder_point ?? ""]]);
+          sum.to_sheet++;
+        }
+      } else if (!same(item.rop, num(row.reorder_point))) patch.reorder_point = item.rop;
       if (!same(item.max, num(row.max_qty))) patch.max_qty = item.max;
       if (!same(item.weight, num(row.unit_weight))) patch.unit_weight = item.weight;
       if (!same(item.price, num(row.sell_price))) patch.sell_price = item.price;
@@ -1300,7 +1308,7 @@ async function reconcilePending(
     const allDone = ps.length > 0 && ps.every((p) => p.state === "done") && new Set(ps.map((p) => p.order_item_id)).size === items;
     if (!o || o.status === "completed" || o.status === "cancelled" || !items || !allDone) continue;
     if (o.stage === "scheduled" && !bols) {
-      log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet. Finish the order in the app: tap Mark delivered (or Mark picked up) and attach the signed BOL.`, null, null, null, "Spreadsheet");
+      log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet. Finish the order in the app: tap Mark shipped out (or Mark picked up) and attach the signed BOL.`, null, null, null, "Spreadsheet");
     } else if (o.stage === "scheduled") {
       await db.from("orders").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", id).neq("status", "completed");
       log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet, so the order is complete in the app too.`, null, null, null, "Spreadsheet");

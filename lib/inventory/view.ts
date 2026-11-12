@@ -25,6 +25,9 @@ export type StockRow = {
   pending: number;
   net: number | null;
   reorder_point: number | null;
+  /** Set in the app (0064), not read from the sheet. */
+  rop_app?: boolean;
+  rop_set_by_name?: string | null;
   max_qty: number | null;
   last_counted: string | null;
   counted_by: string | null;
@@ -57,15 +60,17 @@ export async function inventorySheets(supabase: SupabaseClient): Promise<SheetIn
   return (data ?? []) as SheetInfo[];
 }
 
+const INV_COLS = "product_id, sku, on_hand, reorder_point, max_qty, last_counted, counted_by, sheet_row, product:products(name, category_id, unit)";
+async function invRows(supabase: SupabaseClient, branch: string) {
+  const q = (cols: string) => supabase.from("inventory").select(cols).eq("branch_id", branch).eq("on_sheet", true).order("sheet_row").range(0, 4999);
+  const first = await q(`${INV_COLS}, rop_app, rop_set_by_name`);
+  // Before 0064 there's no rop_app column.
+  return first.error && /rop_/.test(first.error.message) ? q(INV_COLS) : first;
+}
+
 export async function branchStock(supabase: SupabaseClient, branch: string): Promise<StockRow[]> {
   const [{ data: rows }, { data: levels }, { data: lotRows }, { data: pickRows }] = await Promise.all([
-    supabase
-      .from("inventory")
-      .select("product_id, sku, on_hand, reorder_point, max_qty, last_counted, counted_by, sheet_row, product:products(name, category_id, unit)")
-      .eq("branch_id", branch)
-      .eq("on_sheet", true)
-      .order("sheet_row")
-      .range(0, 4999),
+    invRows(supabase, branch),
     supabase.rpc("stock_for", { p_branch: branch }),
     supabase.from("inventory_lots").select("id, product_id, lot_no, mfg, exp, use_by, remaining, sheet_pending, on_sheet, sheet_row").eq("branch_id", branch).range(0, 4999),
     supabase.from("inventory_lines").select("lot_id, qty").eq("branch_id", branch).eq("state", "reserved").not("lot_id", "is", null).range(0, 9999),
@@ -101,6 +106,8 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
     sku: string;
     on_hand: number | null;
     reorder_point: number | null;
+    rop_app?: boolean;
+    rop_set_by_name?: string | null;
     max_qty: number | null;
     last_counted: string | null;
     counted_by: string | null;
@@ -120,6 +127,8 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
       pending: n(l?.pending) ?? 0,
       net: n(l?.net),
       reorder_point: n(r.reorder_point),
+      rop_app: Boolean(r.rop_app),
+      rop_set_by_name: r.rop_set_by_name ?? null,
       max_qty: n(r.max_qty),
       last_counted: r.last_counted,
       counted_by: r.counted_by,

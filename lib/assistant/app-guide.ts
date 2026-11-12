@@ -262,6 +262,18 @@ Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work o
   },
   {
     who: "staff",
+    title: "Reorder points, Sold in 60 days, and Reorder requests to purchasing",
+    body: `On [Stock](/inventory/stock) each item shows In stock, Reserved, Available, Reorder at (its reorder point) and Sold 60 days (how much sold at that location in the last 60 days). When Available drops to the reorder point the item shows under "At reorder point".
+- Set reorder points (admins, CRMs, and a warehouse manager for their own location): tap "Set reorder points", type numbers in the Reorder at column, or pick how many weeks of sales to cover and tap "Fill the blanks" (or "Replace all shown") for suggestions from the last 60 days of sales; then "Save reorder points". The "No reorder point" filter shows what's still missing. Reorder points set in the app also go into the spreadsheet's Reorder Point column.
+- Reorder (admins and CRMs): tap "Reorder", check the items (or "Check everything at reorder point"), tap "Next: how many", change any quantity, add a note, then "Send to Al Rearick". Purchasing gets an email and it's listed under Inventory Hub > [Reorders](/inventory/reorders); they tap "Mark ordered" (with the PO # and ETA) once it's bought.`,
+  },
+  {
+    who: "staff",
+    title: "Waiting on customer payment (credit check)",
+    body: `At the Credit check step accounting can tap "Waiting on customer payment" when the order can't be released until the customer pays. The order shows a "Waiting on payment" tag on the Order desk and the orders list, and its team chat gets a note. When the payment comes in, tap "Release order" ("Customer Has Already Paid" is ticked for you) or "Payment's in: take off Waiting on customer payment". The last step of an order is now "Picked up" (pickup) or "Shipped out" (delivery).`,
+  },
+  {
+    who: "staff",
     title: "Team Chat (channels, direct messages, order boards, to-dos)",
     body: `[Chat](/chat) is AMBIT's own team chat, for employees only (contractors never see it). It's in the menu, on the phone's bottom bar and on Home.
 - Channels: groups for a team or a job (admins make them with New > Channel, open to everyone or private). Open channels anyone can join from "More channels you can join". A channel tells you about @mentions; set "Every message" or "Mute" in its settings (the gear).
@@ -271,6 +283,8 @@ Work orders ([Work orders](/ops/field), the "Work" tab): every trip has a work o
 - The mic: tap it and talk; your words go in the box. Then tap the sparkle and AMBIT Intelligence turns what you said into a clear message (or, with an empty box, suggests a reply). You still tap Send.
 - Catch me up: the sparkle button at the top summarizes what you missed and what's asked of you.
 - Find anything: on Chat's main screen, ask a question ("when is the Covestro truck coming?") or search words.
+- Reactions: hover a message (computer) for one-tap heart, thumbs up, laugh or cry; on a phone tap the smiley.
+- Delete a direct message: open it > the gear > Delete chat. It's gone from your list (only for you); if they send a new message it comes back with just the new messages. Admins can restore it (Chat > Deleted direct messages).
 - My to-dos: when someone @mentions you, AMBIT Intelligence turns what they asked into a to-do (with a due day if they gave one). It shows on Home under "My to-dos" and in Chat > My to-dos; check it off when it's done, or add your own.
 - Phone notifications: Profile > Notifications > Turn on (or on Chat's main screen). iPhone: first tap Share > Add to Home Screen, open the app from the Home Screen, then turn them on.`,
   },

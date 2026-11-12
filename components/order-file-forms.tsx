@@ -191,7 +191,7 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
   );
 }
 
-/** Delivered / picked up: the signed BOL (photo or scan) goes with it. */
+/** Shipped out / picked up: the signed BOL (photo or scan) goes with it. */
 export function CompleteForm({ orderId, pickup, hasBol }: { orderId: string; pickup: boolean; hasBol: boolean }) {
   const [files, setFiles] = useState<File[]>([]);
   const { busy, setBusy, error, setError } = useSend();
@@ -223,7 +223,7 @@ export function CompleteForm({ orderId, pickup, hasBol }: { orderId: string; pic
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="submit" className="btn dark sm" disabled={busy || (!files.length && !hasBol)} style={{ alignSelf: "flex-start", gap: 8 }}>
         {busy ? <LoaderCircle size={16} className="spin" /> : null}
-        {busy ? "Saving…" : pickup ? "Mark picked up" : "Mark delivered"}
+        {busy ? "Saving…" : pickup ? "Mark picked up" : "Mark shipped out"}
       </button>
     </form>
   );

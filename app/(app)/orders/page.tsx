@@ -100,7 +100,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     : week
       ? `${done ? "Done" : "Placed"} the week of ${md(week)}`
       : from || to
-        ? `${done ? "Picked up or delivered" : "Placed"} ${from ? md(from) : "…"} – ${to ? md(to) : "today"}`
+        ? `${done ? "Picked up or shipped out" : "Placed"} ${from ? md(from) : "…"} – ${to ? md(to) : "today"}`
         : null;
   const what = stuck
     ? "Waiting over a day"
@@ -109,7 +109,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       : open
         ? "Open orders"
         : done && !when
-          ? "Picked up or delivered"
+          ? "Picked up or shipped out"
           : null;
   const summary = [what, when, branchName].filter(Boolean).join(" · ");
   const keepDesk = sp.from_desk === "1";
@@ -188,6 +188,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <span className="t">{orderNo(o.order_no)}</span>
                     <span className="row" style={{ gap: 6 }}>
                       {emp ? <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} /> : null}
+                      {emp && o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill warn">Waiting on payment</span> : null}
                       {emp && stageOf(o) ? (
                         <span className={STAGES[stageOf(o)!].pill}>{STAGES[stageOf(o)!].short}</span>
                       ) : (

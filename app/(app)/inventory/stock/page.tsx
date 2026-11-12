@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CircleAlert, CircleCheck, ClipboardCheck, ExternalLink, ListChecks, RefreshCw, Truck } from "lucide-react";
+import { CircleAlert, CircleCheck, ClipboardCheck, ExternalLink, ListChecks, RefreshCw, Send, Truck } from "lucide-react";
 import { todayCentral } from "@/lib/sale";
 import { requirePerm } from "@/lib/session";
 import { hubLock } from "@/lib/access";
@@ -8,6 +8,7 @@ import { Submit } from "@/components/forms";
 import { InventoryList } from "@/components/inventory-list";
 import { HubNav } from "@/components/inventory/hub-nav";
 import { ago, branchStock, inventorySheets, needsReorder } from "@/lib/inventory/view";
+import { canRequestReorder, canSetRop, purchasingContact, soldByProduct } from "@/lib/inventory/reorder";
 import { stockChange, syncNow } from "../actions";
 import type { Category } from "@/lib/types";
 
@@ -45,12 +46,17 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const sheet = live.find((s) => s.branch_id === sp.b) ?? live.find((s) => s.branch_id === profile.branch_id) ?? live[0];
   const branch = sheet.branch_id;
   const today = todayCentral();
-  const [rows, spotRes, incomingRes, recRes] = await Promise.all([
+  const [rows, spotRes, incomingRes, recRes, sold, buyer, reqRes] = await Promise.all([
     branchStock(supabase, branch),
     supabase.from("inventory_counts").select("id", { count: "exact", head: true }).eq("branch_id", branch).eq("kind", "spot").eq("status", "open").lt("day", today),
     supabase.from("inbound_deliveries").select("id", { count: "exact", head: true }).eq("branch_id", branch).eq("status", "expected"),
     supabase.from("inventory_counts").select("id").eq("branch_id", branch).eq("kind", "reconcile").eq("status", "open").limit(1),
+    soldByProduct(supabase, branch, 60),
+    purchasingContact(supabase),
+    supabase.from("reorder_requests").select("id", { count: "exact", head: true }).eq("branch_id", branch).eq("status", "open"),
   ]);
+  const openRequests = reqRes.error ? 0 : (reqRes.count ?? 0);
+  const noRop = rows.filter((r) => r.reorder_point === null).length;
   const spotMissed = spotRes.count ?? 0;
   const incoming = incomingRes.count ?? 0;
   const openRec = (recRes.data ?? []).length > 0;
@@ -106,6 +112,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             <span className="tiny faint">{incoming ? `${incoming} on the way` : "Add a truck that's coming"}</span>
           </span>
         </Link>
+        <Link href={`/inventory/reorders?b=${branch}`} className="inv-tool">
+          <Send size={20} />
+          <span className="grow">
+            <b>Reorder requests</b>
+            <span className="tiny faint">{openRequests ? `${openRequests} waiting on purchasing` : `What's been asked of ${buyer.name.split(" ")[0]}`}</span>
+          </span>
+          {openRequests ? <span className="dot-badge static">{openRequests}</span> : null}
+        </Link>
         <Link href={`/inventory/counts?b=${branch}`} className="inv-tool">
           <ListChecks size={20} />
           <span className="grow">
@@ -146,6 +160,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           <div><b>{reserved}</b><span>with stock reserved</span></div>
           <div className={reorder ? "warn" : ""}><b>{reorder}</b><span>at reorder point</span></div>
           <div><b>{uncounted}</b><span>not counted</span></div>
+          <div className={noRop ? "warn" : ""}><b>{noRop}</b><span>no reorder point</span></div>
         </div>
         <p className="tiny faint" style={{ margin: 0 }}>
           Counts saved here reach the spreadsheet in seconds. Changes made on the spreadsheet show here within 2 minutes.
@@ -155,7 +170,19 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         </p>
       </section>
 
-      <InventoryList rows={rows} branch={branch} categories={(catRows ?? []) as Category[]} action={stockChange} initialFilter={sp.f ?? "all"} sheetUrl={sheet.share_url} />
+      <InventoryList
+        rows={rows}
+        branch={branch}
+        branchName={branchName(branch)}
+        categories={(catRows ?? []) as Category[]}
+        action={stockChange}
+        initialFilter={sp.f ?? "all"}
+        sheetUrl={sheet.share_url}
+        sold60={Object.fromEntries(sold)}
+        canRop={canSetRop(profile, branch)}
+        canReorder={canRequestReorder(profile)}
+        buyer={buyer.name}
+      />
     </main>
   );
 }

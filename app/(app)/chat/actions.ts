@@ -170,6 +170,25 @@ export async function chatJoin(channel: string, join: boolean): Promise<R> {
   return error ? fail(error) : { ok: true };
 }
 
+/** Deletes a direct message for you (0064): it comes back, with only new messages, when someone sends one. */
+export async function chatHide(channel: string): Promise<R> {
+  const { supabase } = await requireEmployee();
+  const { error } = await supabase.rpc("chat_hide", { p_channel: channel });
+  revalidatePath("/chat", "layout");
+  if (error && /chat_hide|function|schema cache/i.test(error.message)) return { ok: false, error: "Deleting a chat needs the 0064 database update first. Ask Jeremiah to run it." };
+  return error ? fail(error) : { ok: true };
+}
+
+/** Admins: bring back a deleted direct message (history included) for that person. */
+export async function chatRestore(form: FormData) {
+  const { supabase } = await requireAdmin();
+  const channel = String(form.get("channel") ?? "");
+  const user = String(form.get("user") ?? "");
+  const { error } = await supabase.rpc("chat_restore", { p_channel: channel, p_user: user });
+  revalidatePath("/chat", "layout");
+  redirect(`/chat/deleted?${error ? `err=${encodeURIComponent(error.message)}` : "msg=Restored."}`);
+}
+
 // ------------------------------------------------------------------ making conversations
 
 export async function chatStartDm(users: string[]): Promise<R<{ id: string }>> {

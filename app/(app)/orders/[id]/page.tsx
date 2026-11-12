@@ -217,7 +217,7 @@ export default async function OrderDetailPage({
       {canEdit ? (
         <Link href={`/orders/${order.id}/edit`} className="btn dark block edit-order-top">
           <PencilLine size={17} /> {order.status === "completed" ? "Correct this order (admin)" : "Edit order"}
-          <span className="tiny faint">{order.status === "completed" ? "Already picked up or delivered: fixes stock and the invoice" : "Add items, change or remove quantities"}</span>
+          <span className="tiny faint">{order.status === "completed" ? "Already picked up or shipped out: fixes stock and the invoice" : "Add items, change or remove quantities"}</span>
         </Link>
       ) : null}
 

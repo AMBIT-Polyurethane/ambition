@@ -3430,3 +3430,41 @@ button.chat-person { cursor: pointer; }
   8% { opacity: .95; }
   100% { transform: translate3d(var(--drift), 105vh, 0) rotate(var(--spin)); opacity: .2; }
 }
+
+/* ---------- Stock: reorder points, sold in 60 days, reorder requests (0064) ---------- */
+.inv-stats { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+.inv-row.inv-wide { grid-template-columns: minmax(0, 1fr) 58px 62px 66px 70px 62px; }
+.inv-row.inv-wide.pick { grid-template-columns: 22px minmax(0, 1fr) 58px 62px 66px 70px 62px; }
+.inv-row.inv-wide.pick input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--red); }
+.inv-plain { cursor: default; }
+label.inv-plain { cursor: pointer; }
+label.inv-plain:hover { background: var(--s2); }
+label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent); }
+.inv-row .show-sm { display: none; }
+.rop-in { width: 64px; text-align: right; padding: 6px 8px; margin-left: auto; font-weight: 750; }
+.rop-in.dirty { border-color: var(--red); box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 22%, transparent); }
+.rop-in.blank { border-style: dashed; }
+.inv-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.inv-mode { gap: 10px; }
+.inv-bar { position: sticky; bottom: calc(var(--tabbar, 0px) + env(safe-area-inset-bottom) + 10px); z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin-top: 10px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line-hover); box-shadow: var(--shadow); }
+.rr-qty-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 12px; }
+.rr-qty-in { display: flex; align-items: center; gap: 6px; }
+.rr-qty-in .input { width: 80px; text-align: right; font-weight: 750; }
+.rr-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.rr-table th { text-align: right; font-size: 11px; font-weight: 750; color: var(--text3); padding: 8px 10px; }
+.rr-table th:first-child, .rr-table td:first-child { text-align: left; }
+.rr-table td { text-align: right; padding: 10px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.rr-table td b.q { font-size: 16px; }
+@media (max-width: 520px) {
+  .inv-row.inv-wide { grid-template-columns: minmax(0, 1fr) 52px 60px 50px; }
+  .inv-row.inv-wide.pick { grid-template-columns: 22px minmax(0, 1fr) 52px 60px 50px; }
+  .inv-row .hide-sm { display: none; }
+  .inv-row .show-sm { display: inline; }
+  .rop-in { width: 56px; }
+  .rr-table .hide-sm { display: none; }
+}
+
+/* Chat (0064): one-tap reactions (heart, thumbs up, laugh, cry) on hover; on phones they're first in the smiley menu. */
+.chat-tools .chat-fast { font-size: 16px; line-height: 1; }
+.chat-menu.chat-emoji button:nth-child(-n + 4) { font-size: 24px; }
+@media (hover: none) { .chat-tools .chat-fast { display: none; } }

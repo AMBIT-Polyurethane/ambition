@@ -28,7 +28,7 @@ export async function setOrderStatus(form: FormData) {
   if (!STATUSES.includes(status)) return;
   if (status === "completed") {
     const { count } = await s.supabase.from("order_files").select("id", { count: "exact", head: true }).eq("order_id", id).eq("kind", "bol");
-    if (!count) back(id, "err", "Attach the signed BOL first: use Mark delivered / Mark picked up on the order desk card.");
+    if (!count) back(id, "err", "Attach the signed BOL first: use Mark shipped out / Mark picked up on the order desk card.");
   }
   await s.supabase.from("orders").update({ status }).eq("id", id);
   await kickForOrder(s.supabase, id, `order ${status}`);
@@ -346,6 +346,17 @@ export async function creditDecision(form: FormData) {
   await sendDeskNotice(s.supabase, id, approve ? "ready_to_schedule" : "credit_hold");
   const flags = pay.p_prepaid ? "customer has already paid" : [pay.p_cod ? "COD only" : "", pay.p_no_checks ? "no checks" : ""].filter(Boolean).join(", ");
   back(id, "msg", approve ? `Released${flags ? ` (${flags})` : ""}. The order desk can schedule it now.` : "Put on credit hold. The rep and the order desk were told.");
+}
+
+/** Accounting, at the credit check: waiting on the customer's payment before releasing (0064). */
+export async function payWaiting(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  const on = String(form.get("on") ?? "1") === "1";
+  const { error } = await s.supabase.rpc("order_pay_waiting", { p_order: id, p_on: on });
+  if (error) back(id, "err", /order_pay_waiting|function|schema cache/i.test(error.message) ? "Waiting on customer payment needs the 0064 database update first. Ask Jeremiah to run it." : error.message);
+  back(id, "msg", on ? "Marked Waiting on customer payment. When it comes in, release the order (Customer Has Already Paid is ticked for you)." : "Took off Waiting on customer payment.");
 }
 
 /** CRM: delivery or pickup date. The customer is emailed that it's approved and scheduled. */

@@ -164,7 +164,7 @@ export function DeskDashboard({
           <span className="s">{rangeLabel}</span>
         </Link>
         <Link className="dash-tile" href={list({ done: "1", from: stats.first, to: stats.today })}>
-          <span className="l">Picked up or delivered</span>
+          <span className="l">Picked up or shipped out</span>
           <span className="v">{stats.completed.toLocaleString("en-US")}</span>
           <span className="s">{rangeLabel}{stats.cancelled ? ` · ${stats.cancelled} cancelled` : ""}</span>
         </Link>

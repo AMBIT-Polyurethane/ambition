@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { initials } from "@/lib/format";
 import { canListen, useListen } from "@/components/ops/ai/voice";
 import {
-  chatCatchUp, chatDelete, chatDraft, chatEdit, chatJoin, chatMessages, chatNotify, chatPin, chatPost, chatReact, chatRead, chatSetMembers, chatThread,
+  chatCatchUp, chatDelete, chatDraft, chatEdit, chatHide, chatJoin, chatMessages, chatNotify, chatPin, chatPost, chatReact, chatRead, chatSetMembers, chatThread,
   chatUpdateChannel, todoAdd,
 } from "@/app/(app)/chat/actions";
 import type { ChatFile, ChatMsg, Staff } from "@/lib/chat";
@@ -29,7 +29,9 @@ export type RoomInfo = {
   order: { id: string; no: number; company: string; status: string } | null;
 };
 
-const QUICK = ["👍", "✅", "👀", "🙏", "🔥", "❤️", "😂", "🎉"];
+/** One tap: heart, thumbs up, laugh, cry. The rest are behind the smiley. */
+const FAST = ["❤️", "👍", "😂", "😢"];
+const QUICK = [...FAST, "✅", "👀", "🙏", "🔥", "🎉", "😮", "💯", "👏"];
 const TONES = ["#E33527", "#2563EB", "#0D9488", "#7C3AED", "#DB2777", "#CA8A04", "#16A34A", "#0891B2", "#4F46E5", "#EA580C"];
 const tone = (id: string | null) => TONES[[...(id ?? "x")].reduce((a, c) => a + c.charCodeAt(0), 0) % TONES.length];
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" });
@@ -295,6 +297,7 @@ export function ChatRoom({
             onJoin={async (j) => { const r = await chatJoin(room.id, j); if (r.ok) { setMember(j); if (!j) router.push("/chat"); } else setError(r.error); }}
             onMembers={async (add, remove) => { const r = await chatSetMembers(room.id, add, remove); if (r.ok) setMembers((m) => [...new Set([...m.filter((x) => !remove.includes(x)), ...add])]); else setError(r.error); await refreshRef.current(); }}
             onSave={async (d) => { const r = await chatUpdateChannel(room.id, d); if (!r.ok) setError(r.error); else router.refresh(); }}
+            onDeleteChat={async () => { const r = await chatHide(room.id); if (r.ok) router.push("/chat?msg=Chat+deleted"); else setError(r.error); }}
           />
         ) : null}
 
@@ -458,7 +461,10 @@ function Message({
       </div>
       {m.deleted_at || editing !== null ? null : (
         <div className={`chat-tools${menu ? " open" : ""}`}>
-          <button type="button" className="iconbtn sm" aria-label="React" onClick={() => setMenu(menu === "react" ? null : "react")}><SmilePlus size={15} /></button>
+          {FAST.map((e) => (
+            <button key={e} type="button" className="iconbtn sm chat-fast" aria-label={`React ${e}`} onClick={() => onReact(e)}>{e}</button>
+          ))}
+          <button type="button" className="iconbtn sm" aria-label="More reactions" onClick={() => setMenu(menu === "react" ? null : "react")}><SmilePlus size={15} /></button>
           {inThread ? null : <button type="button" className="iconbtn sm" aria-label="Reply in thread" onClick={onThread}><MessageSquareReply size={15} /></button>}
           <button type="button" className="iconbtn sm" aria-label="More" onClick={() => setMenu(menu === "more" ? null : "more")}><MoreHorizontal size={15} /></button>
           {menu === "react" ? (
@@ -709,12 +715,14 @@ function Composer({
 // ------------------------------------------------------------------ settings
 
 function RoomSettings({
-  room, isAdmin, member, notify, staff, members, onNotify, onJoin, onMembers, onSave,
+  room, isAdmin, member, notify, staff, members, onNotify, onJoin, onMembers, onSave, onDeleteChat,
 }: {
   room: RoomInfo; isAdmin: boolean; member: boolean; notify: "all" | "mentions" | "none"; staff: Staff[]; members: string[];
   onNotify: (m: "all" | "mentions" | "none") => void; onJoin: (j: boolean) => void; onMembers: (add: string[], remove: string[]) => void;
   onSave: (d: { name?: string; about?: string; private?: boolean; archive?: boolean }) => void;
+  onDeleteChat: () => void;
 }) {
+  const [sure, setSure] = useState(false);
   const [name, setName] = useState(room.title);
   const [about, setAbout] = useState(room.about ?? "");
   const [add, setAdd] = useState("");
@@ -768,6 +776,20 @@ function RoomSettings({
         </div>
       ) : null}
       {member && room.kind !== "dm" ? <button type="button" className="btn sm dark" style={{ alignSelf: "flex-start" }} onClick={() => onJoin(false)}>Leave</button> : null}
+      {room.kind === "dm" && member ? (
+        <div className="field">
+          <span className="label">Delete this chat</span>
+          <span className="tiny muted">It&apos;s gone from your Chat list (for you only). If they send a new message, the chat comes back with just the new messages.</span>
+          {sure ? (
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn sm danger" onClick={onDeleteChat}><Trash2 size={14} /> Yes, delete it</button>
+              <button type="button" className="btn sm dark" onClick={() => setSure(false)}>Keep it</button>
+            </div>
+          ) : (
+            <button type="button" className="btn sm dark" style={{ alignSelf: "flex-start" }} onClick={() => setSure(true)}><Trash2 size={14} /> Delete chat</button>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

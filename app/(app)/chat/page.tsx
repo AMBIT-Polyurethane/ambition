@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageSquarePlus } from "lucide-react";
+import { CircleCheck, MessageSquarePlus, Trash2 } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { claudeReady } from "@/lib/ai/claude";
 import { myTodos, overview } from "@/lib/chat";
@@ -11,7 +11,8 @@ export const metadata = { title: "Chat" };
 export const dynamic = "force-dynamic";
 
 /** Team Chat: the list of conversations (on a computer, with search and notifications beside it). */
-export default async function ChatPage() {
+export default async function ChatPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const { supabase, profile } = await requireEmployee();
   const [{ rows, ready }, todos] = await Promise.all([overview(supabase), myTodos(supabase, profile.id)]);
   if (!ready) {
@@ -33,9 +34,13 @@ export default async function ChatPage() {
             Channels for each team or job, direct messages, and a conversation board on every order. @mention someone and it lands on their to-do list.
           </p>
         </div>
+        {sp.msg ? <div className="alert ok small" role="status"><CircleCheck size={16} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
         <Link href="/chat/new" className="btn"><MessageSquarePlus size={17} /> New message</Link>
         <AskChat aiReady={claudeReady()} />
         <div className="card"><PushToggle /></div>
+        {profile.role === "admin" ? (
+          <Link href="/chat/deleted" className="linkbtn small" style={{ alignSelf: "flex-start" }}><Trash2 size={14} /> Deleted direct messages (admins)</Link>
+        ) : null}
       </div>
     </main>
   );

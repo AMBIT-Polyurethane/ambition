@@ -41,7 +41,7 @@ export function customerProgress(o: Order): string | null {
   if (st === "scheduled" && o.scheduled_for) {
     return o.delivery_method === "pickup" ? "Ready for pickup on the scheduled date" : "Scheduled for delivery";
   }
-  if (st === "completed" || o.status === "completed") return o.delivery_method === "pickup" ? "Picked up" : "Delivered";
+  if (st === "completed" || o.status === "completed") return o.delivery_method === "pickup" ? "Picked up" : "Shipped out";
   if (st === "cancelled") return "Cancelled";
   return "Approved, AMBIT is processing it";
 }

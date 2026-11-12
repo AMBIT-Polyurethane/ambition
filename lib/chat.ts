@@ -92,9 +92,17 @@ export async function withExtras(db: SupabaseClient, rows: Omit<ChatMsg, "by" | 
   }));
 }
 
+/** A direct message you deleted (0064): what was in it before then stays hidden for you. */
+export async function clearedBefore(db: SupabaseClient, channel: string, me: string): Promise<number> {
+  const { data, error } = await db.from("chat_members").select("cleared_before").eq("channel_id", channel).eq("user_id", me).maybeSingle();
+  return error || !data ? 0 : Number((data as { cleared_before: number }).cleared_before ?? 0);
+}
+
 /** The latest messages in a conversation (top level), oldest first. before: older than that id. */
 export async function loadMessages(db: SupabaseClient, channel: string, me: string, names: Map<string, string>, opts: { before?: number; from?: number; limit?: number } = {}) {
+  const cleared = await clearedBefore(db, channel, me);
   let q = db.from("chat_messages").select(MSG_COLS).eq("channel_id", channel).is("parent_id", null).order("id", { ascending: false }).limit(opts.limit ?? 60);
+  if (cleared) q = q.gt("id", cleared);
   if (opts.before) q = q.lt("id", opts.before);
   if (opts.from) q = q.gte("id", opts.from);
   const { data } = await q;
@@ -105,7 +113,9 @@ export async function loadMessages(db: SupabaseClient, channel: string, me: stri
 /** A thread: the message and its replies. */
 export async function loadThread(db: SupabaseClient, parent: number, me: string, names: Map<string, string>) {
   const { data } = await db.from("chat_messages").select(MSG_COLS).or(`id.eq.${parent},parent_id.eq.${parent}`).order("id").limit(300);
-  return withExtras(db, (data ?? []) as Omit<ChatMsg, "by" | "reactions">[], me, names);
+  const rows = (data ?? []) as Omit<ChatMsg, "by" | "reactions">[];
+  const cleared = rows[0] ? await clearedBefore(db, rows[0].channel_id, me) : 0;
+  return withExtras(db, cleared ? rows.filter((r) => r.id > cleared) : rows, me, names);
 }
 
 /** The list of conversations (with unread counts). Empty until migration 0063 is run. */

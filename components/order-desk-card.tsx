@@ -1,7 +1,7 @@
 import { Check, CircleAlert, CircleCheck, FileText, Image as ImageIcon, MailX } from "lucide-react";
 import { Submit } from "@/components/forms";
 import { ClosedDateInput } from "@/components/holiday";
-import { approveWithoutEmail, creditDecision, notifyOverride, resendScheduledEmail, scheduleOrder } from "@/app/(app)/orders/actions";
+import { approveWithoutEmail, creditDecision, notifyOverride, payWaiting, resendScheduledEmail, scheduleOrder } from "@/app/(app)/orders/actions";
 import { CompleteForm, NumbersForm } from "@/components/order-file-forms";
 import { PayBoxes } from "@/components/pay-boxes";
 import { ItemVariance, VarianceLog, type VarianceData } from "@/components/item-variance";
@@ -87,7 +87,7 @@ export function OrderDeskCard({
   // Picked up / delivered. A corrected one waits at "Invoice update" but stays done (0046).
   const closed = o.status === "completed";
   const open = !closed;
-  // The item variance table sits before the Sales Order # step until that's saved, then before Delivered.
+  // The item variance table sits before the Sales Order # step until that's saved, then before Shipped out.
   const varyNow: "before_po" | "before_done" | null = !variance || !open || st === "customer" ? null : o.ambit_po ? "before_done" : "before_po";
   // Changes made before the Sales Order # was saved show on the first check; later ones on the final check.
   const early = (v: { stage: string | null }) => !v.stage || v.stage === "customer" || v.stage === "needs_po";
@@ -104,7 +104,7 @@ export function OrderDeskCard({
       <span>
         <b>CUSTOMER HAS ALREADY PAID</b>
         <br />
-        Nothing to collect when the order {pickup ? "is picked up" : "is delivered"}.
+        Nothing to collect when the order {pickup ? "is picked up" : "ships out"}.
       </span>
     </div>
   ) : payFlags.length ? (
@@ -119,7 +119,9 @@ export function OrderDeskCard({
       </span>
     </div>
   ) : null;
-  const payStart = { cod: Boolean(o.pay_cod || payDefaults?.cod), noChecks: Boolean(o.pay_no_checks || payDefaults?.noChecks), prepaid: paid };
+  // Waiting on the customer's payment (0064): once it's in, releasing starts with "Customer Has Already Paid" ticked.
+  const waitingPay = Boolean(o.pay_waiting_at) && o.credit_status !== "approved";
+  const payStart = { cod: Boolean(o.pay_cod || payDefaults?.cod), noChecks: Boolean(o.pay_no_checks || payDefaults?.noChecks), prepaid: paid || waitingPay };
   // Approve / confirm without the customer's email.
   const noEmail = (action: (f: FormData) => Promise<void>, label = "Customer Approved without Email") => (
     <form action={action}>
@@ -231,7 +233,16 @@ export function OrderDeskCard({
         ) : o.credit_status === "hold" ? (
           <span className="red">On hold: {o.credit_note} ({o.credit_by_name}, {dateTime(o.credit_at)})</span>
         ) : st === "credit" ? (
-          /^Check again/.test(o.credit_note ?? "") ? <b>{o.credit_note}</b> : "Waiting on accounting."
+          <>
+            {/^Check again/.test(o.credit_note ?? "") ? <b>{o.credit_note}</b> : "Waiting on accounting."}
+            {waitingPay ? (
+              <>
+                <br />
+                <b style={{ color: "var(--warn-text)" }}>Waiting on customer payment</b> · {o.pay_waiting_by_name ?? ""}
+                {o.pay_waiting_at ? ` · ${dateTime(o.pay_waiting_at)}` : ""}
+              </>
+            ) : null}
+          </>
         ) : null,
       action:
         credit && (st === "credit" || st === "hold") ? (
@@ -252,6 +263,15 @@ export function OrderDeskCard({
               <PayBoxes start={payStart} remembered={Boolean(payDefaults && (payDefaults.cod || payDefaults.noChecks) && !o.pay_cod && !o.pay_no_checks)} />
               <Submit className="btn sm block" pendingText="Releasing…">Release order</Submit>
             </form>
+            {st === "credit" ? (
+              <form action={payWaiting}>
+                <input type="hidden" name="id" value={o.id} />
+                <input type="hidden" name="on" value={waitingPay ? "0" : "1"} />
+                <Submit className={`btn sm ${waitingPay ? "dark" : "amber"} block`} pendingText="Saving…">
+                  {waitingPay ? "Payment's in: take off Waiting on customer payment" : "Waiting on customer payment"}
+                </Submit>
+              </form>
+            ) : null}
             {st !== "hold" ? (
               <details>
                 <summary className="linkbtn small">Put on credit hold</summary>
@@ -328,7 +348,7 @@ export function OrderDeskCard({
     },
     {
       key: "done",
-      title: pickup ? "Picked up" : "Delivered",
+      title: pickup ? "Picked up" : "Shipped out",
       done: closed,
       current: st === "scheduled",
       detail: closed ? (
@@ -357,6 +377,7 @@ export function OrderDeskCard({
         <div className="eyebrow">Order desk</div>
         <span className="row" style={{ gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {o.pay_prepaid ? <span className="pill ok">Paid</span> : null}
+          {o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill warn">Waiting on payment</span> : null}
           {o.pay_cod ? <span className="pill red">COD only</span> : null}
           {o.pay_no_checks ? <span className="pill red">No checks</span> : null}
           <span className={STAGES[st].pill}>{STAGES[st].short}</span>

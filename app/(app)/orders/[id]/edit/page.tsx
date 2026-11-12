@@ -46,7 +46,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
     .filter((p) => !carried || carried.has(p.id))
     .map((p) => ({ product_id: p.id, sku: p.sku, name: p.name, unit: p.unit }));
   const st = stageOf(order);
-  const where = order.delivery_method === "pickup" ? "picked up" : "delivered";
+  const where = order.delivery_method === "pickup" ? "picked up" : "shipped out";
   const next = closed
     ? `This order was already ${where}. Saving corrects stock${order.branch_id ? ` at ${order.branch_id.toUpperCase()}` : ""}: whatever you change goes back in and the new amount comes out (the spreadsheet updates on its next sync). Then the order desk updates the invoice, and if the total changed the credit team is emailed to collect or credit the difference. Credit isn't checked again, and the customer is emailed the updated order.`
     : st === "customer"

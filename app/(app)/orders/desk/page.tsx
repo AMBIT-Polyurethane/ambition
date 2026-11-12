@@ -101,7 +101,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
       />
       <p className="small muted" style={{ margin: 0 }}>
         {mine
-          ? "The orders you placed and your customers' orders, and where each one is: customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date → picked up or delivered."
+          ? "The orders you placed and your customers' orders, and where each one is: customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date → picked up or shipped out."
           : "Order placed → customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date and the customer is emailed."}
       </p>
 
@@ -151,6 +151,7 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
                         <span className="row" style={{ gap: 6, flex: "none" }}>
                           <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} />
                           {o.pay_prepaid ? <span className="pill ok">Paid</span> : null}
+                          {o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill warn">Waiting on payment</span> : null}
                           {o.pay_cod ? <span className="pill red">COD only</span> : null}
                           {o.pay_no_checks ? <span className="pill red">No checks</span> : null}
                           {o.scheduled_for && (tab.stage === "scheduled" || tab.stage === "completed") ? <span className="pill ok">{dateShort(o.scheduled_for)}</span> : null}
