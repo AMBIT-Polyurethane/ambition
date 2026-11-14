@@ -370,6 +370,9 @@ export async function roleCards({ db, profile, known, skip }: { db: Db; profile:
   });
   const out: BoardCard[] = [];
   if (w.spot && (own || skip.has("spot"))) out.push(card("spot", "Daily spot check", () => (own ? <SpotWidget db={db} branch={own.id} branchName={own.name} /> : null)));
+  // Daily Pulse (0068): your own, for anyone with a pulse department; the team's, for admins.
+  const pw = (profile as { pulse_dept?: string | null }).pulse_dept ? await import("@/components/pulse-widgets") : null;
+  if (pw) out.push(card("pulse", "Daily Pulse", () => <pw.PulseWidget db={db} profile={profile} />));
   if (w.queue) out.push(card("queue", "Your order desk", () => <QueueWidget db={db} />));
   if (w.credit) out.push(card("credit", "Credit approvals", () => <CreditWidget db={db} t={known.tax} />));
   if (w.goals) out.push(card("goals", "Your sales goals", () => <GoalsWidget db={db} profile={profile} due={profile.job_role === "sales_rep" ? known.due : null} />));
@@ -377,6 +380,8 @@ export async function roleCards({ db, profile, known, skip }: { db: Db; profile:
     out.push(card("calendar", "This week", () => (branch ? <CalendarWidget db={db} branch={branch} branchName={branchName} canAdd={w.spot || profile.role === "admin"} /> : null)));
   if (w.admin) {
     out.push(card("waiting", "Waiting on you", () => <WaitingWidget db={db} known={known} />));
+    const tw = await import("@/components/pulse-widgets");
+    out.push(card("pulseteam", "Team pulse", () => <tw.PulseTeamWidget db={db} />));
     out.push(card("teamgoals", "Sales staff goals", () => <TeamGoalsWidget db={db} team="sales" />));
     out.push(card("whgoals", "Warehouse goals", () => <TeamGoalsWidget db={db} team="warehouse" />));
     out.push(card("sales", "Sales", () => <SalesWidget db={db} />));

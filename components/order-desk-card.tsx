@@ -238,6 +238,9 @@ export function OrderDeskCard({
         ) : st === "credit" ? (
           <>
             {/^Check again/.test(o.credit_note ?? "") ? <b>{o.credit_note}</b> : "Waiting on accounting."}
+            {(o as typeof o & { credit_auto_note?: string | null }).credit_auto_note ? (
+              <><br /><span className="tiny"><b className="warn-text">Didn&apos;t release automatically:</b> {(o as typeof o & { credit_auto_note?: string | null }).credit_auto_note}</span></>
+            ) : null}
             {creditInfo ? (
               <>
                 <span className="credit-snap">
@@ -248,7 +251,7 @@ export function OrderDeskCard({
                 </span>
                 <span className="tiny faint">
                   {creditInfo.lastPaid ? `Last payment ${dateShort(creditInfo.lastPaid)}${creditInfo.lastPaidAmount ? ` (${money(creditInfo.lastPaidAmount)})` : ""}` : "No payment entered yet"}
-                  {" · "}<a href={`/credit/${creditInfo.companyId}?pay=1&order=${o.id}#pay`}>Record a payment</a> · <a href={`/credit/${creditInfo.companyId}`}>Credit page</a>
+                  {" · "}<a href={`/customers/${creditInfo.companyId}?pay=1`}>Record a payment</a> · <a href={`/customers/${creditInfo.companyId}`}>Customer dashboard</a>
                 </span>
               </>
             ) : null}

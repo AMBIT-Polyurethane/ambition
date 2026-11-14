@@ -6,6 +6,7 @@ import { ConfirmSubmit, Submit } from "@/components/forms";
 import { dateShort } from "@/lib/format";
 import { createTakeoff, deleteTemplate } from "./actions";
 import { STATUS_TEXT } from "@/lib/takeoff/calc";
+import { TakeoffDelete } from "@/components/takeoff/delete-row";
 
 export const metadata = { title: "Takeoff" };
 export const dynamic = "force-dynamic";
@@ -62,6 +63,7 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
   const templates = (tpl ?? []) as unknown as { id: string; template_name: string | null; name: string; updated_at: string; takeoff_sheets: { count: number }[]; takeoff_items: { count: number }[] }[];
   const rows = (data ?? []) as unknown as Row[];
   const today = new Date().toISOString().slice(0, 10);
+  const back = `/takeoff?${new URLSearchParams({ ...(f !== "all" ? { f } : {}), ...(q ? { q } : {}), ...(inWs && staff ? { ops: "1" } : {}) }).toString()}`.replace(/\?$/, "");
 
   return (
     <main className="shell wide">
@@ -163,15 +165,15 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
       ) : (
         <div className="list to-list">
           <div className="to-row head" aria-hidden="true">
-            <span>Job</span><span>Customer</span><span>Sheets</span><span>Status</span><span>Bid due</span><span>Updated</span>
+            <span>Job</span><span>Customer</span><span>Sheets</span><span>Status</span><span>Bid due</span><span>Updated</span><span />
           </div>
           {rows.map((r) => {
             const st = STATUS_TEXT[r.status] ?? STATUS_TEXT.in_progress;
             const late = r.due_date && r.due_date < today && r.status === "in_progress";
             return (
-              <Link key={r.id} href={`/takeoff/${r.id}`} className="to-row">
+              <div key={r.id} className="to-row">
                 <span className="col tight" style={{ minWidth: 0 }}>
-                  <b className="ellipsis">{r.name}</b>
+                  <Link href={`/takeoff/${r.id}`} className="to-open ellipsis"><b>{r.name}</b></Link>
                   <span className="tiny faint ellipsis">{r.address || `${r.takeoff_items[0]?.count ?? 0} items measured`}</span>
                 </span>
                 <span className="ellipsis muted">{r.customer || "–"}</span>
@@ -179,7 +181,8 @@ export default async function TakeoffListPage({ searchParams }: { searchParams: 
                 <span><span className={st.cls}>{st.label}</span></span>
                 <span className={late ? "warn-text" : "muted"}>{r.due_date ? dateShort(r.due_date) : "–"}</span>
                 <span className="tiny faint">{dateShort(r.updated_at)}{r.created_by_name ? ` · ${r.created_by_name.split(" ")[0]}` : ""}</span>
-              </Link>
+                <span className="to-del-cell"><TakeoffDelete id={r.id} name={r.name} back={back} /></span>
+              </div>
             );
           })}
         </div>

@@ -306,15 +306,24 @@ export async function setOrderPo(form: FormData) {
       );
     }
   }
-  if (!before?.credit_status) await sendDeskNotice(s.supabase, id, "credit_needed");
+  // 0068: the credit step can release itself (customer has a line of credit, nothing past due, the order fits the line).
+  let auto: { released?: boolean; reason?: string } = {};
+  if (!before?.credit_status) {
+    const { data: ar, error: arErr } = await s.supabase.rpc("credit_auto_release", { p_order: id });
+    if (!arErr) auto = (ar ?? {}) as { released?: boolean; reason?: string };
+    await sendDeskNotice(s.supabase, id, auto.released ? "ready_to_schedule" : "credit_needed");
+  }
   if (fileErr) back(id, "err", `Sales Order # and Invoice # saved, but the invoice file wasn't added: ${fileErr}`);
+  if (auto.released) {
+    back(id, "msg", `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved. Credit released automatically (line of credit, nothing past due, fits the line). Schedule it now.`);
+  }
   const added = files.length ? ` ${files.length === 1 ? "Invoice file" : `${files.length} invoice files`} added.` : "";
   back(
     id,
     "msg",
     before?.credit_status
       ? `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added}`
-      : `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added} Accounting has been asked for the credit check.`,
+      : `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added} Accounting has been asked for the credit check${auto.reason && auto.reason !== "off" ? ` (not released automatically: ${auto.reason})` : ""}.`,
   );
 }
 

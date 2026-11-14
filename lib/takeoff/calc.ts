@@ -216,13 +216,24 @@ export function assembly(item: TItem): string {
 }
 
 /** Reads a typed length: 12'-6", 12' 6", 12.5, 150" -> feet. */
+/** Inches as people write them: 5.5, .5, 5 1/2, 5-1/2, 1/2, 3.5" or 3 1/2 in. Null when it isn't a number yet. */
+export function parseInches(t: string): number | null {
+  const s = t.trim().replace(/[”″"]/g, "").replace(/\s*(in|inch|inches)$/i, "").trim();
+  if (!s) return null;
+  const m = /^(?:(\d+\.?\d*|\.\d+)|(\d+)[\s-]+(\d+)\/(\d+)|(\d+)\/(\d+))$/.exec(s);
+  if (!m) return null;
+  if (m[1] !== undefined) return Number(m[1]);
+  if (m[2] !== undefined) return Number(m[4]) ? Number(m[2]) + Number(m[3]) / Number(m[4]) : null;
+  return Number(m[6]) ? Number(m[5]) / Number(m[6]) : null;
+}
+
 export function parseLength(t: string): number | null {
   const s = t.trim().replace(/[’′]/g, "'").replace(/[”″]/g, '"');
   if (!s) return null;
-  const fi = /^(\d+(?:\.\d+)?)\s*'\s*-?\s*(\d+(?:\.\d+)?)?\s*(?:"|in)?$/i.exec(s);
-  if (fi) return Number(fi[1]) + (fi[2] ? Number(fi[2]) / 12 : 0);
-  const inch = /^(\d+(?:\.\d+)?)\s*(?:"|in|inch|inches)$/i.exec(s);
-  if (inch) return Number(inch[1]) / 12;
+  // 9'-6", 9' 6 1/2", 9'6.5"
+  const fi = /^(\d+(?:\.\d+)?)\s*'\s*-?\s*([\d./ -]*?)\s*(?:"|in)?$/i.exec(s);
+  if (fi) { const inch = fi[2].trim() ? parseInches(fi[2]) : 0; return inch === null ? null : Number(fi[1]) + inch / 12; }
+  if (/(?:"|in|inch|inches)$/i.test(s)) { const inch = parseInches(s); if (inch !== null) return inch / 12; }
   const ft = /^(\d+(?:\.\d+)?)\s*(?:ft|feet)?$/i.exec(s);
   if (ft) return Number(ft[1]);
   return null;

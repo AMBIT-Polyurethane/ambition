@@ -22,6 +22,8 @@ export default async function CustomerCreditPage({ params, searchParams }: { par
   const sp = await searchParams;
   const { supabase, profile } = await requireEmployee();
   if (!canCredit(profile)) redirect("/");
+  // 0068: one customer lives on the customer dashboard now.
+  if (!sp.old) redirect(`/customers/${id}?from=credit${sp.msg ? `&msg=${encodeURIComponent(sp.msg)}` : ""}${sp.err ? `&err=${encodeURIComponent(sp.err)}` : ""}${sp.pay ? "&pay=1" : ""}`);
   const { data: co } = await supabase.from("companies").select("*").eq("id", id).maybeSingle();
   if (!co) notFound();
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });

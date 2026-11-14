@@ -19,6 +19,36 @@ async function load(db: SupabaseClient, id: number) {
   return { r: r as PrRow | null, lines: (lines ?? []) as PrLine[] };
 }
 
+export type SmartPrfInput = {
+  customer_kind: "existing" | "new" | "previous"; company_id: string | null; customer: Record<string, string>; product_lines: string[]; branch: string; note: string; valid_days: number;
+  lines: { product_id: string; price: string; basis: string; volume: string }[];
+};
+
+/** The smart price request (existing or new customer, every customer field, product lines, per-lb / per-sq-ft prices). */
+export async function submitSmartPrf(input: SmartPrfInput): Promise<{ ok: false; error: string } | { ok: true; id: number; auto: number; lines: number }> {
+  const s = await getSession();
+  if (!s?.profile || !(can(s.profile, "price_requests") || s.profile.role === "admin")) return { ok: false, error: "You don't have access to price requests." };
+  const lines = input.lines.filter((l) => UUID.test(l.product_id) && Number(l.price) > 0).map((l) => ({ product_id: l.product_id, price: Math.round(Number(l.price) * 10000) / 10000, basis: l.basis, volume: l.volume.trim().slice(0, 80) }));
+  const { data, error } = await s.supabase.rpc("price_request_submit2", { p: { ...input, lines } });
+  if (error) return { ok: false, error: missing(error.message) && !/Fill in|Pick|Add/.test(error.message) ? "The smart price request needs the 0068 database update first." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  const res = data as { id: number; lines: number; auto: number };
+  const { r, lines: saved } = await load(s.supabase, res.id);
+  if (r) {
+    if (res.auto < res.lines) await tellApprovers(s.supabase, r, saved).catch(() => null);
+    else await tellRep(s.supabase, r, saved).catch(() => null);
+  }
+  revalidatePath("/price-requests", "layout");
+  return { ok: true, id: res.id, auto: res.auto, lines: res.lines };
+}
+
+/** What an existing customer pays now (shown beside each item while quoting). */
+export async function customerPricesFor(company: string): Promise<{ product_id: string; price: number; basis: "unit" | "lb" | "sqft" }[]> {
+  const s = await getSession();
+  if (!s?.profile || !UUID.test(company)) return [];
+  const { data } = await s.supabase.from("customer_prices").select("product_id, price, basis").eq("company_id", company);
+  return (data ?? []) as { product_id: string; price: number; basis: "unit" | "lb" | "sqft" }[];
+}
+
 export type PrInput = { companyId: string; companyName: string; contact: string; branch: string; note: string; validDays: number; lines: { product_id: string; price: number; volume: string }[] };
 
 export async function submitPriceRequest(input: PrInput): Promise<{ ok: false; error: string } | { ok: true; id: number; auto: number; lines: number }> {

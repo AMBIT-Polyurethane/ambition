@@ -99,9 +99,12 @@ export async function deleteTakeoff(form: FormData) {
   const { data: files } = await s.supabase.from("takeoff_files").select("path").eq("takeoff_id", id);
   const paths = ((files ?? []) as { path: string }[]).map((f) => f.path);
   if (paths.length) await s.supabase.storage.from("plans").remove(paths);
-  await s.supabase.from("takeoffs").delete().eq("id", id);
+  const { error } = await s.supabase.from("takeoffs").delete().eq("id", id);
   revalidatePath("/takeoff");
-  redirect("/takeoff?msg=" + encodeURIComponent("Takeoff deleted."));
+  // Back to the list as it was (filter, search, the contractor's workspace).
+  const to = clip(form.get("to"), 300);
+  const back = to.startsWith("/takeoff") && !to.startsWith("/takeoff/") ? to : "/takeoff";
+  redirect(`${back}${back.includes("?") ? "&" : "?"}${error ? "err=" + encodeURIComponent(error.message) : "msg=" + encodeURIComponent("Takeoff deleted.")}`);
 }
 
 /** Saves a copy of this takeoff as a template (plans, shapes and quantities), for plans built over and over. */

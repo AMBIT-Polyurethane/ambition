@@ -55,6 +55,7 @@ import {
   itemTotals,
   mainQty,
   num,
+  parseInches,
   parseLength,
   pitchFactor,
   polygonArea,
@@ -1954,6 +1955,9 @@ function ItemEditor({ draft, used, areas, onCancel, onSave, onDelete }: { draft:
   const [sure, setSure] = useState(false);
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }));
   const numOrNull = (v: string) => (v.trim() === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+  // What's typed stays exactly as typed ("3.", "5 1/2"); the number underneath updates once it reads as one.
+  const [thk, setThk] = useState(draft.thickness_in === null || draft.thickness_in === undefined ? "" : String(draft.thickness_in));
+  const [ded, setDed] = useState(draft.deduct_sqft ? String(draft.deduct_sqft) : "");
   return (
     <div className="to-modal" role="dialog" aria-modal="true" aria-label={d.id ? "Edit item" : "New item"} onClick={onCancel}>
       <form
@@ -1971,7 +1975,7 @@ function ItemEditor({ draft, used, areas, onCancel, onSave, onDelete }: { draft:
         {!d.id ? (
           <div className="to-presets">
             {PRESETS.map((p) => (
-              <button key={p.label} type="button" className="chip sm" onClick={() => setD((x) => ({ ...x, material: null, thickness_in: null, r_value: null, height_ft: null, pitch: null, shape: null, area_code: null, ...p.item }))}>{p.label}</button>
+              <button key={p.label} type="button" className="chip sm" onClick={() => { setD((x) => ({ ...x, material: null, thickness_in: null, r_value: null, height_ft: null, pitch: null, shape: null, area_code: null, ...p.item })); setThk(p.item.thickness_in ? String(p.item.thickness_in) : ""); }}>{p.label}</button>
             ))}
           </div>
         ) : null}
@@ -2023,7 +2027,9 @@ function ItemEditor({ draft, used, areas, onCancel, onSave, onDelete }: { draft:
           {d.kind !== "count" ? (
             <label className="field">
               <span className="label">Thickness (inches)</span>
-              <input className="input sm" inputMode="decimal" value={d.thickness_in ?? ""} onChange={(e) => set({ thickness_in: numOrNull(e.target.value) })} placeholder={isFoam(d.material) ? "5.5" : "Optional"} />
+              <input className={`input sm${thk.trim() && parseInches(thk) === null ? " bad" : ""}`} inputMode="decimal" value={thk}
+                onChange={(e) => { const v = e.target.value.replace(/[^\d./ "-]/g, ""); setThk(v); set({ thickness_in: parseInches(v) }); }}
+                placeholder={isFoam(d.material) ? "5.5 or 5 1/2" : "Optional"} />
             </label>
           ) : null}
           <label className="field">
@@ -2052,7 +2058,7 @@ function ItemEditor({ draft, used, areas, onCancel, onSave, onDelete }: { draft:
           {d.kind === "linear" && (d.height_ft || d.shape === "gable") ? (
             <label className="field">
               <span className="label">Openings to take out (sq ft)</span>
-              <input className="input sm" inputMode="decimal" value={d.deduct_sqft ?? ""} onChange={(e) => set({ deduct_sqft: numOrNull(e.target.value) ?? 0 })} placeholder="Windows and doors" />
+              <input className="input sm" inputMode="decimal" value={ded} onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setDed(v); set({ deduct_sqft: numOrNull(v) ?? 0 }); }} placeholder="Windows and doors" />
             </label>
           ) : null}
           {d.kind === "area" ? (
