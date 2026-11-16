@@ -2618,6 +2618,12 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .edit-changes { margin: 4px 0 4px; padding-left: 18px; }
 .edit-changes li { margin: 1px 0; }
 .edit-row.removed .t, .edit-row.removed .s { text-decoration: line-through; opacity: 0.55; }
+.edit-lot { margin-top: 8px; width: 100%; max-width: 520px; }
+@media (max-width: 600px) {
+  .edit-row { flex-wrap: wrap; }
+  .edit-row > .grow { flex: 1 1 100%; }
+  .edit-row > .grow .t { white-space: normal; }
+}
 
 /* Custom foam order (staff): pick exact drums by lot / batch */
 .foam-prod > .product { padding-bottom: 10px; }

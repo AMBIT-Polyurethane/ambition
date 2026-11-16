@@ -14,6 +14,9 @@ export const optionText = (o: LotOption, qty: number, after = false) =>
     o.current ? (after ? "what's recorded now" : "picked by the app") : `${Math.max(0, o.available)} left`, o.expired ? "EXPIRED" : null, !o.current && o.available < qty ? "not enough" : null]
     .filter(Boolean).join(" · ");
 
+/** The lot the app picked was taken off FOAM LOTS (moved to DAMAGED DRUMS, say): someone has to pick the real one. */
+const gone = (l: LotLine) => l.lot_id !== null && !l.options.some((o) => o.lot_id === l.lot_id);
+
 /** One select per drum line, starting on the lot the app picked. Its name is lot:<line id>. */
 export function LotPickupCheck({ lines }: { lines: LotLine[] }) {
   if (!lines.length) return null;
@@ -24,11 +27,14 @@ export function LotPickupCheck({ lines }: { lines: LotLine[] }) {
       {lines.map((l) => (
         <label key={l.line} className="lotcheck-row">
           <span className="col tight" style={{ minWidth: 0 }}><b className="small">{l.qty} {l.unit}{l.qty === 1 ? "" : "s"} · {l.item}</b><span className="tiny faint">{l.sku}</span></span>
-          <select className="select sm" name={`lot:${l.line}`} defaultValue={String(l.lot_id ?? "")} aria-label={`Lot for ${l.item}`}>
+          <select className="select sm" name={`lot:${l.line}`} defaultValue={gone(l) ? "" : String(l.lot_id ?? "")} required={gone(l)} aria-label={`Lot for ${l.item}`}>
             {l.lot_id === null ? <option value="">No lot picked</option> : null}
-            <optgroup label="Same product">
-              {l.options.filter((o) => o.same_type).map((o) => <option key={o.lot_id} value={o.lot_id} disabled={!o.current && o.available < l.qty}>{optionText(o, l.qty)}</option>)}
-            </optgroup>
+            {gone(l) ? <option value="" disabled>Lot {l.lot_no || "(no lot #)"} isn&apos;t on FOAM LOTS any more: pick the lot going out</option> : null}
+            {l.options.some((o) => o.same_type) ? (
+              <optgroup label="Same product">
+                {l.options.filter((o) => o.same_type).map((o) => <option key={o.lot_id} value={o.lot_id} disabled={!o.current && o.available < l.qty}>{optionText(o, l.qty)}</option>)}
+              </optgroup>
+            ) : null}
             {l.options.some((o) => !o.same_type) ? (
               <optgroup label="Loaded a different product instead">
                 {l.options.filter((o) => !o.same_type).map((o) => <option key={o.lot_id} value={o.lot_id} disabled={o.available < l.qty}>{optionText(o, l.qty)}</option>)}
@@ -60,11 +66,14 @@ export function LotFixAfter({ orderId, lines }: { orderId: string; lines: LotLin
             <b className="small">{l.qty} {l.unit}{l.qty === 1 ? "" : "s"} · {l.item}</b>
             <span className="tiny faint">Recorded: {l.sku} · Lot {l.lot_no || "(none)"}</span>
           </span>
-          <select className="select sm" name="lot" defaultValue={String(l.lot_id ?? "")} aria-label={`Lot that really went out for ${l.item}`}>
-            {l.lot_id === null ? <option value="">No lot recorded</option> : null}
-            <optgroup label="Same product">
-              {l.options.filter((o) => o.same_type).map((o) => <option key={o.lot_id} value={o.lot_id}>{optionText(o, l.qty, true)}</option>)}
-            </optgroup>
+          <select className="select sm" name="lot" defaultValue={gone(l) ? "" : String(l.lot_id ?? "")} required aria-label={`Lot that really went out for ${l.item}`}>
+            {l.lot_id === null ? <option value="" disabled>No lot recorded: pick one</option> : null}
+            {gone(l) ? <option value="" disabled>Lot {l.lot_no || "(no lot #)"} isn&apos;t on FOAM LOTS any more: pick one</option> : null}
+            {l.options.some((o) => o.same_type) ? (
+              <optgroup label="Same product">
+                {l.options.filter((o) => o.same_type).map((o) => <option key={o.lot_id} value={o.lot_id}>{optionText(o, l.qty, true)}</option>)}
+              </optgroup>
+            ) : null}
             {l.options.some((o) => !o.same_type) ? (
               <optgroup label="A different product went out">
                 {l.options.filter((o) => !o.same_type).map((o) => <option key={o.lot_id} value={o.lot_id}>{optionText(o, l.qty, true)}</option>)}

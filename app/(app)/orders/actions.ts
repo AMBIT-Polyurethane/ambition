@@ -150,7 +150,7 @@ export async function approveWithoutEmail(form: FormData) {
 }
 
 // ------------------------------------------------------------------ editing an order (0041)
-export type EditLine = { id?: number | null; product_id?: string | null; qty: number };
+export type EditLine = { id?: number | null; product_id?: string | null; qty: number; lot_id?: number | null };
 
 /**
  * AMBIT staff: add items or change / remove quantities on an open order. Then whoever's next hears about it:
@@ -164,11 +164,13 @@ export async function editOrder(input: { id: string; lines: EditLine[]; note: st
   }
   const id = String(input.id ?? "");
   const lines = (input.lines ?? [])
-    .map((l) => ({ id: l.id ?? null, product_id: l.product_id ?? null, qty: Math.round(Number(l.qty) * 100) / 100 }))
+    .map((l) => ({ id: l.id ?? null, product_id: l.product_id ?? null, qty: Math.round(Number(l.qty) * 100) / 100, lot_id: Number(l.lot_id) > 0 ? Number(l.lot_id) : null }))
     .filter((l) => Number.isFinite(l.qty) && l.qty >= 0 && (l.id || l.product_id));
-  const { data, error } = await s.supabase.rpc("order_edit", { p_order: id, p_lines: lines, p_note: String(input.note ?? "").slice(0, 500) || null });
-  if (error) return { ok: false, error: error.message };
-  const r = (data ?? {}) as { revision?: number; invoice_update?: boolean; customer?: boolean; closed?: boolean; changes?: OrderChange[] };
+  // Spray foam on a completed order: each line goes on the exact lot picked for it (0070).
+  const withLots = lines.some((l) => l.lot_id);
+  const { data, error } = await s.supabase.rpc(withLots ? "order_edit_lots" : "order_edit", { p_order: id, p_lines: lines, p_note: String(input.note ?? "").slice(0, 500) || null });
+  if (error) return { ok: false, error: /order_edit_lots/.test(error.message) ? "Picking the lot needs the 0070 database update first (Supabase > SQL Editor)." : error.message };
+  const r = (data ?? {}) as { revision?: number; invoice_update?: boolean; customer?: boolean; closed?: boolean; changes?: OrderChange[]; lots?: number };
   const changes = changesText(r.changes);
   await kickForOrder(s.supabase, id, "order edited");
   const rev = `Saved as revision ${r.revision ?? 2}.`;
@@ -177,7 +179,7 @@ export async function editOrder(input: { id: string; lines: EditLine[]; note: st
     back(
       id,
       "msg",
-      `${rev} Stock was corrected (what changed went back in, the new amounts came out), and the spreadsheet updates on its next sync.${
+      `${rev} Stock was corrected (what changed went back in, the new amounts came out${r.lots ? ", from the lots you picked" : ""}), and the spreadsheet updates on its next sync.${
         r.invoice_update ? ` The order desk${sent?.status === "sent" ? " was emailed to" : " needs to"} update the invoice. If the total changes, the credit team is emailed to collect or credit the difference.` : ""
       }`,
     );
