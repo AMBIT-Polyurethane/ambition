@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Camera, FileUp, LoaderCircle, X } from "lucide-react";
 import { completeOrder, setOrderPo } from "@/app/(app)/orders/actions";
+import { LotPickupCheck, type LotLine } from "@/components/lot-check";
 import { uploadOrderFiles } from "@/lib/order-file-upload";
 import { dateShort, orderNo, qtyText } from "@/lib/format";
 import type { PriceLine } from "@/lib/order-doc/loads";
@@ -192,11 +193,14 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
 }
 
 /** Shipped out / picked up: the signed BOL (photo or scan) goes with it. */
-export function CompleteForm({ orderId, pickup, hasBol }: { orderId: string; pickup: boolean; hasBol: boolean }) {
+export function CompleteForm({ orderId, pickup, hasBol, lots = [] }: { orderId: string; pickup: boolean; hasBol: boolean; lots?: LotLine[] }) {
   const [files, setFiles] = useState<File[]>([]);
   const { busy, setBusy, error, setError } = useSend();
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Read the lot choices now: the form isn't reachable from the event after the upload.
+    // Only the lines where a different lot was picked.
+    const lotPicks = [...new FormData(e.currentTarget).entries()].filter(([k, v]) => k.startsWith("lot:") && String(v) !== String(lots.find((l) => `lot:${l.line}` === k)?.lot_id ?? ""));
     if (!files.length && !hasBol) return setError("Add a photo or scan of the signed BOL first.");
     setError(null);
     setBusy(true);
@@ -207,6 +211,8 @@ export function CompleteForm({ orderId, pickup, hasBol }: { orderId: string; pic
     }
     const fd = new FormData();
     fd.append("id", orderId);
+    // The lot on each drum line (spray foam): checked against the drums before closing.
+    for (const [k, v] of lotPicks) fd.append(k, v);
     for (const f of up.ok) {
       fd.append("file_path", f.path);
       fd.append("file_name", f.name);
@@ -219,6 +225,7 @@ export function CompleteForm({ orderId, pickup, hasBol }: { orderId: string; pic
   };
   return (
     <form onSubmit={submit} className="col" style={{ gap: 10 }}>
+      <LotPickupCheck lines={lots} />
       <FilePick label={hasBol ? "Signed BOL (already attached, add more pages if needed)" : "Signed BOL (photo or scan, required)"} files={files} setFiles={setFiles} required={!hasBol} camera />
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="submit" className="btn dark sm" disabled={busy || (!files.length && !hasBol)} style={{ alignSelf: "flex-start", gap: 8 }}>

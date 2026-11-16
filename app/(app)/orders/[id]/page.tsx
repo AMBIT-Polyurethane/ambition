@@ -22,6 +22,7 @@ import { HOUSE, RepOptions, staffName, type Staff } from "@/components/rep-optio
 import { changesText, editable, type OrderEdit } from "@/lib/order-edit";
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
+import { LotFixAfter, type LotLine, type LotOption } from "@/components/lot-check";
 import type { Alternative, LotChoice, Variance, VarianceData } from "@/components/item-variance";
 import { can } from "@/lib/access";
 import { STAGES, customerProgress, stageOf } from "@/lib/order-desk";
@@ -138,6 +139,22 @@ export default async function OrderDetailPage({
         }),
     ]);
   }
+  // Spray foam lots (0069): checked at pickup by whoever closes the order; fixable after pickup by admins.
+  const st0 = stageOf(order);
+  const closer = emp && (can(profile, "order_desk") || can(profile, "inventory"));
+  const lotLines = async (state: "reserved" | "done"): Promise<LotLine[]> => {
+    const want = lines.flatMap((l) => (picks.get(l.id) ?? []).filter((p) => p.state === state).map((p) => ({ l, p })));
+    const out = await Promise.all(want.map(async ({ l, p }) => {
+      const { data } = await supabase.rpc("inventory_lot_choices_any", { p_line: p.id });
+      const options = ((data ?? []) as LotOption[]).map((o) => ({ ...o, available: Number(o.available) }));
+      return { line: p.id, item: l.name, qty: Number(p.qty), unit: l.unit, sku: p.sku, lot_id: p.lot_id, lot_no: p.lot_no, options };
+    }));
+    return out.filter((x) => x.options.length > 0);
+  };
+  const [pickupLots, fixLots] = await Promise.all([
+    closer && st0 === "scheduled" && order.status !== "completed" && order.status !== "cancelled" ? lotLines("reserved") : Promise.resolve([] as LotLine[]),
+    emp && profile.role === "admin" && order.status === "completed" ? lotLines("done") : Promise.resolve([] as LotLine[]),
+  ]);
   const files = (fileRows ?? []) as OrderFile[];
   const variance: VarianceData | null = emp
     ? { orderId: order.id, lines, picks, choices, alternatives, log: (varRows ?? []) as Variance[], canEdit: canVary }
@@ -395,9 +412,11 @@ export default async function OrderDetailPage({
           lines={lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) }))}
           payDefaults={company ? { cod: Boolean(company.pay_cod), noChecks: Boolean(company.pay_no_checks) } : null}
           edits={edits}
+          pickupLots={pickupLots}
           creditInfo={credit ? { limit: credit.credit_limit, balance: credit.balance, pastDue: credit.past_due, over90: credit.over_90, available: credit.available, lastPaid: credit.last_paid, lastPaidAmount: credit.last_paid_amount, asOf: credit.as_of, companyId: credit.company_id } : null}
         />
       ) : null}
+      {fixLots.length ? <LotFixAfter orderId={order.id} lines={fixLots} /> : null}
 
       <section className="section">
         <div className="row between" style={{ gap: 8 }}>

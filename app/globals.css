@@ -3886,3 +3886,13 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
   .side.compact .side-grp-btn { justify-content: center; padding: 0; width: 52px; }
   .app-frame:has(.side.compact) .side-fly { left: 70px; }
 }
+
+/* ── Spray foam lots at pickup and after (0069) ── */
+.lotcheck { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--s2); }
+.lotcheck-row, .lotfix-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-items: center; }
+.lotcheck-row + .lotcheck-row { border-top: 1px solid var(--line); padding-top: 8px; }
+.lotcheck-row .select, .lotfix-row .select { width: 100%; }
+.lotfix { display: flex; flex-direction: column; gap: 10px; }
+.lotfix > summary { cursor: pointer; list-style: none; }
+.lotfix-row { grid-template-columns: minmax(0, 1fr) minmax(220px, 1.3fr) minmax(200px, 1.2fr) auto; padding: 10px 0; border-top: 1px solid var(--line); }
+@media (max-width: 760px) { .lotcheck-row, .lotfix-row { grid-template-columns: minmax(0, 1fr); } }

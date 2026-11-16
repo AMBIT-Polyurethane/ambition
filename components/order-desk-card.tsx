@@ -5,6 +5,7 @@ import { approveWithoutEmail, creditDecision, notifyOverride, payWaiting, resend
 import { CompleteForm, NumbersForm } from "@/components/order-file-forms";
 import { PayBoxes } from "@/components/pay-boxes";
 import { ItemVariance, VarianceLog, type VarianceData } from "@/components/item-variance";
+import type { LotLine } from "@/components/lot-check";
 import { dateShort, dateTime, money } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
 import type { Order, OrderItem } from "@/lib/types";
@@ -58,7 +59,10 @@ export function OrderDeskCard({
   edits = [],
   closures = [],
   creditInfo = null,
+  pickupLots = [],
 }: {
+  /** Spray foam lots to check when the order is marked picked up / shipped out (0069). */
+  pickupLots?: LotLine[];
   /** The customer's credit right now (0066), shown at the credit check. */
   creditInfo?: { limit: number | null; balance: number; pastDue: number; over90: number; available: number | null; lastPaid: string | null; lastPaidAmount: number | null; asOf: string | null; companyId: string } | null;
   /** Days AMBIT is closed (0063), so the date box can warn. */
@@ -387,7 +391,7 @@ export function OrderDeskCard({
         ) : bols.length ? (
           <FileLinks orderId={o.id} files={bols} label="Signed BOL" />
         ) : null,
-      action: (desk || warehouse) && st === "scheduled" ? <CompleteForm orderId={o.id} pickup={pickup} hasBol={bols.length > 0} /> : null,
+      action: (desk || warehouse) && st === "scheduled" ? <CompleteForm orderId={o.id} pickup={pickup} hasBol={bols.length > 0} lots={pickupLots} /> : null,
     },
   ];
 

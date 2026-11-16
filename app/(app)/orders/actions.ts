@@ -416,10 +416,35 @@ export async function completeOrder(form: FormData) {
   const files = filesFrom(form);
   const fileErr = await addFiles(s, id, "bol", files);
   if (fileErr) back(id, "err", `The signed BOL wasn't saved: ${fileErr}`);
+  // Spray foam: the lots that really went on the truck (0069). A different one is saved as an item variance first.
+  let moved = 0;
+  for (const [k, v] of form.entries()) {
+    const line = Number(k.startsWith("lot:") ? k.slice(4) : NaN);
+    const lot = Number(v);
+    if (!Number.isFinite(line) || !lot) continue;
+    const { data, error: le } = await s.supabase.rpc("order_line_relot", { p_line: line, p_lot: lot, p_reason: null, p_at_pickup: true });
+    if (le) back(id, "err", `Nothing was closed: ${le.message.replace(/^.*?ERROR:\s*/, "")}`);
+    if (data !== null) moved += 1;
+  }
   const { error } = await s.supabase.rpc("order_complete", { p_order: id });
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "order completed");
-  back(id, "msg", "Marked complete. The signed BOL is saved on the order.");
+  back(id, "msg", `Marked complete. The signed BOL is saved on the order.${moved ? ` ${moved} lot${moved === 1 ? "" : "s"} changed to what really went out (on the item variance table).` : ""}`);
+}
+
+/** Admins, after pickup or delivery: the lot (or brand) that really went out (0069). FOAM LOTS and the order follow. */
+export async function fixLoadedLot(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || s.profile.role !== "admin") return;
+  const id = String(form.get("id") ?? "");
+  const line = Number(form.get("line"));
+  const lot = Number(form.get("lot"));
+  const reason = String(form.get("reason") ?? "").trim();
+  if (!line || !lot) back(id, "err", "Pick the lot that really went out.");
+  const { data, error } = await s.supabase.rpc("order_line_relot", { p_line: line, p_lot: lot, p_reason: reason, p_at_pickup: false });
+  if (error) back(id, "err", /order_line_relot|function/.test(error.message) && !/Say why|lot|admin/i.test(error.message) ? "This needs the 0069 database update first." : error.message);
+  await kickForOrder(s.supabase, id, "lot corrected after pickup");
+  back(id, "msg", `Corrected to lot ${data}. The drums moved between lots on FOAM LOTS (the spreadsheet updates in a moment), and the change is on the item variance table.`);
 }
 
 /** Cancel an order with a reason. Its stock is released and the inventory sheet line is marked Cancelled. */
