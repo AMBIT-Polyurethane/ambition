@@ -30,12 +30,13 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
     supabase.from("order_items").select("*").eq("order_id", id).order("id"),
     supabase.from("inventory_lines").select("order_item_id").eq("order_id", id).eq("state", "done"),
     carriedAt(supabase, order.branch_id),
-    supabase.from("products").select("id, sku, name, unit, stock_of").eq("active", true).order("sort").order("name"),
+    // Every product, hidden ones too: the ISO brands are hidden from the catalog but their lots are what went out.
+    supabase.from("products").select("id, sku, name, unit, stock_of, active").order("sort").order("name"),
     order.branch_id
       ? supabase.from("inventory_lots").select("product_id").eq("branch_id", order.branch_id).eq("on_sheet", true)
       : Promise.resolve({ data: [] as { product_id: string }[] }),
   ]);
-  type P = { id: string; sku: string; name: string; unit: string; stock_of: string | null };
+  type P = { id: string; sku: string; name: string; unit: string; stock_of: string | null; active: boolean };
   const prods = (products ?? []) as P[];
   // Spray foam counted by lot on FOAM LOTS (every ISO brand, Summer / Winter resin) and the catalog item each sells as.
   const lotIds = new Set(((lotRows ?? []) as { product_id: string }[]).map((l) => l.product_id));
@@ -52,7 +53,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
     locked: !closed && done.has(i.id) ? "Already picked up on the spreadsheet: can't be changed here." : null,
   }));
   const choices: AddChoice[] = prods
-    .filter((p) => !carried || carried.has(p.id) || byLot.has(p.id))
+    .filter((p) => p.active && (!carried || carried.has(p.id) || byLot.has(p.id)))
     .map((p) => ({ product_id: p.id, sku: p.sku, name: p.name, unit: p.unit, lots: byLot.has(p.id) }));
   // Correcting a completed order: the lots each spray foam item could have come from (0070).
   const lotChoices: Record<string, LotChoice[]> = {};
