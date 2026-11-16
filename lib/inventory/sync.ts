@@ -5,6 +5,7 @@ import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { msConnection, msReady } from "@/lib/microsoft";
 import { todayCentral } from "@/lib/sale";
 import { resolveFile, Workbook } from "@/lib/inventory/workbook";
+import { holdText, holdsAt, stripHoldTag, withHoldTag } from "@/lib/inventory/holds";
 import { LOTS_TAB, countSheetTotal, lotFormulas, lotRange, newLotsTab, parseLotsSheet, type DbLot, type LotCol, type LotsSheet, type PendingRef } from "@/lib/inventory/lots";
 import { at as at_ } from "@/lib/inventory/sheet";
 import { RECEIVED_TAB, syncReceivedLots } from "@/lib/inventory/received-lots";
@@ -842,7 +843,7 @@ async function syncLotsIn(
       shipped_out: r2(r.out),
       shipped_in: r2(r.in),
       adj: r2(r.adj),
-      notes: r.notes || null,
+      notes: stripHoldTag(r.notes) || null,
       sheet_row: r.row,
       on_sheet: true,
       sort: r.row,
@@ -883,6 +884,17 @@ async function syncLotsIn(
     out.sheetOut.set(id, r.out);
     out.sheetAdj.set(id, r.adj);
     out.sheetIn.set(id, r.in);
+  }
+
+  // ---- drums held for a customer (0071): "[HELD: ProSeal 6 until 12/16]" at the end of the lot's Notes
+  if (sheet.cols.notes) {
+    const holdList = await holdsAt(db, branch);
+    for (const r of sheet.rows) {
+      const id = out.ids.get(`${r.key}|${r.lotKey}`);
+      if (!id) continue;
+      const want = withHoldTag(r.notes, holdText(holdList.filter((h) => h.lot_id === id)));
+      if (want !== (r.notes ?? "").trim()) await wb.write(tab, r.row, sheet.cols.notes, [[want]]);
+    }
   }
 
   // ---- lots taken off the sheet

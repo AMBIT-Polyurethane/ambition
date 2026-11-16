@@ -58,7 +58,9 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
   const lotChoices: Record<string, LotChoice[]> = {};
   if (closed && order.branch_id && byLot.size) {
     const want = [...new Set([...choices.filter((c) => c.lots).map((c) => c.product_id), ...items.map((i) => i.product_id).filter((x): x is string => !!x)])];
-    const { data: lc } = await supabase.rpc("inventory_lot_choices_for", { p_branch: order.branch_id, p_products: want });
+    // Holds for other customers show on each lot (0071); before 0071 the function has no p_company.
+    let { data: lc, error: le } = await supabase.rpc("inventory_lot_choices_for", { p_branch: order.branch_id, p_products: want, p_company: order.company_id });
+    if (le) ({ data: lc } = await supabase.rpc("inventory_lot_choices_for", { p_branch: order.branch_id, p_products: want }));
     for (const r of (lc ?? []) as (LotChoice & { for_product: string })[]) {
       (lotChoices[r.for_product] ??= []).push({ ...r, remaining: Number(r.remaining), available: Number(r.available) });
     }

@@ -6,12 +6,13 @@ import { dateShort } from "@/lib/format";
 //  · At pickup (LotPickupCheck, inside the Mark picked up form): confirm the lots, or pick the one that went on the truck.
 //  · After pickup (LotFixAfter, admins): change the lot or the brand; FOAM LOTS and the order's lot record follow.
 
-export type LotOption = { lot_id: number; sku: string; name: string; lot_no: string | null; exp: string | null; use_by: string | null; available: number; expired: boolean; current: boolean; same_type: boolean };
+export type LotOption = { lot_id: number; sku: string; name: string; lot_no: string | null; exp: string | null; use_by: string | null; available: number; expired: boolean; current: boolean; same_type: boolean; held_for?: string | null };
 export type LotLine = { line: number; item: string; qty: number; unit: string; sku: string; lot_id: number | null; lot_no: string | null; options: LotOption[] };
 
 export const optionText = (o: LotOption, qty: number, after = false) =>
   [`${o.sku}`, `Lot ${o.lot_no || "(no lot #)"}`, o.exp ? `exp ${dateShort(o.exp)}` : o.use_by ? `use by ${dateShort(o.use_by)}` : null,
-    o.current ? (after ? "what's recorded now" : "picked by the app") : `${Math.max(0, o.available)} left`, o.expired ? "EXPIRED" : null, !o.current && o.available < qty ? "not enough" : null]
+    o.current ? (after ? "what's recorded now" : "picked by the app") : `${Math.max(0, o.available)} left`, o.expired ? "EXPIRED" : null, !o.current && o.available < qty ? "not enough" : null,
+    o.held_for ? `HELD for ${o.held_for}` : null]
     .filter(Boolean).join(" · ");
 
 /** The lot the app picked was taken off FOAM LOTS (moved to DAMAGED DRUMS, say): someone has to pick the real one. */

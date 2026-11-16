@@ -3902,3 +3902,29 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .lotfix > summary { cursor: pointer; list-style: none; }
 .lotfix-row { grid-template-columns: minmax(0, 1fr) minmax(220px, 1.3fr) minmax(200px, 1.2fr) auto; padding: 10px 0; border-top: 1px solid var(--line); }
 @media (max-width: 760px) { .lotcheck-row, .lotfix-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* Holding a lot for a customer (0071) */
+.hold-form { display: flex; flex-direction: column; gap: 12px; }
+.hold-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hold-who { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--s2); }
+.hold-who b { flex: none; }
+.hold-who .tiny { flex: 1; min-width: 0; }
+.hold-find { display: flex; flex-direction: column; gap: 6px; }
+.hold-matches { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.hold-matches button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; background: none; border: 0; border-top: 1px solid var(--line); color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.hold-matches button:first-child { border-top: 0; }
+.hold-matches button:hover, .hold-matches button:focus-visible { background: var(--s2); }
+.hold-list { display: flex; flex-direction: column; }
+.hold-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; padding: 12px 0; border-top: 1px solid var(--line); align-items: start; }
+.hold-item:first-child { border-top: 0; }
+.hold-item .hold-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+.hold-item form { display: flex; gap: 6px; align-items: center; }
+.hold-item .input.sm { width: auto; }
+.hold-soon { color: var(--warn, #b45309); font-weight: 600; }
+.lot-table tr.lot-hold td { padding-top: 0; font-size: 12px; color: var(--warn, #b45309); border-top: 0; }
+.cust-holds li { margin: 2px 0; }
+@media (max-width: 640px) {
+  .hold-row { grid-template-columns: 1fr; }
+  .hold-item { grid-template-columns: minmax(0, 1fr); }
+  .hold-item .hold-acts { justify-content: flex-start; }
+}

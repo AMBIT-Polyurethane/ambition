@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CircleAlert, CircleCheck, FilePlus2, Link2, ListChecks, Pencil, Tag } from "lucide-react";
+import { CircleAlert, CircleCheck, FilePlus2, Link2, ListChecks, Lock, Pencil, Tag } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { canCredit, canSetCredit, creditFor, creditOverview, daysLate, FLAGS, health, methodLabel, STATUS, type CreditStatus, type Invoice } from "@/lib/credit";
 import { dateShort, dateTime, money, orderNo } from "@/lib/format";
@@ -11,6 +11,7 @@ import { AgingBar } from "@/components/credit/aging-bar";
 import { PaymentDrawer } from "@/components/credit/payment-drawer";
 import { addNote, noteDone, saveCreditProfile, voidPayment68 } from "@/app/(app)/credit/actions";
 import type { Order } from "@/lib/types";
+import { canHold, holdsAt } from "@/lib/inventory/holds";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Customer" };
@@ -101,6 +102,9 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const flags = ((co.credit_flags ?? []) as string[]).filter((f) => FLAGS[f]);
   const paid12 = pays.filter((p) => !p.voided_at && p.kind === "payment" && p.paid_on >= `${Number(today.slice(0, 4)) - 1}${today.slice(4)}`).reduce((s, p) => s + Number(p.amount), 0);
   const q = (o: Record<string, string>) => `/customers/${id}?${new URLSearchParams(o).toString()}`;
+  // Material set aside for this customer (or its locations) at the branches (0071).
+  const held = (await holdsAt(supabase, null)).filter((h) => where.has(h.company_id) && h.held_left > 0);
+  const holder = canHold(profile);
 
   return (
     <main className="shell wide cust">
@@ -131,6 +135,7 @@ export default async function CustomerPage({ params, searchParams }: { params: P
             open={sp.pay === "1"} /> : null}
           <Link href={`/customers/${id}/prices`} className="btn sm dark"><Tag size={15} /> Prices</Link>
           <Link href={`/price-requests/new?company=${id}`} className="btn sm dark"><FilePlus2 size={15} /> Price request</Link>
+          {holder ? <Link href={`/inventory/holds?c=${id}`} className="btn sm dark"><Lock size={15} /> Hold material</Link> : null}
           {admin ? <Link href={`/admin/companies?q=${encodeURIComponent(co.name as string)}`} className="btn sm dark"><Pencil size={15} /> Edit details</Link> : null}
         </div>
       </section>
@@ -192,6 +197,23 @@ export default async function CustomerPage({ params, searchParams }: { params: P
       ) : null}
 
       {co.credit_note ? <div className="alert small cust-note"><span><b>Credit note:</b> {co.credit_note as string}</span></div> : null}
+
+      {held.length ? (
+        <section className="card col" style={{ gap: 6 }}>
+          <b className="small">Material held for {group ? "this customer and its locations" : "this customer"}</b>
+          <ul className="small cust-holds" style={{ margin: 0, paddingLeft: 18 }}>
+            {held.map((h) => (
+              <li key={h.id}>
+                <b>{Number.isInteger(h.held_left) ? h.held_left : h.held_left.toFixed(2)}</b> of {h.sku} · Lot {h.lot_no || "(no lot #)"} at {h.branch_id.toUpperCase()} until {dateShort(h.until)}
+                {where.size > 1 && h.company_id !== id ? <span className="faint"> · for {h.company_name}</span> : null}
+                {h.note ? <span className="faint"> · {h.note}</span> : null}{" "}
+                <Link href={`/inventory/holds?b=${h.branch_id}`} className="tiny">Manage</Link>
+              </li>
+            ))}
+          </ul>
+          <span className="tiny faint">Their orders from that location take these drums first. Nobody else&apos;s orders get them.</span>
+        </section>
+      ) : null}
 
       <nav className="chips cust-tabs" aria-label="Customer sections">
         {TABS.map((t) => (

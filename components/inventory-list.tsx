@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CircleAlert, CircleCheck, ListChecks, Search, Send, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { Submit } from "@/components/forms";
@@ -360,13 +360,20 @@ export function InventoryList({
                         </thead>
                         <tbody>
                           {r.lots.map((l) => (
-                            <tr key={l.id} className={l.expired ? "exp" : ""}>
-                              <td>{l.lot_no || "(no lot #)"}</td>
-                              <td>{md(l.use_by)}{l.expired ? " · expired" : l.exp ? "" : l.use_by ? " *" : ""}</td>
-                              <td className="num">{q2(l.remaining)}</td>
-                              <td className="num">{l.held ? q2(l.held) : "–"}</td>
-                              <td className="num"><b>{q2(l.available)}</b></td>
-                            </tr>
+                            <Fragment key={l.id}>
+                              <tr className={l.expired ? "exp" : ""}>
+                                <td>{l.lot_no || "(no lot #)"}</td>
+                                <td>{md(l.use_by)}{l.expired ? " · expired" : l.exp ? "" : l.use_by ? " *" : ""}</td>
+                                <td className="num">{q2(l.remaining)}</td>
+                                <td className="num">{l.held ? q2(l.held) : "–"}</td>
+                                <td className="num"><b>{q2(l.available)}</b></td>
+                              </tr>
+                              {l.hold ? (
+                                <tr className="lot-hold">
+                                  <td colSpan={5}><a href={`/inventory/holds?b=${branch}`}>Held for {l.hold}</a></td>
+                                </tr>
+                              ) : null}
+                            </Fragment>
                           ))}
                         </tbody>
                       </table>
@@ -375,6 +382,7 @@ export function InventoryList({
                     )}
                     <p className="lot-note">
                       Counted by lot. Change quantities on the FOAM LOTS tab of the {sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener noreferrer">spreadsheet</a> : "spreadsheet"}; the app adds pickups to Shipped Out.
+                      {" "}<a href={`/inventory/holds?b=${branch}`}>Hold drums for a customer</a>.
                       {r.lots.some((l) => !l.exp && l.use_by) ? " * No Exp date: 12 months after Mfg." : ""}
                     </p>
                   </div>

@@ -12,12 +12,12 @@ import { dateShort, plural } from "@/lib/format";
 export type EditItem = { id: number; product_id: string | null; sku: string; name: string; unit: string; qty: number; locked?: string | null };
 export type AddChoice = { product_id: string; sku: string; name: string; unit: string; available?: number | null; lots?: boolean };
 /** A lot a spray foam item could have come from, at the order's location (0070). */
-export type LotChoice = { lot_id: number; product_id: string; sku: string; name: string; lot_no: string | null; exp: string | null; use_by: string | null; remaining: number; available: number; expired: boolean; same_type: boolean };
+export type LotChoice = { lot_id: number; product_id: string; sku: string; name: string; lot_no: string | null; exp: string | null; use_by: string | null; remaining: number; available: number; expired: boolean; same_type: boolean; held_for?: string | null };
 
 type Row = { key: string; id: number | null; product_id: string | null; sku: string; name: string; unit: string; was: number; qty: string; locked?: string | null; lot: string };
 
 const lotText = (o: LotChoice) =>
-  [o.sku, `Lot ${o.lot_no || "(no lot #)"}`, o.exp ? `exp ${dateShort(o.exp)}` : o.use_by ? `use by ${dateShort(o.use_by)}` : null, `${Math.max(0, o.remaining)} left`, o.expired ? "EXPIRED" : null]
+  [o.sku, `Lot ${o.lot_no || "(no lot #)"}`, o.exp ? `exp ${dateShort(o.exp)}` : o.use_by ? `use by ${dateShort(o.use_by)}` : null, `${Math.max(0, o.remaining)} left`, o.expired ? "EXPIRED" : null, o.held_for ? `HELD for ${o.held_for}` : null]
     .filter(Boolean)
     .join(" · ");
 

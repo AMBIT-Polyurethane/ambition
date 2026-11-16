@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { holdText, holdsAt } from "@/lib/inventory/holds";
 
 // What the Inventory screens show (read with the signed-in person's own access).
 
@@ -47,6 +48,8 @@ export type LotView = {
   held: number;
   available: number;
   expired: boolean;
+  /** Set aside for customers (0071): "ProSeal 6 until 12/16". */
+  hold?: string | null;
 };
 
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
@@ -69,11 +72,12 @@ async function invRows(supabase: SupabaseClient, branch: string) {
 }
 
 export async function branchStock(supabase: SupabaseClient, branch: string): Promise<StockRow[]> {
-  const [{ data: rows }, { data: levels }, { data: lotRows }, { data: pickRows }] = await Promise.all([
+  const [{ data: rows }, { data: levels }, { data: lotRows }, { data: pickRows }, holds] = await Promise.all([
     invRows(supabase, branch),
     supabase.rpc("stock_for", { p_branch: branch }),
     supabase.from("inventory_lots").select("id, product_id, lot_no, mfg, exp, use_by, remaining, sheet_pending, on_sheet, sheet_row").eq("branch_id", branch).range(0, 4999),
     supabase.from("inventory_lines").select("lot_id, qty").eq("branch_id", branch).eq("state", "reserved").not("lot_id", "is", null).range(0, 9999),
+    holdsAt(supabase, branch),
   ]);
   // Lots per product (only products counted by lot have any).
   const held = new Map<number, number>();
@@ -87,6 +91,8 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
     lotOrder.set(l.product_id, Math.min(lotOrder.get(l.product_id) ?? 1e9, l.sheet_row ?? 1e8));
     if (!l.on_sheet) continue;
     const h = (held.get(l.id) ?? 0) + Number(l.sheet_pending);
+    const mine = holds.filter((x) => x.lot_id === l.id && x.held_left > 0);
+    const forCust = mine.reduce((t, x) => t + x.held_left, 0);
     lotsOf.get(l.product_id)!.push({
       id: l.id,
       lot_no: l.lot_no,
@@ -95,8 +101,9 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
       use_by: l.use_by,
       remaining: Number(l.remaining),
       held: h,
-      available: Number(l.remaining) - h,
+      available: Number(l.remaining) - h - forCust,
       expired: Boolean(l.use_by && l.use_by < today),
+      hold: mine.length ? holdText(mine) : null,
     });
   }
   for (const list of lotsOf.values()) list.sort((a, z) => (a.use_by ?? "9999").localeCompare(z.use_by ?? "9999") || a.lot_no.localeCompare(z.lot_no));
