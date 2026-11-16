@@ -3932,3 +3932,11 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 /* An order's BOL or invoice, shown in the app */
 .file-view.pdf { width: 100%; height: calc(100vh - 210px); min-height: 480px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .file-view.img { display: block; max-width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+
+/* Rebuild what went out (0073) */
+.lf-item { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.lf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; }
+.lf-row.on { background: var(--s2); }
+.lf-qty { width: 64px; text-align: center; }
+.lf-qty.over { border-color: var(--red, #e5484d); }
+.lf-other > summary { cursor: pointer; padding: 4px 8px; color: var(--text3); }

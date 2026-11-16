@@ -449,6 +449,22 @@ export async function fixLoadedLot(form: FormData) {
   back(id, "msg", `Corrected to lot ${data}. The drums moved between lots on FOAM LOTS (the spreadsheet updates in a moment), and the change is on the item variance table.`);
 }
 
+/** Admins, on a picked-up or shipped order: rebuild how many drums of each item came off each lot (0073). */
+export async function rebuildLoaded(input: { id: string; items: { item: number; lots: { lot: number; qty: number }[] }[]; reason: string }): Promise<{ ok: false; error: string } | never> {
+  const s = await getSession();
+  if (!s?.profile || s.profile.role !== "admin") return { ok: false, error: "Only an admin can change what was loaded after pickup." };
+  const id = String(input.id ?? "");
+  const items = (input.items ?? []).map((it) => ({
+    item: Number(it.item),
+    lots: (it.lots ?? []).map((l) => ({ lot: Number(l.lot), qty: Math.round(Number(l.qty) * 100) / 100 })).filter((l) => l.lot > 0 && Number.isFinite(l.qty) && l.qty > 0),
+  }));
+  const { data, error } = await s.supabase.rpc("order_relot_items", { p_order: id, p_items: items, p_reason: String(input.reason ?? "").slice(0, 300) });
+  if (error) return { ok: false, error: /order_relot_items/.test(error.message) ? "This needs the 0073 database update first (Supabase > SQL Editor)." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  await kickForOrder(s.supabase, id, "lots corrected after pickup");
+  const n = Number(data) || 0;
+  back(id, "msg", `Saved. ${n === 1 ? "1 item" : `${n} items`} now show${n === 1 ? "s" : ""} the lots that really went out. FOAM LOTS and PENDING ORDERS update in a moment, and the change is on the item variance table.`);
+}
+
 /** Cancel an order with a reason. Its stock is released and the inventory sheet line is marked Cancelled. */
 export async function cancelOrder(form: FormData) {
   const s = await getSession();
