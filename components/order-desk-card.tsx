@@ -35,7 +35,7 @@ function FileLinks({ orderId, files, label }: { orderId: string; files: OrderFil
     <div className="file-links">
       <span className="tiny muted">{label}:</span>
       {files.map((f, i) => (
-        <a key={f.id} href={`/orders/${orderId}/files/${f.id}`} target="_blank" rel="noopener" className="file-link" title={`${f.uploaded_by_name ?? ""} · ${dateTime(f.created_at)}`}>
+        <a key={f.id} href={`/orders/${orderId}/file/${f.id}`} className="file-link" title={`${f.uploaded_by_name ?? ""} · ${dateTime(f.created_at)}`}>
           {/\.pdf$/i.test(f.name ?? "") ? <FileText size={14} /> : <ImageIcon size={14} />}
           {files.length > 1 ? `Page ${i + 1}` : "View"}
         </a>

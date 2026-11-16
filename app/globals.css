@@ -3928,3 +3928,7 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
   .hold-item { grid-template-columns: minmax(0, 1fr); }
   .hold-item .hold-acts { justify-content: flex-start; }
 }
+
+/* An order's BOL or invoice, shown in the app */
+.file-view.pdf { width: 100%; height: calc(100vh - 210px); min-height: 480px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.file-view.img { display: block; max-width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
