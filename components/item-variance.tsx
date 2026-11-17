@@ -8,7 +8,7 @@ import type { OrderItem } from "@/lib/types";
 // The item variance table: what was ordered next to what's being loaded (product type and lot / batch).
 // Admins and people with the Item variance box can change either one; every change is kept with who, when and why.
 
-export type LotChoice = { lot_id: number; sku: string; lot_no: string; exp: string | null; use_by: string | null; available: number; expired: boolean };
+export type LotChoice = { lot_id: number; sku: string; lot_no: string; exp: string | null; use_by: string | null; available: number; expired: boolean; remaining?: number };
 export type Alternative = { product_id: string; sku: string; name: string; on_hand: number | null; available: number | null };
 export type Variance = { id: number; order_item_id: number | null; kind: "type" | "lot"; from_text: string | null; to_text: string | null; reason: string | null; stage: string | null; by_name: string | null; created_at: string };
 
@@ -125,14 +125,14 @@ export function ItemVariance({ data, open, title }: { data: VarianceData; open: 
                               <select className="select sm" name="lot" defaultValue={p.lot_id ?? ""} aria-label="Lot">
                                 {p.lot_id === null ? <option value="">Choose a lot…</option> : null}
                                 {opts.map((c) => (
-                                  <option key={c.lot_id} value={c.lot_id} disabled={c.lot_id !== p.lot_id && c.available < p.qty}>
-                                    {choiceText(c)}{c.lot_id === p.lot_id ? " (now)" : ""}
+                                  <option key={c.lot_id} value={c.lot_id} disabled={c.lot_id !== p.lot_id && (c.remaining ?? c.available) < p.qty}>
+                                    {choiceText(c)}{c.lot_id === p.lot_id ? " (now)" : c.available < p.qty && (c.remaining ?? 0) >= p.qty ? " · promised to another order (it'll need another lot)" : ""}
                                   </option>
                                 ))}
                               </select>
                               <input className="input sm" name="reason" maxLength={300} placeholder="Why? (optional)" aria-label="Reason" />
                               <Submit className="btn sm dark" pendingText="Saving…">Use this lot</Submit>
-                              <span className="tiny faint">Moves all {qtyText(p.qty, l.unit)}. Lots without enough available are greyed out.</span>
+                              <span className="tiny faint">Moves all {qtyText(p.qty, l.unit)}. Lots without enough drums on them are greyed out. Taking drums promised to another order flags that order to pick another lot.</span>
                             </form>
                           </details>
                         ) : null}

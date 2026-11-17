@@ -142,7 +142,7 @@ export default async function OrderDetailPage({
     await Promise.all([
       ...open.map(async (p) => {
         const { data } = await supabase.rpc("inventory_lot_choices", { p_line: p.id });
-        choices.set(p.id, ((data ?? []) as LotChoice[]).map((c) => ({ ...c, available: Number(c.available) })));
+        choices.set(p.id, ((data ?? []) as LotChoice[]).map((c) => ({ ...c, available: Number(c.available), remaining: c.remaining === undefined ? undefined : Number(c.remaining) })));
       }),
       ...lines
         .filter((l) => l.product_id)

@@ -33,6 +33,7 @@ export default async function AdminPage() {
         <ListLink href="/admin/sales-goals" icon="target" title="Sales goals" sub="Monthly goals by product group for sales reps and warehouse managers" />
         <ListLink href="/admin/products" icon="box" title="Products & pricing" sub={`${products.count ?? 0} active products`} />
         <ListLink href="/orders?status=new" icon="cart" title="Orders" sub={`${newOrders.count ?? 0} new`} />
+        <ListLink href="/admin/data-check" icon="shield" title="Data check" sub="Everything that needs fixing in inventory and orders, who it's on, and their emails" />
         <ListLink href="/admin/inventory" icon="boxes" title="Inventory" sub="Live stock from each location's spreadsheet (Microsoft connection)" />
         <ListLink href="/admin/expenses" icon="receipt" title="Expense reports" sub="Approvals, the Chase statement and the expense dashboard" />
         <ListLink href="/admin/forms" icon="form" title="Forms hub" sub="Credit applications, account setups and every Jotform form" />

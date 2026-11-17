@@ -556,7 +556,7 @@ export async function changeLot(form: FormData) {
   const { data, error } = await s.supabase.rpc("order_variance_lot", { p_line: line, p_lot: lot, p_reason: reason || null });
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "lot changed");
-  back(id, "msg", `Lot changed to ${data}. The spreadsheet updates in a moment.`);
+  back(id, "msg", `Lot changed to ${data} The spreadsheet updates in a moment.`.replace(/^Lot changed to ([^ .]+)(?=\s)/, "Lot changed to $1."));
 }
 
 /** Item variance: load a different product type than the one ordered (Summer / Winter, another product in the same category). */

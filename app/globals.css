@@ -4000,3 +4000,11 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .lf-hits button { text-align: left; padding: 9px 12px; background: var(--s2); border: 0; border-bottom: 1px solid var(--line); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .lf-hits button:last-child { border-bottom: 0; }
 .lf-hits button:hover { background: var(--s3, var(--s1)); }
+
+/* 0080: data check */
+.dc-person { border-top: 1px solid var(--line); padding: 8px 0; }
+.dc-person summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dc-mail { margin: 8px 0; }
+.dc-text { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.5; background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 6px 0; max-height: 360px; overflow: auto; }
+.dc-row.err { border-left: 3px solid var(--red); }
+.dc-row.warn { border-left: 3px solid var(--warn); }
