@@ -3993,3 +3993,10 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .prf-fg-row > b { font-size: 15px; }
 .prf-fg .cp-money .input { width: 100%; }
 .cp-money.on .input { border-color: var(--ok, #3fb950); }
+
+/* 0078: Fix what went out, any product */
+.lf-find { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.lf-hits { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.lf-hits button { text-align: left; padding: 9px 12px; background: var(--s2); border: 0; border-bottom: 1px solid var(--line); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.lf-hits button:last-child { border-bottom: 0; }
+.lf-hits button:hover { background: var(--s3, var(--s1)); }

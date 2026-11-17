@@ -3,7 +3,8 @@ import { CircleAlert, CircleCheck } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { dateShort, orderNo, qtyText } from "@/lib/format";
 import { TopBar } from "@/components/ui";
-import { LoadedFix, type FixItem, type FixLot } from "@/components/loaded-fix";
+import { LoadedFix, type FixItem, type FixLot, type FixStockItem } from "@/components/loaded-fix";
+import { fixStockList } from "@/lib/inventory/view";
 
 export const metadata = { title: "BOL review" };
 export const dynamic = "force-dynamic";
@@ -50,6 +51,9 @@ export default async function BolReviewPage({ searchParams }: { searchParams: Pr
           if (!done.length) return null;
           const { data, error } = await supabase.rpc("order_item_lot_options", { p_item: it.id });
           if (error || !data?.length) return null;
+          // This page is for spray foam by lot: items counted by total (fiberglass, supplies) are fixed on the order page.
+          const opts = data as FixLot[];
+          if (!done.some((l) => l.lot_id) && !opts.some((x) => x.same_type && !x.by_total)) return null;
           return {
             item: it.id,
             name: it.name,
@@ -63,6 +67,12 @@ export default async function BolReviewPage({ searchParams }: { searchParams: Pr
       );
       fixOf.set(o.id, out.filter((x): x is FixItem => x !== null));
     }),
+  );
+
+  // Items counted by total at each location, for "a different product went out" (0078).
+  const stockAt = new Map<string, FixStockItem[]>();
+  await Promise.all(
+    [...new Set(orders.map((o) => (o as { branch_id?: string | null }).branch_id).filter((b): b is string => !!b))].map(async (b) => stockAt.set(b, await fixStockList(supabase, b))),
   );
 
   const pages = Math.max(1, Math.ceil((count ?? 0) / PER));
@@ -120,7 +130,7 @@ export default async function BolReviewPage({ searchParams }: { searchParams: Pr
             ) : (
               <div className="alert warn small">No signed BOL uploaded.</div>
             )}
-            {fix.length ? <LoadedFix orderId={o.id} items={fix} back={`${here}#o-${o.order_no}`} /> : null}
+            {fix.length ? <LoadedFix orderId={o.id} items={fix} back={`${here}#o-${o.order_no}`} stock={stockAt.get((o as { branch_id?: string | null }).branch_id ?? "") ?? []} /> : null}
           </section>
         );
       })}

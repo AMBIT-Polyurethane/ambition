@@ -23,7 +23,8 @@ import { changeWaiting, changesText, detailsText, editable, type DetailEdit, typ
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
 import { LotFixAfter, type LotLine, type LotOption } from "@/components/lot-check";
-import { LoadedFix, type FixItem, type FixLot } from "@/components/loaded-fix";
+import { LoadedFix, type FixItem, type FixLot, type FixStockItem } from "@/components/loaded-fix";
+import { fixStockList } from "@/lib/inventory/view";
 import type { Alternative, LotChoice, Variance, VarianceData } from "@/components/item-variance";
 import { can } from "@/lib/access";
 import { STAGES, customerProgress, stageOf } from "@/lib/order-desk";
@@ -170,6 +171,7 @@ export default async function OrderDetailPage({
     const out = await Promise.all(withDone.map(async (l): Promise<FixItem | null> => {
       const { data, error } = await supabase.rpc("order_item_lot_options", { p_item: l.id });
       if (error || !data?.length) return null;
+      // Before 0078 the options have no product_id.
       const done = (picks.get(l.id) ?? []).filter((p) => p.state === "done");
       return {
         item: l.id,
@@ -183,9 +185,10 @@ export default async function OrderDetailPage({
     }));
     return out.filter((x): x is FixItem => x !== null);
   };
-  const [pickupLots, fixItems] = await Promise.all([
+  const [pickupLots, fixItems, fixStock] = await Promise.all([
     closer && st0 === "scheduled" && order.status !== "completed" && order.status !== "cancelled" ? lotLines("reserved") : Promise.resolve([] as LotLine[]),
     fixer ? fixItemsOf() : Promise.resolve([] as FixItem[]),
+    fixer ? fixStockList(supabase, order.branch_id) : Promise.resolve([] as FixStockItem[]),
   ]);
   // Before update 0073: one lot per line.
   const fixLots = fixer && !fixItems.length ? await lotLines("done") : ([] as LotLine[]);
@@ -559,7 +562,7 @@ export default async function OrderDetailPage({
           creditInfo={credit ? { limit: credit.credit_limit, balance: credit.balance, pastDue: credit.past_due, over90: credit.over_90, available: credit.available, lastPaid: credit.last_paid, lastPaidAmount: credit.last_paid_amount, asOf: credit.as_of, companyId: credit.company_id } : null}
         />
       ) : null}
-      {fixItems.length ? <LoadedFix orderId={order.id} items={fixItems} /> : fixLots.length ? <LotFixAfter orderId={order.id} lines={fixLots} /> : null}
+      {fixItems.length ? <LoadedFix orderId={order.id} items={fixItems} stock={fixStock} /> : fixLots.length ? <LotFixAfter orderId={order.id} lines={fixLots} /> : null}
 
       <section className="section">
         <div className="row between" style={{ gap: 8 }}>

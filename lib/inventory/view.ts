@@ -168,3 +168,19 @@ export function ago(iso: string | null | undefined): string {
   if (h < 48) return `${h} hr ago`;
   return `${Math.round(h / 24)} days ago`;
 }
+
+/** Everything counted by total at a location (the COUNT SHEET, minus what's counted by lot): for "Fix what went out" (0078). */
+export type FixStock = { product_id: string; sku: string; name: string; unit: string; on_hand: number };
+export async function fixStockList(supabase: SupabaseClient, branch: string | null | undefined): Promise<FixStock[]> {
+  if (!branch) return [];
+  const [{ data: inv }, { data: lots }] = await Promise.all([
+    supabase.from("inventory").select("product_id, sku, on_hand, product:products(name, unit)").eq("branch_id", branch).eq("on_sheet", true).range(0, 2999),
+    supabase.from("inventory_lots").select("product_id").eq("branch_id", branch).eq("on_sheet", true).range(0, 4999),
+  ]);
+  const lotted = new Set(((lots ?? []) as { product_id: string }[]).map((l) => l.product_id));
+  type Row = { product_id: string; sku: string; on_hand: number | null; product: { name: string; unit: string } | null };
+  return ((inv ?? []) as unknown as Row[])
+    .filter((r) => !lotted.has(r.product_id))
+    .map((r) => ({ product_id: r.product_id, sku: r.sku, name: r.product?.name ?? r.sku, unit: r.product?.unit ?? "", on_hand: Number(r.on_hand ?? 0) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

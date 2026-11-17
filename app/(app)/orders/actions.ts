@@ -460,16 +460,35 @@ export async function fixLoadedLot(form: FormData) {
 }
 
 /** Admins, on a picked-up or shipped order: rebuild how many drums of each item came off each lot (0073). */
-export async function rebuildLoaded(input: { id: string; items: { item: number; lots: { lot: number; qty: number }[] }[]; reason: string; back?: string }): Promise<{ ok: false; error: string } | never> {
+export async function rebuildLoaded(input: {
+  id: string;
+  /** Per item, each lot ({ lot }) or item counted by total ({ product }, 0078) and how many came off it. */
+  items: { item: number; lots: ({ lot: number; qty: number } | { product: string; qty: number })[] }[];
+  reason: string;
+  back?: string;
+}): Promise<{ ok: false; error: string } | never> {
   const s = await getSession();
   if (!s?.profile || s.profile.role !== "admin") return { ok: false, error: "Only an admin can change what was loaded after pickup." };
   const id = String(input.id ?? "");
+  const UUIDISH = /^[0-9a-f-]{36}$/i;
   const items = (input.items ?? []).map((it) => ({
     item: Number(it.item),
-    lots: (it.lots ?? []).map((l) => ({ lot: Number(l.lot), qty: Math.round(Number(l.qty) * 100) / 100 })).filter((l) => l.lot > 0 && Number.isFinite(l.qty) && l.qty > 0),
+    lots: (it.lots ?? [])
+      .map((l): { lot: number; qty: number } | { product: string; qty: number } | null => {
+        const qty = Math.round(Number(l.qty) * 100) / 100;
+        if (!Number.isFinite(qty) || qty <= 0) return null;
+        if ("product" in l) return UUIDISH.test(String(l.product)) ? { product: String(l.product), qty } : null;
+        return Number(l.lot) > 0 ? { lot: Number(l.lot), qty } : null;
+      })
+      .filter((l) => l !== null),
   }));
   const { data, error } = await s.supabase.rpc("order_relot_items", { p_order: id, p_items: items, p_reason: String(input.reason ?? "").slice(0, 300) });
-  if (error) return { ok: false, error: /order_relot_items/.test(error.message) ? "This needs the 0073 database update first (Supabase > SQL Editor)." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  if (error) {
+    if (/order_relot_items/.test(error.message)) return { ok: false, error: "This needs the 0073 database update first (Supabase > SQL Editor)." };
+    // Before 0078 only lots of the same kind of product could be picked.
+    if (/can't take the place of|invalid input syntax for type bigint/.test(error.message)) return { ok: false, error: "Picking any product needs the 0078 database update first (Supabase > SQL Editor)." };
+    return { ok: false, error: error.message.replace(/^.*?ERROR:\s*/, "") };
+  }
   await kickForOrder(s.supabase, id, "lots corrected after pickup");
   const n = Number(data) || 0;
   // From the BOL review page: back there, at this order.
