@@ -41,13 +41,14 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
   }
 
   // Locations: every location for sales and orders; the ones with inventory for the inventory reports (a warehouse
-  // manager only ever gets their own).
+  // manager can look at all of them and starts on their own).
   let places: { id: string; name: string }[] = [];
   let branch: string | null = null;
   if (def.location === "inventory") {
-    places = await inventoryBranches(supabase, profile);
     const lock = inventoryLock(profile);
-    branch = lock !== null ? places[0]?.id ?? "none" : places.find((b) => b.id === sp.b)?.id ?? null;
+    places = lock === "" ? [] : await inventoryBranches(supabase, profile, { all: true });
+    const own = lock && places.some((b) => b.id === lock) ? lock : null;
+    branch = lock === "" ? "none" : sp.b === "all" ? null : places.find((b) => b.id === sp.b)?.id ?? own;
   } else if (def.location === "sales") {
     const { data } = await supabase.from("branches").select("id, name, sort").order("sort");
     places = (data ?? []) as { id: string; name: string }[];
@@ -64,7 +65,9 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     key === "price-sheet"
       ? (((await supabase.from("companies").select("id, name, account_no, city").eq("active", true).order("name").limit(5000)).data ?? []) as { id: string; name: string; account_no: string | null; city: string | null }[])
       : [];
-  const keep = Object.fromEntries(Object.entries({ b: branch && !inventoryLock(profile) ? branch : "", d: sp.d ?? "" }).filter(([, v]) => v)) as Record<string, string>;
+  // A warehouse manager's "All locations" is b=all (no b means their own).
+  const lockedInv = def.location === "inventory" && !!inventoryLock(profile);
+  const keep = Object.fromEntries(Object.entries({ b: branch && branch !== "none" ? branch : lockedInv && !branch ? "all" : "", d: sp.d ?? "" }).filter(([, v]) => v)) as Record<string, string>;
   const rangeQs: Record<string, string> = {};
   if (range && range.key !== def.range) {
     if (range.key !== "custom") rangeQs.r = range.key;
@@ -103,11 +106,11 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             : null}
         </div>
       ) : null}
-      {def.location && places.length > 1 && !(def.location === "inventory" && inventoryLock(profile) !== null) ? (
+      {def.location && places.length > 1 ? (
         <div className="chips no-print" aria-label="Location">
-          <Link href={href({ b: "" })} className={`chip sm${branch ? "" : " on"}`}>All locations</Link>
+          <Link href={href({ b: lockedInv ? "all" : "" })} className={`chip sm${branch ? "" : " on"}`}>All locations</Link>
           {places.map((b) => (
-            <Link key={b.id} href={href({ b: b.id })} className={`chip sm${branch === b.id ? " on" : ""}`}>{b.name}</Link>
+            <Link key={b.id} href={href({ b: b.id })} className={`chip sm${branch === b.id ? " on" : ""}`}>{b.name}{lockedInv && b.id === profile.branch_id ? " (yours)" : ""}</Link>
           ))}
         </div>
       ) : null}

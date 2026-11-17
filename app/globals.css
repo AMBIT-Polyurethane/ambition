@@ -3953,3 +3953,43 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .br-recorded { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--s2); }
 .br-img { display: block; width: 100%; height: auto; border-radius: 10px; background: #fff; }
 .br-pdf { width: 100%; height: 1150px; border: 0; border-radius: 10px; background: #fff; }
+
+/* 0076: edit an order's details */
+.details-btn { margin-top: 12px; width: 100%; justify-content: center; }
+
+/* 0076: sign the packing slip on screen */
+.slip-no { font-size: 24px; font-weight: 800; letter-spacing: 0.01em; line-height: 1.1; }
+.slip-kv dd { font-weight: 700; }
+.slip-lines { display: flex; flex-direction: column; gap: 8px; }
+.slip-line { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.slip-line.on { border-color: var(--ok, #3fb950); }
+.slip-line-main { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.slip-line-main input, .slip-lot input { width: 24px; height: 24px; flex: none; accent-color: var(--red); }
+.slip-qty { font-size: 15px; white-space: nowrap; }
+.slip-lots { display: flex; flex-direction: column; gap: 6px; padding-left: 36px; }
+.slip-lot { display: grid; grid-template-columns: 24px 1fr; column-gap: 10px; row-gap: 1px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--red-soft); font-size: 14px; cursor: pointer; }
+.slip-lot .tiny { grid-column: 2; }
+.slip-lot.on { background: rgba(63, 185, 80, 0.14); }
+.slip-lot.warn { display: block; background: var(--warn-soft); cursor: default; }
+.slip-stop { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 2px solid var(--red); border-radius: 14px; color: var(--red); font-weight: 800; font-size: 13px; line-height: 1.4; }
+.slip-stop-sign { flex: none; display: grid; place-items: center; width: 56px; height: 56px; background: var(--red); color: #fff; font-size: 14px; letter-spacing: 0.04em; clip-path: polygon(29.3% 0, 70.7% 0, 100% 29.3%, 100% 70.7%, 70.7% 100%, 29.3% 100%, 0 70.7%, 0 29.3%); }
+.sign-part.ambit { border: 2px solid var(--red); }
+.sign-part.dim { opacity: 0.6; }
+.sigpad-wrap { display: flex; flex-direction: column; gap: 6px; }
+.sigpad { position: relative; background: #ffffff; border-radius: 12px; border: 2px dashed #b9b9c2; overflow: hidden; }
+.sigpad:not(.empty) { border-style: solid; border-color: #6b6b75; }
+.sigpad canvas { display: block; width: 100%; height: auto; aspect-ratio: 720 / 220; touch-action: none; cursor: crosshair; }
+.sigpad-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; color: #8a8a94; font-size: 14px; pointer-events: none; }
+.sigpad-x { position: absolute; left: 14px; bottom: 26%; color: #9a9aa4; font-size: 16px; pointer-events: none; }
+.sigpad::after { content: ""; position: absolute; left: 36px; right: 16px; bottom: 26%; border-bottom: 1px solid #c9c9d1; pointer-events: none; }
+.sign-finish { min-height: 56px; font-size: 15px; }
+
+/* 0076: price requests by type */
+.prf-kind.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .prf-kind.two { grid-template-columns: 1fr; } }
+.prf-fg { display: flex; flex-direction: column; gap: 6px; }
+.prf-fg-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: center; }
+.prf-fg-row.head span { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); }
+.prf-fg-row > b { font-size: 15px; }
+.prf-fg .cp-money .input { width: 100%; }
+.cp-money.on .input { border-color: var(--ok, #3fb950); }

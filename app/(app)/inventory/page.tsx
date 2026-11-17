@@ -28,14 +28,15 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
   }
   if (!can(profile, "inv_reports")) redirect(hubHome(profile, sp.b) ?? "/");
 
-  const live = await inventoryBranches(supabase, profile);
-  // Warehouse managers only ever see their own location.
-  const locked = hubLock(profile) !== null;
+  // Warehouse managers can look at every location but start on their own, and their tools stay on their own.
+  const lock = hubLock(profile);
+  const locked = lock !== null;
+  const live = lock === "" ? [] : await inventoryBranches(supabase, profile, { all: true });
   if (!live.length) {
     return (
       <main className="shell">
         <TopBar title="Inventory Hub" back="/" />
-        {locked ? (
+        {lock === "" ? (
           <Empty icon="boxes" title="Your account isn't set to a location yet">
             Warehouse managers see the Inventory Hub for their own location. An admin sets your location in Admin → Accounts.
           </Empty>
@@ -47,15 +48,17 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
       </main>
     );
   }
-  const pick = locked
-    ? live[0].id
-    : sp.b === "all" ? "all" : live.find((b) => b.id === sp.b)?.id ?? (live.some((b) => b.id === profile.branch_id) ? profile.branch_id! : "all");
+  const own = locked && live.some((b) => b.id === lock) ? lock : null;
+  const pick =
+    sp.b === "all" ? "all" : live.find((b) => b.id === sp.b)?.id ?? own ?? (live.some((b) => b.id === profile.branch_id) ? profile.branch_id! : "all");
   const hub = await loadHub(supabase, pick === "all" ? "all" : [pick]);
   const k = hub.kpi;
   const name = (id: string) => hub.branches.find((b) => b.id === id)?.name ?? id.toUpperCase();
   const many = hub.scope.length > 1;
   const q = `b=${pick}`;
-  const hereBranch = pick === "all" ? (profile.branch_id && live.some((b) => b.id === profile.branch_id) ? profile.branch_id : live[0].id) : pick;
+  // Receiving, transfers and spot checks: a warehouse manager's are always their own location.
+  const hereBranch = own ?? (pick === "all" ? (profile.branch_id && live.some((b) => b.id === profile.branch_id) ? profile.branch_id : live[0].id) : pick);
+  const lookOnly = locked && pick !== own;
   // Partial receipts (0065) and reorder requests (0064) waiting, for the tool cards.
   const scopeIds = pick === "all" ? live.map((b) => b.id) : [pick];
   const [restRes, rrRes] = await Promise.all([
@@ -108,9 +111,14 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
         <div className="chips" role="tablist" aria-label="Location">
           <Link href="/inventory?b=all" className={`chip${pick === "all" ? " on" : ""}`}>All locations</Link>
           {live.map((b) => (
-            <Link key={b.id} href={`/inventory?b=${b.id}`} className={`chip${b.id === pick ? " on" : ""}`}>{b.name}</Link>
+            <Link key={b.id} href={`/inventory?b=${b.id}`} className={`chip${b.id === pick ? " on" : ""}`}>{b.name}{b.id === own ? " (yours)" : ""}</Link>
           ))}
         </div>
+      ) : null}
+      {lookOnly && own ? (
+        <p className="tiny faint" style={{ margin: 0 }}>
+          Look only. Your receiving, transfers, counts and holds stay on {live.find((b) => b.id === own)?.name ?? "your location"}. <Link href={`/inventory?b=${own}`}>Back to yours</Link>
+        </p>
       ) : null}
 
       <section className="hub-kpis" aria-label="Key numbers">

@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, wrapEmail } from "@/lib/email";
-import { escapeHtml as h, money } from "@/lib/format";
+import { escapeHtml as h, money, rate } from "@/lib/format";
 import { currentOrigin } from "@/lib/origin";
 import { sendPush } from "@/lib/push";
 
@@ -53,8 +53,8 @@ ${lines
   .map(
     (l) => `<tr><td style="padding:9px 8px;border-bottom:1px solid #eee;font-size:14px;"><b>${h(l.name)}</b><br><span style="font-size:12px;color:#71717a;">${h(l.sku)}${l.volume ? ` · ${h(l.volume)}` : ""}${l.auto ? " · approved by the rules" : ""}</span></td>
 <td style="padding:9px 8px;border-bottom:1px solid #eee;text-align:right;color:#71717a;">${l.list_price !== null ? h(money(Number(l.list_price))) : "-"}</td>
-<td style="padding:9px 8px;border-bottom:1px solid #eee;text-align:right;">${h(money(Number(l.requested_price)))}</td>
-${approved ? `<td style="padding:9px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:800;">${l.status === "approved" && l.approved_price !== null ? h(money(Number(l.approved_price))) : l.status === "denied" ? '<span style="color:#b91c1c;">No</span>' : "Waiting"}</td>` : ""}</tr>`,
+<td style="padding:9px 8px;border-bottom:1px solid #eee;text-align:right;">${h(rate(Number(l.requested_price)))}${l.unit && /lb|sq ft|bag/.test(l.unit) ? ` / ${h(l.unit)}` : ""}</td>
+${approved ? `<td style="padding:9px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:800;">${l.status === "approved" && l.approved_price !== null ? h(rate(Number(l.approved_price))) : l.status === "denied" ? '<span style="color:#b91c1c;">No</span>' : "Waiting"}</td>` : ""}</tr>`,
   )
   .join("")}</table>`;
 

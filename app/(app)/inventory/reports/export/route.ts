@@ -14,7 +14,9 @@ export async function GET(req: NextRequest) {
   const key = (REPORTS.find((r) => r.key === req.nextUrl.searchParams.get("r"))?.key ?? "reorder") as ReportKey;
   const lock = hubLock(s.profile);
   if (lock === "") return new NextResponse("Your account isn't set to a location yet.", { status: 403 });
-  const b = lock ?? req.nextUrl.searchParams.get("b") ?? "all";
+  // Warehouse managers can download any location's report; with no location picked it's their own.
+  const asked = req.nextUrl.searchParams.get("b") ?? "";
+  const b = (/^[a-z0-9_-]{1,24}$/i.test(asked) ? asked : "") || lock || "all";
   const hub = await loadHub(s.supabase, b === "all" ? "all" : [b]);
   const csv = reportCsv(buildReport(hub, key));
   const where = b === "all" ? "all-locations" : b;

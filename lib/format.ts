@@ -3,6 +3,12 @@ export function money(n: number | null | undefined): string {
   return Number(n).toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+/** A rate that can be a fraction of a cent: $1.35, $0.385, $0.0425 (sq ft and per-lb prices). */
+export function rate(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return "";
+  return Number(n).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
+
 export function orderNo(n: number): string {
   return `ORD-${n}`;
 }

@@ -12,10 +12,11 @@ export type PriceEdit = { company_id: string; product_id: string; price: string 
 /** Admins and anyone who approves price requests. */
 export const canPrice = (p: Pick<Profile, "role" | "status"> & { perms?: string[] | null }) => can(p, "prf_approve");
 
-/** Foam is quoted per lb, fiberglass per sq ft, everything else per unit. */
-export function basisFor(p: Pick<PriceItem, "category_id">): Basis {
+/** Foam is quoted per lb, fiberglass batts per sq ft (blow-in per bag), everything else per unit. */
+export function basisFor(p: Pick<PriceItem, "category_id"> & { name?: string | null }): Basis {
   if (p.category_id === "ambit-foam") return "lb";
-  if (p.category_id === "batts") return "sqft";
+  // "fiberglass" in the live app ("batts" in older test data).
+  if (p.category_id === "fiberglass" || p.category_id === "batts") return /jet ?stream|climate ?pro|blow|loose ?fill|\bl77\b|propink|insul ?safe/i.test(p.name ?? "") ? "unit" : "sqft";
   return "unit";
 }
 

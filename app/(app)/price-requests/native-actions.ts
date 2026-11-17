@@ -20,17 +20,29 @@ async function load(db: SupabaseClient, id: number) {
 }
 
 export type SmartPrfInput = {
-  customer_kind: "existing" | "new" | "previous"; company_id: string | null; customer: Record<string, string>; product_lines: string[]; branch: string; note: string; valid_days: number;
-  lines: { product_id: string; price: string; basis: string; volume: string }[];
+  customer_kind: "existing" | "new"; company_id: string | null; customer: Record<string, string>; product_lines: string[]; branch: string; note: string; valid_days: number;
+  /** An item (intumescents, coatings), or a type (0076: foam per lb, fiberglass per sq ft, blow-in per bag) with the products it covers. */
+  lines: ({ product_id: string; price: string; basis: string; volume: string } | { type: string; label: string; unit: string; products: string[]; price: string; basis: string; volume: string })[];
 };
 
 /** The smart price request (existing or new customer, every customer field, product lines, per-lb / per-sq-ft prices). */
 export async function submitSmartPrf(input: SmartPrfInput): Promise<{ ok: false; error: string } | { ok: true; id: number; auto: number; lines: number }> {
   const s = await getSession();
   if (!s?.profile || !(can(s.profile, "price_requests") || s.profile.role === "admin")) return { ok: false, error: "You don't have access to price requests." };
-  const lines = input.lines.filter((l) => UUID.test(l.product_id) && Number(l.price) > 0).map((l) => ({ product_id: l.product_id, price: Math.round(Number(l.price) * 10000) / 10000, basis: l.basis, volume: l.volume.trim().slice(0, 80) }));
+  const price = (v: string) => Math.round(Number(v) * 10000) / 10000;
+  const lines = input.lines
+    .filter((l) => Number(l.price) > 0 && ("type" in l ? /^[a-z]+:[A-Z0-9-]+$/i.test(l.type) : UUID.test(l.product_id)))
+    .map((l) =>
+      "type" in l
+        ? { type: l.type, label: l.label.slice(0, 120), unit: l.unit.slice(0, 20), products: l.products.filter((x) => UUID.test(x)), price: price(l.price), basis: l.basis, volume: l.volume.trim().slice(0, 80) }
+        : { product_id: l.product_id, price: price(l.price), basis: l.basis, volume: l.volume.trim().slice(0, 80) },
+    );
   const { data, error } = await s.supabase.rpc("price_request_submit2", { p: { ...input, lines } });
-  if (error) return { ok: false, error: missing(error.message) && !/Fill in|Pick|Add/.test(error.message) ? "The smart price request needs the 0068 database update first." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  if (error) {
+    // Before 0076 the database still asks for the old boxes (billing terms, credit line now, freight).
+    if (/billing_terms|credit_range|freight_included/.test(error.message)) return { ok: false, error: "The new price request form needs the 0076 database update first (Supabase > SQL Editor)." };
+    return { ok: false, error: missing(error.message) && !/Fill in|Pick|Add/.test(error.message) ? "The smart price request needs the 0068 database update first." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  }
   const res = data as { id: number; lines: number; auto: number };
   const { r, lines: saved } = await load(s.supabase, res.id);
   if (r) {

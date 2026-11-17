@@ -6,7 +6,9 @@ import { msConnection, msReady } from "@/lib/microsoft";
 import { todayCentral } from "@/lib/sale";
 import { resolveFile, Workbook } from "@/lib/inventory/workbook";
 import { holdText, holdsAt, stripHoldTag, withHoldTag } from "@/lib/inventory/holds";
-import { LOTS_TAB, countSheetTotal, lotFormulas, lotRange, newLotsTab, parseLotsSheet, type DbLot, type LotCol, type LotsSheet, type PendingRef } from "@/lib/inventory/lots";
+import { GROUPS, LOTS_TAB, countSheetTotal, groupOf, groupTotalCells, lotFormulas, lotRange, newLotsTab, parseLotsSheet, type DbLot, type Group, type LotCol, type LotsSheet, type PendingRef } from "@/lib/inventory/lots";
+
+const GROUP_ORDER = (g: Group) => GROUPS.indexOf(g);
 import { at as at_ } from "@/lib/inventory/sheet";
 import { RECEIVED_TAB, syncReceivedLots } from "@/lib/inventory/received-lots";
 import {
@@ -387,6 +389,11 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
           if (f) {
             await wb.write(countTab, item.row, stockCol, [[f]]);
             sum.to_sheet++;
+            // Just started counting by lot (0077: AMBI-JACK, Alpha …): its old lot list in Notes moves to FOAM LOTS.
+            const noteNow = count.cols.notes ? String(at_(countGrid, item.row, count.cols.notes) ?? "") : "";
+            if (count.cols.notes && !/counted by lot/i.test(noteNow)) {
+              await wb.write(countTab, item.row, count.cols.notes, [[`Counted by lot: see the ${lots.tab} tab.`]]);
+            }
             log(
               "sheet",
               K !== null && !lots.created
@@ -937,7 +944,7 @@ async function syncLotsIn(
  * block (just above that block's last row, so the group's totals take it in), with its SKU, lot #, dates and
  * Starting Qty. Only the tab's own columns move down. Gives back how many rows went in.
  */
-async function addReceivedLots(
+export async function addReceivedLots(
   db: SupabaseClient,
   wb: Workbook,
   tab: string,
@@ -952,31 +959,16 @@ async function addReceivedLots(
   const c = sheet.cols;
   const width = Math.max(...(Object.values(c).filter(Boolean) as number[]));
   let added = 0;
-  // Bottom of the tab first, so the rows above keep their numbers.
-  const plan = fresh
-    .map((l) => {
-      const key = l.sku.toUpperCase();
-      const same = sheet.rows.filter((r) => r.key === key);
-      const kin = same.length
-        ? same
-        : sheet.rows.filter((r) => key.startsWith(`${r.key}-`) || r.key.startsWith(`${key}-`) || r.key.split("-")[0] === key.split("-")[0]);
-      return { l, at: kin.length ? kin[kin.length - 1].row : null, sameSku: same.length > 0 };
-    })
-    .sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
-  for (const { l, at, sameSku } of plan) {
-    if (!at) {
-      log("error", `Lot ${l.lot_no} of ${l.sku} was received in the app but has no group on ${tab}. Add its row there (SKU, Lot #, dates, Starting Qty ${String(r2(Number(l.starting)))}).`, l.sku, null, null, "AMBIT A.I.");
-      await db.from("inventory_lots").update({ add_to_sheet: false, notes: "Add this lot's row on FOAM LOTS by hand" }).eq("id", l.id);
-      continue;
-    }
+  // A lot row: SKU, lot #, dates, Starting Qty and the formulas, for sheet row `r`.
+  const lotCells = (l: DbLotRow, r: number, category: unknown, label: string) => {
     const range = lotRange(sheet);
-    const f = lotFormulas(c, at, { first: range.first, last: range.last + 1 }, pendRef);
+    const f = lotFormulas(c, r, { first: range.first, last: range.last + 1 }, pendRef);
     const cells: unknown[] = [];
     for (let col = 1; col <= width; col++) {
       const k = (Object.keys(c) as LotCol[]).find((x) => c[x] === col);
       const val =
-        k === "category" ? at_(g, at, col) ?? ""
-        : k === "label" ? (sameSku ? String(at_(g, at, col) ?? "").trim() : "") || l.label || prod.get(l.product_id)?.name || l.sku
+        k === "category" ? category ?? ""
+        : k === "label" ? label
         : k === "sku" ? l.sku
         : k === "lot" ? l.lot_no
         : k === "mfg" ? (l.mfg ? sheetDate(l.mfg) : "")
@@ -988,6 +980,66 @@ async function addReceivedLots(
         : "";
       cells.push(val);
     }
+    return cells;
+  };
+  // Where each lot goes: under its own SKU, else with the other SKUs of its group (ISO, Open Cell, Other AMBIT foam,
+  // Alpha …). A group the tab doesn't have yet becomes a new block just above DAMAGED DRUMS.
+  const plan = fresh.map((l) => {
+    const key = l.sku.toUpperCase();
+    const grp = groupOf(key);
+    const same = sheet.rows.filter((r) => r.key === key);
+    const kin = same.length ? same : sheet.rows.filter((r) => groupOf(r.key) === grp);
+    return { l, grp, at: kin.length ? kin[kin.length - 1].row : null, sameSku: same.length > 0 };
+  });
+
+  // ---- new groups first: they go at the bottom, so nothing above them moves
+  const newGroups = new Map<Group, DbLotRow[]>();
+  for (const p of plan) if (!p.at) newGroups.set(p.grp, [...(newGroups.get(p.grp) ?? []), p.l]);
+  if (newGroups.size) {
+    // The DAMAGED DRUMS band (or just under the last lot when there isn't one).
+    let dmg: number | null = null;
+    for (let r = sheet.headerRow + 1; r < g.top + g.values.length; r++) {
+      if (String(at_(g, r, g.left) ?? "").trim().toLowerCase().startsWith("damaged")) {
+        dmg = r;
+        break;
+      }
+    }
+    const lastCol = colLetter(width);
+    let at = dmg ?? sheet.last + 2;
+    const blocks: { grp: Group; rows: unknown[][]; band: number }[] = [];
+    for (const grp of [...newGroups.keys()].sort((a, b) => GROUP_ORDER(a) - GROUP_ORDER(b))) {
+      const lots = newGroups.get(grp)!.sort((a, b) => a.sku.localeCompare(b.sku) || (a.lot_no ?? "").localeCompare(b.lot_no ?? ""));
+      const rows: unknown[][] = [[grp.band, ...Array(width - 1).fill("")]];
+      lots.forEach((l, i) => rows.push(lotCells(l, at + 1 + i, grp.cat, l.label || prod.get(l.product_id)?.name || l.sku)));
+      const total = groupTotalCells(c, lotRange(sheet), grp, width);
+      if (total) rows.push(total);
+      rows.push(Array(width).fill(""));
+      blocks.push({ grp, rows, band: at });
+      if (dmg) await wb.insertDown(tab, `A${at}:${lastCol}${at + rows.length - 1}`);
+      await wb.write(tab, at, 1, rows);
+      await wb.format(tab, `A${at + 1}:${lastCol}${at + rows.length - 1}`, "/fill", { color: "#FFFFFF" });
+      await wb.format(tab, `A${at + 1}:${lastCol}${at + rows.length - 1}`, "/font", { bold: false, color: "#000000" });
+      await wb.format(tab, `A${at}:${lastCol}${at}`, "/fill", { color: grp.fill });
+      await wb.format(tab, `A${at}:${lastCol}${at}`, "/font", { bold: true, color: grp.font });
+      if (total) {
+        const tr = at + lots.length + 1;
+        await wb.format(tab, `A${tr}:${lastCol}${tr}`, "/fill", { color: "#F4D6D6" });
+        await wb.format(tab, `A${tr}:${lastCol}${tr}`, "/font", { bold: true });
+      }
+      for (const [i, l] of lots.entries()) {
+        await db.from("inventory_lots").update({ add_to_sheet: false, on_sheet: true, sheet_row: at + 1 + i, updated_at: new Date().toISOString() }).eq("id", l.id);
+        log("sheet", `Lot ${l.lot_no} of ${l.sku} (${String(r2(Number(l.starting)))}) added to ${tab} under ${grp.cat}.`, l.sku, null, r2(Number(l.starting)), "AMBIT A.I.");
+        added++;
+      }
+      at += rows.length;
+    }
+  }
+
+  // ---- lots joining a group that's already there: bottom of the tab first, so the rows above keep their numbers
+  const rest = plan.filter((p) => p.at).sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  for (const { l, at: atRow, sameSku } of rest) {
+    const at = atRow!;
+    const cells = lotCells(l, at, at_(g, at, c.category ?? 1), (sameSku ? String(at_(g, at, c.label ?? 2) ?? "").trim() : "") || l.label || prod.get(l.product_id)?.name || l.sku);
     await wb.insertDown(tab, `A${at}:${colLetter(width)}${at}`);
     await wb.write(tab, at, 1, [cells]);
     await db.from("inventory_lots").update({ add_to_sheet: false, on_sheet: true, sheet_row: at, updated_at: new Date().toISOString() }).eq("id", l.id);

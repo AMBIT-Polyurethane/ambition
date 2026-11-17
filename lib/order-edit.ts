@@ -42,3 +42,23 @@ export const changesText = (list: OrderChange[] | null | undefined) => (list ?? 
 
 /** Orders that can still be edited: not completed or cancelled. */
 export const editable = (o: { status: string }) => o.status !== "completed" && o.status !== "cancelled";
+
+// ------------------------------------------------------------------ order details (0076)
+/** One detail changed on an order: "Ship to: 12 Main St → 400 Oak Ave". */
+export type DetailChange = { label: string; from: string | null; to: string | null };
+
+export type DetailEdit = {
+  id: number;
+  changed_by_name: string | null;
+  changed_at: string;
+  changes: DetailChange[];
+  note: string | null;
+  restocked: boolean;
+};
+
+const short = (v: string | null | undefined, max = 120) => {
+  const t = (v ?? "").replace(/\s+/g, " ").trim() || "(none)";
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+};
+export const detailText = (c: DetailChange) => `${c.label}: ${short(c.from)} → ${short(c.to)}`;
+export const detailsText = (list: DetailChange[] | null | undefined) => (Array.isArray(list) ? list : []).map(detailText);

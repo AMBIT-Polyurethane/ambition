@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { CircleAlert, CircleCheck, ClipboardCheck, ExternalLink, ListChecks, RefreshCw, Send, Truck } from "lucide-react";
+import { CircleAlert, CircleCheck, ClipboardCheck, Eye, ExternalLink, ListChecks, RefreshCw, Send, Truck } from "lucide-react";
 import { todayCentral } from "@/lib/sale";
 import { requirePerm } from "@/lib/session";
-import { hubLock } from "@/lib/access";
+import { hubAllows, hubLock } from "@/lib/access";
 import { TopBar, Empty } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { InventoryList } from "@/components/inventory-list";
@@ -24,9 +24,11 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     supabase.from("branches").select("id, name, state").order("sort"),
     supabase.from("categories").select("*").order("sort"),
   ]);
-  // Warehouse managers only see their own location.
+  // Warehouse managers can look at every location, start on their own, and only work on their own.
   const lock = hubLock(profile);
-  const live = sheets.filter((s) => s.enabled && (lock === null || s.branch_id === lock));
+  const live = sheets
+    .filter((s) => s.enabled)
+    .sort((a, b) => (a.branch_id === profile.branch_id ? -1 : b.branch_id === profile.branch_id ? 1 : 0));
   const branchName = (id: string) => {
     const b = ((branchRows ?? []) as { id: string; name: string; state: string }[]).find((x) => x.id === id);
     return b ? `${b.name}, ${b.state}` : id.toUpperCase();
@@ -45,6 +47,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   const sheet = live.find((s) => s.branch_id === sp.b) ?? live.find((s) => s.branch_id === profile.branch_id) ?? live[0];
   const branch = sheet.branch_id;
+  const mine = hubAllows(profile, branch);
   const today = todayCentral();
   const [rows, spotRes, incomingRes, recRes, sold, buyer, reqRes] = await Promise.all([
     branchStock(supabase, branch),
@@ -82,7 +85,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <div className="chips" role="tablist" aria-label="Location">
           {live.map((s) => (
             <Link key={s.branch_id} href={`/inventory/stock?b=${s.branch_id}`} className={`chip${s.branch_id === branch ? " on" : ""}`}>
-              {branchName(s.branch_id)}
+              {branchName(s.branch_id)}{lock && s.branch_id === lock ? " (yours)" : ""}
             </Link>
           ))}
         </div>
@@ -95,7 +98,18 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div>
       ) : null}
 
+      {!mine ? (
+        <div className="alert info" role="status">
+          <Eye size={18} style={{ flex: "none", marginTop: 1 }} />
+          <span>
+            Look only: this is {branchName(branch)}&apos;s stock. Counts, receiving, holds and transfers are done by that location.{" "}
+            {lock ? <Link href={`/inventory/stock?b=${lock}`}>Back to your location</Link> : null}
+          </span>
+        </div>
+      ) : null}
+
       {/* Counting and receiving */}
+      {mine ? (
       <div className="inv-tools">
         <Link href={`/inventory/spot?b=${branch}`} className="inv-tool">
           <ClipboardCheck size={20} />
@@ -128,6 +142,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           </span>
         </Link>
       </div>
+      ) : null}
 
       <section className="card col inv-head">
         <div className="row between" style={{ gap: 12, alignItems: "flex-start" }}>
@@ -139,12 +154,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
               {" · checks every 2 minutes"}
             </span>
           </div>
-          <form action={syncNow}>
-            <input type="hidden" name="branch" value={branch} />
-            <Submit className="btn sm ghost" pendingText="Syncing…">
-              <RefreshCw size={15} /> Sync now
-            </Submit>
-          </form>
+          {mine ? (
+            <form action={syncNow}>
+              <input type="hidden" name="branch" value={branch} />
+              <Submit className="btn sm ghost" pendingText="Syncing…">
+                <RefreshCw size={15} /> Sync now
+              </Submit>
+            </form>
+          ) : null}
         </div>
         {sheet.last_summary?.lot_issues?.length ? (
           <div className="alert warn small">
@@ -179,9 +196,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         initialFilter={sp.f ?? "all"}
         sheetUrl={sheet.share_url}
         sold60={Object.fromEntries(sold)}
-        canRop={canSetRop(profile, branch)}
-        canReorder={canRequestReorder(profile)}
+        canRop={mine && canSetRop(profile, branch)}
+        canReorder={mine && canRequestReorder(profile)}
         buyer={buyer.name}
+        readOnly={!mine}
       />
     </main>
   );

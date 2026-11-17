@@ -41,6 +41,7 @@ export function InventoryList({
   canRop = false,
   canReorder = false,
   buyer = "purchasing",
+  readOnly = false,
 }: {
   rows: StockRow[];
   branch: string;
@@ -57,6 +58,8 @@ export function InventoryList({
   canReorder?: boolean;
   /** Who reorder requests go to ("Al Rearick"). */
   buyer?: string;
+  /** Look only: a warehouse manager viewing another location (no counts, holds or reorder points). */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -382,10 +385,12 @@ export function InventoryList({
                     )}
                     <p className="lot-note">
                       Counted by lot. Change quantities on the FOAM LOTS tab of the {sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener noreferrer">spreadsheet</a> : "spreadsheet"}; the app adds pickups to Shipped Out.
-                      {" "}<a href={`/inventory/holds?b=${branch}`}>Hold drums for a customer</a>.
+                      {readOnly ? null : <>{" "}<a href={`/inventory/holds?b=${branch}`}>Hold drums for a customer</a>.</>}
                       {r.lots.some((l) => !l.exp && l.use_by) ? " * No Exp date: 12 months after Mfg." : ""}
                     </p>
                   </div>
+                ) : readOnly ? (
+                  <p className="small muted inv-look">Look only. Counts and changes for {branchName ?? "this location"} are made by its own warehouse.</p>
                 ) : (
                   <form action={action} className="inv-form">
                     <input type="hidden" name="branch" value={branch} />

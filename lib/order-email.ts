@@ -278,10 +278,10 @@ export function buildChangeRequestEmail(doc: OrderDoc, link: string) {
   return { subject, html: wrapEmail("Changes requested", inner), text };
 }
 
-export type DeskNotice = "credit_needed" | "credit_hold" | "ready_to_schedule" | "invoice_update" | "corrected";
+export type DeskNotice = "credit_needed" | "credit_hold" | "ready_to_schedule" | "invoice_update" | "corrected" | "details";
 
 /** Order desk heads-ups for AMBIT staff: the order is now in their queue. */
-export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, changes?: string[]) {
+export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, changes?: string[], by?: string) {
   const o = doc.order;
   const no = orderNo(o.order_no);
   const who = o.account_no ? `${o.company_name} (${o.account_no})` : o.company_name;
@@ -294,6 +294,13 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, ch
     invoice_update: { eyebrow: "INVOICE UPDATE NEEDED", subject: `Invoice update needed · ${no} · ${o.company_name}`, line: `${ox.invoice_update_by_name ?? "AMBIT staff"} ${o.status === "completed" ? "corrected this order after it was " + (o.delivery_method === "pickup" ? "picked up" : "shipped out") : "edited this order"} (now revision ${ox.revision ?? 2}). Update the invoice in QuickBooks, then enter the new Invoice # and the prices on the order in the app.` },
     corrected: { eyebrow: "SETTLE THE DIFFERENCE", subject: `Corrected after ${o.delivery_method === "pickup" ? "pickup" : "delivery"} · ${no} · ${o.company_name}`, line: `This order was corrected after it was ${o.delivery_method === "pickup" ? "picked up" : "shipped out"}, and the order desk updated the invoice (Invoice # ${o.invoice_no ?? ""}). Collect the difference from the customer if the total went up, or credit them if it went down. Credit isn't checked again.` },
     credit_hold: { eyebrow: "ON CREDIT HOLD", subject: `On credit hold · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} put this order on hold: ${o.credit_note ?? ""}` },
+    details: {
+      eyebrow: "ORDER DETAILS CHANGED",
+      subject: `Order details changed · ${no} · ${o.company_name}`,
+      line: `${by ?? "AMBIT staff"} changed this order's details (below). The items didn't change. Make sure the invoice in QuickBooks matches${
+        o.status === "completed" ? "" : ", and if a packing slip was already printed, print a new one: only the newest counts"
+      }.`,
+    },
     ready_to_schedule: { eyebrow: "READY TO SCHEDULE", subject: `Ready to schedule · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} released this order. Set the ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date and the customer is emailed.` },
   }[kind];
   const rows: [string, string][] = [

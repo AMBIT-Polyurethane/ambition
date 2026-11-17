@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CircleAlert, CircleCheck } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
-import { can, hubLock } from "@/lib/access";
+import { can, hubAllows, hubLock } from "@/lib/access";
 import { dateShort } from "@/lib/format";
 import { todayCentral } from "@/lib/sale";
 import { TopBar, Empty } from "@/components/ui";
@@ -25,14 +25,17 @@ export default async function HoldsPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const { supabase, profile } = await requireEmployee();
   if (!(can(profile, "inventory") || can(profile, "order_desk"))) redirect("/");
-  const holder = canHold(profile);
+  const canPlace = canHold(profile);
   const [sheets, { data: branchRows }, picked] = await Promise.all([
     inventorySheets(supabase),
     supabase.from("branches").select("id, name, state").order("sort"),
     sp.c ? supabase.from("companies").select("default_branch_id").eq("id", sp.c).maybeSingle<{ default_branch_id: string | null }>() : Promise.resolve({ data: null }),
   ]);
+  // Warehouse managers can look at every location's holds; they only hold or release at their own.
   const lock = hubLock(profile);
-  const live = sheets.filter((s) => s.enabled && (lock === null || s.branch_id === lock));
+  const live = sheets
+    .filter((s) => s.enabled)
+    .sort((a, b) => (a.branch_id === profile.branch_id ? -1 : b.branch_id === profile.branch_id ? 1 : 0));
   const branchName = (id: string) => {
     const b = ((branchRows ?? []) as { id: string; name: string; state: string }[]).find((x) => x.id === id);
     return b ? `${b.name}, ${b.state}` : id.toUpperCase();
@@ -45,8 +48,10 @@ export default async function HoldsPage({ searchParams }: { searchParams: Promis
       </main>
     );
   }
-  const want = sp.b ?? picked.data?.default_branch_id ?? profile.branch_id ?? null;
+  const want = sp.b ?? (lock ? null : picked.data?.default_branch_id) ?? profile.branch_id ?? null;
   const branch = (live.find((s) => s.branch_id === want) ?? live[0]).branch_id;
+  const mine = hubAllows(profile, branch);
+  const holder = canPlace && mine;
   const today = todayCentral();
 
   const [holds, { data: lotRows }, { data: lineRows }, custRes, { data: endedRows }] = await Promise.all([
@@ -92,7 +97,7 @@ export default async function HoldsPage({ searchParams }: { searchParams: Promis
       {live.length > 1 ? (
         <div className="chips" role="tablist" aria-label="Location">
           {live.map((s) => (
-            <Link key={s.branch_id} href={`/inventory/holds?b=${s.branch_id}`} className={`chip${s.branch_id === branch ? " on" : ""}`}>{branchName(s.branch_id)}</Link>
+            <Link key={s.branch_id} href={`/inventory/holds?b=${s.branch_id}`} className={`chip${s.branch_id === branch ? " on" : ""}`}>{branchName(s.branch_id)}{lock && s.branch_id === lock ? " (yours)" : ""}</Link>
           ))}
         </div>
       ) : null}
@@ -114,6 +119,8 @@ export default async function HoldsPage({ searchParams }: { searchParams: Promis
             <p className="small muted" style={{ margin: 0 }}>No lots on this location&apos;s FOAM LOTS tab.</p>
           )}
         </section>
+      ) : canPlace && !mine ? (
+        <p className="tiny faint" style={{ margin: 0 }}>Look only: holds at {branchName(branch)} are placed and released by that location.</p>
       ) : (
         <p className="tiny faint" style={{ margin: 0 }}>Admins and the order desk place and release holds.</p>
       )}

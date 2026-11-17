@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, CircleAlert, Sparkles, X } from "lucide-react";
-import { money } from "@/lib/format";
+import { money, rate } from "@/lib/format";
 import { decidePriceRequest } from "@/app/(app)/price-requests/native-actions";
 
 type L = { id: number; name: string; sku: string; unit: string | null; list: number | null; requested: number; volume: string | null; status: string; approved: number | null; auto: boolean; rule: string | null; floor: number | null };
@@ -43,10 +43,10 @@ export function PriceDecision({ id, lines }: { id: number; lines: L[] }) {
             <div className="pr-nums">
               <span><span className="tiny faint">List</span><b>{l.list !== null ? money(l.list) : "–"}</b></span>
               <span><span className="tiny faint">Floor</span><b>{l.floor !== null ? money(l.floor) : "–"}</b></span>
-              <span><span className="tiny faint">Asked</span><b className={off !== null && off > 0 ? "red" : ""}>{money(l.requested)}</b>{off !== null ? <span className="tiny faint">{off > 0 ? `${off}% under` : "at/above list"}</span> : null}</span>
+              <span><span className="tiny faint">Asked</span><b className={off !== null && off > 0 ? "red" : ""}>{rate(l.requested)}</b>{off !== null ? <span className="tiny faint">{off > 0 ? `${off}% under` : "at/above list"}</span> : null}</span>
             </div>
             {l.auto ? (
-              <span className="tiny muted">Approved by the rules at {money(l.approved ?? l.requested)}.</span>
+              <span className="tiny muted">Approved by the rules at {rate(l.approved ?? l.requested)}.</span>
             ) : (
               <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <div className="seg" role="radiogroup" aria-label={`Decision for ${l.name}`}>

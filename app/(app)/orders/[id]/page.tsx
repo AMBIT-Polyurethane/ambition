@@ -8,7 +8,7 @@ import { OrderReturnsCard, type ReturnLine } from "@/components/order-returns-ca
 import { canCredit, creditFor } from "@/lib/credit";
 import { OrderChatButton } from "@/components/chat/order-button";
 import { notFound } from "next/navigation";
-import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, Printer, RefreshCw, Repeat, ShieldAlert } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, MapPin, PencilLine, PenLine, Printer, RefreshCw, Repeat, ShieldAlert } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
@@ -19,7 +19,7 @@ import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { approveOrderChange, cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderRep, setOrderStatus } from "@/app/(app)/orders/actions";
 import { HOUSE, RepOptions, staffName, type Staff } from "@/components/rep-options";
-import { changeWaiting, changesText, editable, type OrderEdit } from "@/lib/order-edit";
+import { changeWaiting, changesText, detailsText, editable, type DetailEdit, type OrderEdit } from "@/lib/order-edit";
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
 import { LotFixAfter, type LotLine, type LotOption } from "@/components/lot-check";
@@ -111,6 +111,15 @@ export default async function OrderDetailPage({
     ? await supabase.from("order_edits").select("*").eq("order_id", id).order("edited_at")
     : { data: null };
   const edits = ((editRows ?? []) as OrderEdit[]).map((e) => ({ ...e, changes: Array.isArray(e.changes) ? e.changes : [] }));
+  // Detail changes (0076): ship-to, customer, location, PO… (no admin approval). Before 0076 the table isn't there.
+  const { data: detailRows } = emp
+    ? await supabase.from("order_detail_changes").select("id, changed_by_name, changed_at, changes, note, restocked").eq("order_id", id).order("changed_at")
+    : { data: null };
+  const detailEdits = ((detailRows ?? []) as DetailEdit[]).map((d) => ({ ...d, changes: Array.isArray(d.changes) ? d.changes : [] }));
+  // Ship-to: anyone who edits orders, any time (not cancelled). Admins: every detail, cancelled orders too.
+  const canEditDetails =
+    emp &&
+    (profile.role === "admin" || ((can(profile, "ordering") || can(profile, "order_desk")) && order.status !== "cancelled" && order.delivery_method !== "pickup"));
   // Changes no admin has approved yet (0075): the order can't be loaded until one does.
   const waitingEdits = edits.filter(changeWaiting);
   // Open orders: admins, Ordering and the order desk. A completed order (picked up / delivered): admins only (0046).
@@ -214,6 +223,50 @@ export default async function OrderDetailPage({
   const where = order.delivery_method === "pickup"
     ? `: ${branch ? `${branch.name}, ${branch.state}` : order.branch_id}`
     : `${branch && order.delivery_method === "jobsite" ? ` from ${branch.name}, ${branch.state}` : ""}\n${order.ship_address ?? ""}`;
+
+  // Item edits and detail changes together, newest first.
+  type HistoryRow = { kind: "d"; at: string; d: (typeof detailEdits)[number] } | { kind: "e"; at: string; e: (typeof edits)[number] };
+  const history: HistoryRow[] = [
+    ...detailEdits.map((d) => ({ kind: "d" as const, at: d.changed_at, d })),
+    ...edits.map((e) => ({ kind: "e" as const, at: e.edited_at, e })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  const detailItem = (d: (typeof detailEdits)[number]) => (
+    <div key={`d${d.id}`} className="item col" style={{ alignItems: "stretch", gap: 4 }}>
+      <div className="row between" style={{ gap: 8 }}>
+        <b className="small">Details changed</b>
+        <span className="tiny faint">{d.changed_by_name ?? ""} · {dateTime(d.changed_at)}</span>
+      </div>
+      <ul className="edit-changes small">{detailsText(d.changes).map((t, i) => <li key={i}>{t}</li>)}</ul>
+      {d.note ? <div className="tiny muted">Why: {d.note}</div> : null}
+      {d.restocked ? <div className="tiny faint">The stock it holds moved with it.</div> : null}
+    </div>
+  );
+  const editItem = (e: (typeof edits)[number]) => (
+    <div key={e.id} className="item col" style={{ alignItems: "stretch", gap: 4 }}>
+      <div className="row between" style={{ gap: 8 }}>
+        <b className="small">Revision {e.revision}</b>
+        <span className="tiny faint">{e.edited_by_name ?? ""} · {dateTime(e.edited_at)}</span>
+      </div>
+      <ul className="edit-changes small">{changesText(e.changes).map((t, i) => <li key={i}>{t}</li>)}</ul>
+      {e.note ? <div className="tiny muted">Why: {e.note}</div> : null}
+      {e.admin_needed ? (
+        <div className={`tiny ${e.admin_approved_at ? "faint" : "red"}`}>
+          {e.admin_approved_at
+            ? `Approved by ${e.admin_approved_by_name ?? "an admin"} (QuickBooks invoice checked) · ${dateTime(e.admin_approved_at)}${e.admin_note ? ` · ${e.admin_note}` : ""}`
+            : "Waiting for an admin to approve"}
+        </div>
+      ) : null}
+      <div className="tiny faint">
+        {e.invoice_updated_at
+          ? `Invoice updated by ${e.invoice_updated_by_name ?? ""} · ${dateTime(e.invoice_updated_at)}${e.total_before !== null && e.total_after !== null ? ` · ${money(e.total_before)} → ${money(e.total_after)}` : ""}${e.credit_reopened ? " · credit checked again" : ""}`
+          : e.stage_before && !["customer", "needs_po"].includes(e.stage_before)
+            ? "Waiting for the order desk to update the invoice"
+            : e.stage_before === "customer"
+              ? "Before the customer approved: they got a fresh approval email"
+              : "Before the Sales Order #: orders@ambitpu.com got the updated order"}
+      </div>
+    </div>
+  );
 
   return (
     <main className="shell">
@@ -354,6 +407,13 @@ export default async function OrderDetailPage({
           </a>
         )
       ) : null}
+      {/* 0076: sign the packing slip on a phone or iPad, which finishes the order. */}
+      {closer && st0 === "scheduled" && order.status !== "completed" && order.status !== "cancelled" && order.delivery_method !== "dropship" && !waitingEdits.length ? (
+        <Link href={`/orders/${order.id}/sign`} className="btn block packing-slip-btn">
+          <PenLine size={17} /> Sign on screen
+          <span className="tiny faint">Both sign with a finger, then it&apos;s marked {order.delivery_method === "pickup" ? "picked up" : "shipped out"} with the signed slip saved as the BOL</span>
+        </Link>
+      ) : null}
 
       {canEdit ? (
         <Link href={`/orders/${order.id}/edit`} className="btn dark block edit-order-top">
@@ -464,6 +524,12 @@ export default async function OrderDetailPage({
             </>
           ) : null}
         </dl>
+        {canEditDetails ? (
+          <Link href={`/orders/${order.id}/details`} className="btn ghost sm details-btn">
+            {profile.role === "admin" ? <PencilLine size={15} /> : <MapPin size={15} />}{" "}
+            {profile.role === "admin" ? "Edit details (customer, ship-to, location, PO…)" : "Change ship-to address"}
+          </Link>
+        ) : null}
       </section>
 
       {emp && tax && (TAX_STATE[tax.state].blocks || tax.state === "expiring") ? (
@@ -553,36 +619,11 @@ export default async function OrderDetailPage({
         <p className="tiny faint" style={{ margin: 0 }}>Final pricing, tax and freight are confirmed by AMBIT on the invoice.</p>
       </section>
 
-      {edits.length ? (
+      {edits.length || detailEdits.length ? (
         <section className="section">
           <div className="eyebrow row" style={{ gap: 6 }}><History size={14} /> Changes to this order</div>
           <div className="list">
-            {[...edits].reverse().map((e) => (
-              <div key={e.id} className="item col" style={{ alignItems: "stretch", gap: 4 }}>
-                <div className="row between" style={{ gap: 8 }}>
-                  <b className="small">Revision {e.revision}</b>
-                  <span className="tiny faint">{e.edited_by_name ?? ""} · {dateTime(e.edited_at)}</span>
-                </div>
-                <ul className="edit-changes small">{changesText(e.changes).map((t, i) => <li key={i}>{t}</li>)}</ul>
-                {e.note ? <div className="tiny muted">Why: {e.note}</div> : null}
-                {e.admin_needed ? (
-                  <div className={`tiny ${e.admin_approved_at ? "faint" : "red"}`}>
-                    {e.admin_approved_at
-                      ? `Approved by ${e.admin_approved_by_name ?? "an admin"} (QuickBooks invoice checked) · ${dateTime(e.admin_approved_at)}${e.admin_note ? ` · ${e.admin_note}` : ""}`
-                      : "Waiting for an admin to approve"}
-                  </div>
-                ) : null}
-                <div className="tiny faint">
-                  {e.invoice_updated_at
-                    ? `Invoice updated by ${e.invoice_updated_by_name ?? ""} · ${dateTime(e.invoice_updated_at)}${e.total_before !== null && e.total_after !== null ? ` · ${money(e.total_before)} → ${money(e.total_after)}` : ""}${e.credit_reopened ? " · credit checked again" : ""}`
-                    : e.stage_before && !["customer", "needs_po"].includes(e.stage_before)
-                      ? "Waiting for the order desk to update the invoice"
-                      : e.stage_before === "customer"
-                        ? "Before the customer approved: they got a fresh approval email"
-                        : "Before the Sales Order #: orders@ambitpu.com got the updated order"}
-                </div>
-              </div>
-            ))}
+            {history.map((h) => (h.kind === "d" ? detailItem(h.d) : editItem(h.e)))}
           </div>
         </section>
       ) : null}

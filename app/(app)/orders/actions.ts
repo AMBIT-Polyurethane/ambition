@@ -5,11 +5,12 @@ import { redirect } from "next/navigation";
 import { getSession, isEmployee } from "@/lib/session";
 import { sendAdminChangeApproval, sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendOrderUpdatedNotice, sendScheduledNotice } from "@/lib/order-send";
 import { loadOrderDoc } from "@/lib/order-doc/load";
+import { renderPackingSlip, signedSlipFileName } from "@/lib/order-doc/packing-slip";
 import type { Order } from "@/lib/types";
 import { kickForOrder } from "@/lib/inventory/sync";
 import { can } from "@/lib/access";
 import { money } from "@/lib/format";
-import { changesText, type OrderChange } from "@/lib/order-edit";
+import { changesText, detailsText, type DetailChange, type OrderChange } from "@/lib/order-edit";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
 
 const STATUSES = ["new", "processing", "completed", "cancelled"];
@@ -567,4 +568,101 @@ export async function approveOrderChange(form: FormData) {
   });
   if (error) back(id, "err", /order_change_approve|function/.test(error.message) && !/Tick|nothing|admin/i.test(error.message) ? "This needs the 0075 database update first." : error.message);
   back(id, "msg", `Change approved${Number(data) > 1 ? ` (${data} revisions)` : ""}. The order can be loaded and marked picked up or shipped out.`);
+}
+
+/** Change an order's details (0076): ship-to for staff who edit orders; everything for admins. No admin approval. */
+export async function editOrderDetails(input: { id: string; set: Record<string, string | boolean | null>; note: string }): Promise<{ ok: false; error: string } | never> {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile) || !(s.profile.role === "admin" || can(s.profile, "ordering") || can(s.profile, "order_desk"))) {
+    return { ok: false, error: "You don't have access to edit orders." };
+  }
+  const id = String(input.id ?? "");
+  const set = Object.fromEntries(Object.entries(input.set ?? {}).filter(([, v]) => v !== undefined));
+  if (!Object.keys(set).length) return { ok: false, error: "Nothing changed." };
+  const { data, error } = await s.supabase.rpc("order_edit_details", { p_order: id, p_set: set, p_note: String(input.note ?? "").slice(0, 500) || null });
+  if (error) return { ok: false, error: /order_edit_details/.test(error.message) ? "Editing order details needs the 0076 database update first (Supabase > SQL Editor)." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  const r = (data ?? {}) as { changes?: DetailChange[]; restocked?: boolean; stage?: string; customer?: boolean; approval_pending?: boolean; scheduled?: boolean };
+  const changes = detailsText(r.changes);
+  if (r.restocked) await kickForOrder(s.supabase, id, "order moved");
+  const by = s.profile.full_name ?? s.profile.email ?? "AMBIT staff";
+  // The order desk hears about it once the order is in QuickBooks (before that, the new details are simply on the order).
+  const desk = r.stage && r.stage !== "customer" && r.stage !== "needs_po" ? await sendDeskNotice(s.supabase, id, "details", changes, by) : null;
+  const parts = [
+    `Saved: ${changes.length === 1 ? changes[0] : `${changes.length} details changed`}.`,
+    r.restocked ? "The stock it holds moved too (the spreadsheets update on the next sync)." : "",
+    desk ? (desk.status === "sent" ? "The order desk was emailed to check the invoice." : "Tell the order desk so they can check the invoice (the email didn't go out).") : "",
+    r.customer ? "Prices on the items didn't change: check them against the new customer's pricing." : "",
+    r.customer && r.approval_pending ? "It's still waiting on the customer: resend the approval below so it goes to the new customer." : "",
+    r.scheduled && !r.customer ? "It's already scheduled: if the customer needs the new details, resend the scheduled email." : "",
+  ];
+  back(id, "msg", parts.filter(Boolean).join(" "));
+}
+
+/** 0076: the packing slip signed on a phone or iPad. Saves the signed slip as the BOL and marks the order picked up / shipped out. */
+export async function signPackingSlip(input: {
+  id: string;
+  version: string;
+  ambit_name: string;
+  ambit_sig: string;
+  customer_name: string;
+  customer_company: string;
+  truck: string;
+  customer_sig: string;
+  lots: number[];
+}): Promise<{ ok: false; error: string } | never> {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile) || !(can(s.profile, "order_desk") || can(s.profile, "inventory"))) {
+    return { ok: false, error: "Only the order desk or the warehouse can sign out an order." };
+  }
+  const id = String(input.id ?? "");
+  const png = (v: unknown) => (typeof v === "string" && v.startsWith("data:image/png;base64,") && v.length < 400000 ? v : "");
+  const ambitSig = png(input.ambit_sig);
+  const custSig = png(input.customer_sig);
+  if (!ambitSig || !custSig) return { ok: false, error: "Both signatures are needed." };
+  const doc = await loadOrderDoc(s.supabase, id, { picks: true });
+  if (!doc) return { ok: false, error: "Order not found." };
+  // The signed slip, as it was signed.
+  const signedAt = new Date().toISOString();
+  let pdf: Buffer;
+  try {
+    pdf = await renderPackingSlip(doc, {
+      printedBy: s.profile.full_name ?? s.profile.email ?? null,
+      signed: {
+        signedAt,
+        ambit: { name: String(input.ambit_name ?? "").trim().slice(0, 120), sig: ambitSig },
+        customer: {
+          name: String(input.customer_name ?? "").trim().slice(0, 120),
+          company: String(input.customer_company ?? "").trim().slice(0, 120) || null,
+          truck: String(input.truck ?? "").trim().slice(0, 60) || null,
+          sig: custSig,
+        },
+      },
+    });
+  } catch (e) {
+    return { ok: false, error: `The signed slip couldn't be made: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const path = `${id}/bol-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.pdf`;
+  const up = await s.supabase.storage.from("order-files").upload(path, pdf, { contentType: "application/pdf", upsert: false });
+  if (up.error) return { ok: false, error: `The signed slip couldn't be saved (${up.error.message}). Try again.` };
+  const { error } = await s.supabase.rpc("order_sign_slip", {
+    p_order: id,
+    p_version: String(input.version ?? ""),
+    p: {
+      ambit_name: input.ambit_name,
+      ambit_sig: ambitSig,
+      customer_name: input.customer_name,
+      customer_company: input.customer_company,
+      truck: input.truck,
+      customer_sig: custSig,
+      lots: (input.lots ?? []).map(Number).filter((n) => Number.isFinite(n) && n > 0),
+    },
+    p_path: path,
+    p_file_name: signedSlipFileName(doc),
+  });
+  if (error) {
+    await s.supabase.storage.from("order-files").remove([path]);
+    return { ok: false, error: /order_sign_slip|order_slip_version/.test(error.message) ? "Signing on screen needs the 0076 database update first (Supabase > SQL Editor)." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  }
+  await kickForOrder(s.supabase, id, "order completed");
+  back(id, "msg", `Signed and marked ${doc.order.delivery_method === "pickup" ? "picked up" : "shipped out"}. The signed packing slip is saved on the order as its signed BOL.`);
 }

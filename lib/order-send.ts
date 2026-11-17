@@ -122,7 +122,7 @@ export async function creditEmailList(supabase: SupabaseClient): Promise<{ name:
 }
 
 /** Order desk heads-ups: credit check needed (accounting), on hold (rep + order desk), ready to schedule (order desk). */
-export async function sendDeskNotice(supabase: SupabaseClient, orderId: string, kind: DeskNotice, changes?: string[]): Promise<SendResult> {
+export async function sendDeskNotice(supabase: SupabaseClient, orderId: string, kind: DeskNotice, changes?: string[], by?: string): Promise<SendResult> {
   const doc = await loadOrderDoc(supabase, orderId);
   if (!doc) return { status: "failed", error: "Order not found" };
   const o = doc.order;
@@ -135,7 +135,7 @@ export async function sendDeskNotice(supabase: SupabaseClient, orderId: string, 
   if (kind === "credit_hold" && o.placed_by_role !== "customer" && o.placed_by_email) to.push(o.placed_by_email);
   if (to.length === 0) to = [kind === "credit_needed" || kind === "corrected" ? ACCOUNTING_EMAIL : ORDERS_EMAIL];
   const origin = await currentOrigin();
-  return sendEmail({ to, ...buildDeskEmail(kind, doc, `${origin}/orders/${orderId}`, changes) });
+  return sendEmail({ to, ...buildDeskEmail(kind, doc, `${origin}/orders/${orderId}`, changes, by) });
 }
 
 /** The customer's email for an order: whoever placed it (a contractor), else the approval email, else the company's. */

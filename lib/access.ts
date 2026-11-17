@@ -64,8 +64,9 @@ export const needsRole = (p: Pick<Profile, "role" | "status"> & { job_role?: str
   p.role === "employee" && p.status === "active" && p.perms != null && !p.job_role;
 
 /**
- * Warehouse managers run one location, so the Inventory Hub only ever shows them their own.
- * Returns that location ("" if their account has no location yet), or null for anyone who can see every location.
+ * Warehouse managers run one location. They can look at every location's stock, holds and reports (starting on their
+ * own), but counts, receiving, holds, transfers and spot checks only ever happen at their own.
+ * Returns that location ("" if their account has no location yet), or null for anyone who works on every location.
  */
 type HubWho = (Pick<Profile, "role"> & { job_role?: string | null; branch_id?: string | null }) | null | undefined;
 export function hubLock(p: HubWho): string | null {
@@ -73,7 +74,7 @@ export function hubLock(p: HubWho): string | null {
   if (p.role !== "employee" || p.job_role !== "warehouse") return null;
   return p.branch_id ?? "";
 }
-/** Can this person see or work on this location in the Inventory Hub? */
+/** Can this person work on this location in the Inventory Hub (count, receive, hold, transfer)? */
 export function hubAllows(p: HubWho, branch: string | null | undefined): boolean {
   const lock = hubLock(p);
   return lock === null || (!!branch && branch === lock);

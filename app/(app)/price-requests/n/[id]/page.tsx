@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CircleAlert, CircleCheck, Sparkles } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
-import { dateShort, dateTime, money } from "@/lib/format";
+import { dateShort, dateTime, money, rate } from "@/lib/format";
 import { PR_STATUS, prRef, type PrLine, type PrRow } from "@/lib/price-requests";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -62,8 +62,8 @@ export default async function PriceRequestPage({ params, searchParams }: { param
                 <tr key={l.id}>
                   <td><b>{l.name}</b><br /><span className="tiny faint">{l.sku}{l.volume ? ` · ${l.volume}` : ""} · {off(l)}</span>{l.auto ? <><br /><span className="tiny" style={{ color: "var(--ok-text)" }}><Sparkles size={11} /> {l.rule}</span></> : null}</td>
                   <td className="hide-sm">{l.list_price !== null ? money(Number(l.list_price)) : "–"}</td>
-                  <td>{money(Number(l.requested_price))}</td>
-                  <td>{l.status === "approved" && l.approved_price !== null ? <b>{money(Number(l.approved_price))}</b> : l.status === "denied" ? <b className="red">No</b> : <span className="pill warn">Waiting</span>}</td>
+                  <td>{rate(Number(l.requested_price))}{l.unit && /lb|sq ft|bag/.test(l.unit) ? <span className="tiny faint"> / {l.unit}</span> : null}</td>
+                  <td>{l.status === "approved" && l.approved_price !== null ? <b>{rate(Number(l.approved_price))}</b> : l.status === "denied" ? <b className="red">No</b> : <span className="pill warn">Waiting</span>}</td>
                 </tr>
               ))}
             </tbody>

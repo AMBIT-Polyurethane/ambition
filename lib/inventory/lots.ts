@@ -123,6 +123,18 @@ export function lotFormulas(cols: Partial<Record<LotCol, number>>, r: number, ra
   return out;
 }
 
+/** A group's total row (Remaining, Pending Pickup, Available for every SKU in the group), `width` cells wide. */
+export function groupTotalCells(cols: Partial<Record<LotCol, number>>, range: { first: number; last: number }, g: Group, width: number): unknown[] | null {
+  if (!g.total || !g.pattern || !cols.label || !cols.sku) return null;
+  const row: unknown[] = Array(width).fill("");
+  row[cols.label - 1] = g.total;
+  for (const k of ["remaining", "pending", "available"] as LotCol[]) {
+    if (!cols[k]) continue;
+    row[cols[k]! - 1] = `=SUMIFS(${abs(cols[k]!, range.first, range.last)},${abs(cols.sku, range.first, range.last)},"${g.pattern}")`;
+  }
+  return row;
+}
+
 /** COUNT SHEET TOTAL IN STOCK for a product counted by lot: everything left in its lots. */
 export function countSheetTotal(tab: string, s: Pick<LotsSheet, "headerRow" | "last" | "cols">, skuCell: string): string | null {
   const { remaining, sku } = s.cols;
@@ -150,13 +162,19 @@ export type DbLot = {
   sort: number;
 };
 
-type Group = { band: string; cat: string; total: string | null; match: (sku: string) => boolean; pattern: string | null; fill: string; font: string };
-const GROUPS: Group[] = [
+export type Group = { band: string; cat: string; total: string | null; match: (sku: string) => boolean; pattern: string | null; fill: string; font: string };
+export const GROUPS: Group[] = [
   { band: "ISO  (A-SIDE)", cat: "ISO", total: "Total ISO", match: (s) => /^ISO/i.test(s), pattern: "ISO-*", fill: "#E33527", font: "#FFFFFF" },
+  { band: "ISO TOTES", cat: "ISO TOTES", total: "Total ISO Totes", match: (s) => /ISO.*TOTE/i.test(s), pattern: "*ISO-TOTE*", fill: "#F87171", font: "#FFFFFF" },
   { band: "OPEN CELL", cat: "OPEN CELL", total: "Total Open Cell", match: (s) => /^AMB-SEAL/i.test(s), pattern: "AMB-SEAL*", fill: "#18181B", font: "#FFFFFF" },
   { band: "CLOSED-CELL (HFO)", cat: "CLOSED-CELL (HFO)", total: "Total Closed-Cell", match: (s) => /^AMB-TITE/i.test(s), pattern: "AMB-TITE*", fill: "#A1A1AA", font: "#FFFFFF" },
+  // 0077: AMBI-JACK, AMBI-ROOF, AMBI-TITE 255 AG / 285 and the rest of AMBIT's own foams, then Alpha.
+  { band: "OTHER AMBIT FOAM  (AMBI-JACK, AMBI-ROOF, 255 AG, 285 …)", cat: "OTHER AMBIT FOAM", total: null, match: (s) => /^AMBI?-/i.test(s), pattern: null, fill: "#52525B", font: "#FFFFFF" },
+  { band: "ALPHA CHEMICALS", cat: "ALPHA", total: null, match: (s) => /^ALPHA/i.test(s), pattern: null, fill: "#7C3AED", font: "#FFFFFF" },
   { band: "OTHER FOAM", cat: "OTHER", total: null, match: () => true, pattern: null, fill: "#D4D4D8", font: "#18181B" },
 ];
+/** The FOAM LOTS group a SKU belongs in. */
+export const groupOf = (sku: string): Group => GROUPS.find((g) => g.match(sku))!;
 
 export const LOT_HEADERS = ["Category", "Product", "SKU", "Lot #", "Mfg Date", "Exp Date", "Starting Qty", "Shipped Out", "Shipped In", "Adj", "Remaining", "Pending Pickup", "Available", "Product Total", "Use By", "Notes"];
 const WIDTH = LOT_HEADERS.length;

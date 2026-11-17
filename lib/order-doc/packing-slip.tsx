@@ -67,7 +67,7 @@ const s = StyleSheet.create({
   cDesc: { flex: 1 },
   cQty: { width: 62, textAlign: "right", fontFamily: "Helvetica-Bold", fontSize: 10 },
   cTick: { width: 46, alignItems: "center" },
-  tick: { width: 13, height: 13, borderWidth: 1.1, borderColor: INK, borderRadius: 1.5 },
+  tick: { width: 13, height: 13, borderWidth: 1.1, borderColor: INK, borderRadius: 1.5, alignItems: "center", justifyContent: "center" },
   loadBreak: { borderTopWidth: 1.8, borderTopColor: INK },
   splitNote: { fontSize: 7, color: GRAY, marginTop: 1 },
   pick: { fontSize: 8, color: INK, marginTop: 1.5 },
@@ -84,6 +84,8 @@ const s = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "flex-end", marginTop: 11 },
   lineL: { fontSize: 7.4, color: GRAY, marginRight: 5 },
   lineRule: { flex: 1, borderBottomWidth: 0.8, borderBottomColor: INK, height: 12 },
+  lineV: { fontFamily: "Helvetica-Bold", fontSize: 8.6, lineHeight: 1.1, paddingLeft: 2 },
+  sigImg: { height: 30, width: 150, objectFit: "contain", objectPosition: "0% 100%" },
   foot: { position: "absolute", left: 36, right: 36, bottom: 20, borderTopWidth: 0.7, borderTopColor: RULE, paddingTop: 4, fontSize: 6.6, color: GRAY },
   cont: { position: "absolute", left: 36, right: 36, top: 15, fontSize: 6.6, color: GRAY, fontFamily: "Helvetica-Bold", letterSpacing: 0.8 },
   pageNo: { position: "absolute", left: 36, right: 36, bottom: 20, paddingTop: 4.7, fontSize: 6.6, color: GRAY, textAlign: "right" },
@@ -112,23 +114,37 @@ function StopSign({ size = 64 }: { size?: number }) {
   );
 }
 
-function Line({ label }: { label: string }) {
+/** A line to write on; on a slip signed in the app it carries what was entered (or the signature itself). */
+function Line({ label, value, sig }: { label: string; value?: string | null; sig?: string | null }) {
   return (
     <View style={s.line}>
       <Text style={s.lineL}>{label}</Text>
-      <View style={s.lineRule} />
+      <View style={[s.lineRule, sig ? { height: 32 } : {}]}>
+        {sig ? <Image src={sig} style={s.sigImg} /> : value ? <Text style={s.lineV}>{value}</Text> : null}
+      </View>
     </View>
   );
 }
 
-function Two({ a, b }: { a: string; b: string }) {
+function Two({ a, b, av, bv }: { a: string; b: string; av?: string | null; bv?: string | null }) {
   return (
     <View style={{ flexDirection: "row" }}>
-      <View style={{ flex: 1.3, marginRight: 10 }}><Line label={a} /></View>
-      <View style={{ flex: 1 }}><Line label={b} /></View>
+      <View style={{ flex: 1.3, marginRight: 10 }}><Line label={a} value={av} /></View>
+      <View style={{ flex: 1 }}><Line label={b} value={bv} /></View>
     </View>
   );
 }
+
+/** Signed on a phone or iPad (0076): both signatures are PNG data URLs. */
+export type SlipSigned = {
+  signedAt: string;
+  ambit: { name: string; sig: string };
+  customer: { name: string; company: string | null; truck: string | null; sig: string };
+};
+
+const dayOf = (iso: string) => dateShort(iso);
+const timeOf = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Chicago", timeZoneName: "short" });
 
 /** "38 drums · 2 pails · 1 each" for everything on the slip. */
 export function totalsText(items: { qty: number | string; unit: string }[]): string {
@@ -140,7 +156,7 @@ export function totalsText(items: { qty: number | string; unit: string }[]): str
   return [...by.entries()].map(([u, q]) => qtyText(q, u)).join("  ·  ");
 }
 
-function PackingSlip({ doc, printedBy, printedAt }: { doc: OrderDoc; printedBy: string | null; printedAt: string }) {
+function PackingSlip({ doc, printedBy, printedAt, signed }: { doc: OrderDoc; printedBy: string | null; printedAt: string; signed?: SlipSigned | null }) {
   const o = doc.order;
   const no = orderNo(o.order_no);
   const pickup = o.delivery_method === "pickup";
@@ -164,7 +180,9 @@ function PackingSlip({ doc, printedBy, printedAt }: { doc: OrderDoc; printedBy: 
   const hold = o.credit_status === "hold";
 
   const when = o.scheduled_for ? dateShort(o.scheduled_for) : null;
-  const stamp = doc.state === "cancelled"
+  const stamp = signed
+    ? { text: `${pickup ? "PICKED UP" : "SHIPPED OUT"}  ·  SIGNED ${up(dayOf(signed.signedAt))}`, color: GREEN }
+    : doc.state === "cancelled"
     ? { text: "CANCELLED · DO NOT LOAD", color: RED }
     : when
       ? { text: `${pickup ? "PICKUP" : "DELIVERY"}  ·  ${up(when)}`, color: GREEN }
@@ -197,7 +215,7 @@ function PackingSlip({ doc, printedBy, printedAt }: { doc: OrderDoc; printedBy: 
             <Text style={s.kicker}>{rev > 1 ? `PACKING SLIP  ·  REVISION ${rev}` : "PACKING SLIP"}</Text>
             <Text style={s.h1}>{no}</Text>
             <Text style={[s.stamp, { color: stamp.color, borderColor: stamp.color }]}>{stamp.text}</Text>
-            <Text style={s.copyTag}>WAREHOUSE PICKING COPY  ·  NO PRICES</Text>
+            <Text style={s.copyTag}>{signed ? "SIGNED IN THE APP  ·  SIGNED BOL  ·  NO PRICES" : "WAREHOUSE PICKING COPY  ·  NO PRICES"}</Text>
           </View>
         </View>
 
@@ -304,7 +322,15 @@ function PackingSlip({ doc, printedBy, printedAt }: { doc: OrderDoc; printedBy: 
               ))}
             </View>
             <Text style={[s.td, s.cQty]}>{qtyText(row.qty, it.unit)}</Text>
-            <View style={[s.td, s.cTick]}><View style={s.tick} /></View>
+            <View style={[s.td, s.cTick]}>
+              <View style={s.tick}>
+                {signed ? (
+                  <Svg width={9} height={9} viewBox="0 0 12 12">
+                    <Path d="M2 6.5 L5 9.5 L10.5 2.5" fill="none" stroke={GREEN} strokeWidth={2} />
+                  </Svg>
+                ) : null}
+              </View>
+            </View>
           </View>
         ))}
         <View style={s.total} wrap={false}>
@@ -341,24 +367,26 @@ function PackingSlip({ doc, printedBy, printedAt }: { doc: OrderDoc; printedBy: 
               <Text style={s.attest}>
                 I loaded only the items, quantities and lots printed on this packing slip, and I checked the lot # on every drum.
               </Text>
-              <Line label="Print name" />
-              <Line label="Signature" />
-              <Two a="Date" b="Time" />
+              <Line label="Print name" value={signed?.ambit.name} />
+              <Line label="Signature" sig={signed?.ambit.sig} />
+              <Two a="Date" b="Time" av={signed ? dayOf(signed.signedAt) : null} bv={signed ? timeOf(signed.signedAt) : null} />
             </View>
             <View style={s.box}>
               <Text style={s.h3t}>{pickup ? "CUSTOMER OR TRUCK DRIVER · PICKED UP BY" : "TRUCK DRIVER · RECEIVED FOR DELIVERY BY"}</Text>
               <Text style={s.attest}>I received the items and quantities on this packing slip.</Text>
-              <Line label="Print name" />
-              <Line label="Company / carrier" />
-              <Line label="Signature" />
-              <Two a="Date" b="Truck / trailer #" />
+              <Line label="Print name" value={signed?.customer.name} />
+              <Line label="Company / carrier" value={signed?.customer.company} />
+              <Line label="Signature" sig={signed?.customer.sig} />
+              <Two a="Date" b="Truck / trailer #" av={signed ? dayOf(signed.signedAt) : null} bv={signed?.customer.truck} />
             </View>
           </View>
         </View>
 
         <View style={s.foot} fixed>
           <Text>
-            AMBIT Polyurethane  ·  Packing slip {no}{rev > 1 ? ` (revision ${rev})` : ""}  ·  Printed {dateTime(printedAt)}{printedBy ? ` by ${printedBy}` : ""}  ·  Only the newest packing slip counts
+            AMBIT Polyurethane  ·  Packing slip {no}{rev > 1 ? ` (revision ${rev})` : ""}  ·  {signed
+              ? `Signed in the app ${dateTime(signed.signedAt)}${printedBy ? `, saved by ${printedBy}` : ""}  ·  This is the signed BOL`
+              : `Printed ${dateTime(printedAt)}${printedBy ? ` by ${printedBy}` : ""}  ·  Only the newest packing slip counts`}
           </Text>
         </View>
         <Text style={s.pageNo} fixed render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
@@ -368,8 +396,9 @@ function PackingSlip({ doc, printedBy, printedAt }: { doc: OrderDoc; printedBy: 
 }
 
 /** The packing slip as a PDF (AMBIT staff only: it shows the lots the app picked). */
-export async function renderPackingSlip(doc: OrderDoc, opts: { printedBy?: string | null; printedAt?: string } = {}): Promise<Buffer> {
-  return renderToBuffer(<PackingSlip doc={doc} printedBy={opts.printedBy ?? null} printedAt={opts.printedAt ?? new Date().toISOString()} />);
+export async function renderPackingSlip(doc: OrderDoc, opts: { printedBy?: string | null; printedAt?: string; signed?: SlipSigned | null } = {}): Promise<Buffer> {
+  return renderToBuffer(<PackingSlip doc={doc} printedBy={opts.printedBy ?? null} printedAt={opts.printedAt ?? new Date().toISOString()} signed={opts.signed ?? null} />);
 }
 
 export const packingSlipFileName = (doc: OrderDoc) => `AMBIT-Packing-Slip-${orderNo(doc.order.order_no)}.pdf`;
+export const signedSlipFileName = (doc: OrderDoc) => `AMBIT-Signed-Packing-Slip-${orderNo(doc.order.order_no)}.pdf`;

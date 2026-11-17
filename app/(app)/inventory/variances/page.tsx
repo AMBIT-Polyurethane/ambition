@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { requireActive } from "@/lib/session";
-import { can } from "@/lib/access";
+import { can, hubLock } from "@/lib/access";
 import { dateShort, dateTime, money } from "@/lib/format";
 import { inventoryBranches } from "@/lib/widgets";
 import { loadHub } from "@/lib/inventory/hub";
@@ -21,9 +21,12 @@ export default async function VariancesPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const { supabase, profile } = await requireActive();
   if (profile.role !== "admin" && !can(profile, "inventory") && !can(profile, "inv_reports")) redirect("/");
-  const live = await inventoryBranches(supabase, profile);
+  // Warehouse managers can look at every location; they start on their own.
+  const lock = hubLock(profile);
+  const live = lock === "" ? [] : await inventoryBranches(supabase, profile, { all: true });
   if (!live.length) return <main className="shell"><TopBar title="Variance report" back="/inventory" /><Empty icon="boxes" title="No location has live inventory yet" /></main>;
-  const pick = sp.b === "all" && live.length > 1 ? "all" : live.find((b) => b.id === sp.b)?.id ?? (live.length > 1 && !sp.b ? "all" : live[0].id);
+  const own = lock && live.some((b) => b.id === lock) ? lock : null;
+  const pick = sp.b === "all" && live.length > 1 ? "all" : live.find((b) => b.id === sp.b)?.id ?? own ?? (live.length > 1 && !sp.b ? "all" : live[0].id);
   const scope = pick === "all" ? live.map((b) => b.id) : [pick];
 
   const [rows, hub] = await Promise.all([loadVariances(supabase, scope), loadHub(supabase, scope)]);

@@ -2,17 +2,17 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Building2, Check, CircleAlert, CircleCheck, FileSignature, History, LoaderCircle, Send, Sparkles, UserPlus } from "lucide-react";
-import { money } from "@/lib/format";
-import { BASIS_LABEL, basisFor, perUnit, type Basis } from "@/lib/prices";
-import { CREDIT_RANGES, CUSTOMER_TYPES, EMPTY_CUSTOMER, linesOf, PRODUCT_LINES, TERMS, type LineKey, type PrfCustomer } from "@/lib/prf";
+import { ArrowLeft, ArrowRight, Building2, Check, CircleAlert, CircleCheck, FileSignature, LoaderCircle, Send, Sparkles, UserPlus } from "lucide-react";
+import { money, rate } from "@/lib/format";
+import { BASIS_LABEL, basisFor, type Basis } from "@/lib/prices";
+import { CUSTOMER_TYPES, EMPTY_CUSTOMER, linesOf, PRODUCT_LINES, QUOTE_TYPES, type LineKey, type PrfCustomer, type QuoteType } from "@/lib/prf";
 import { customerPricesFor, submitSmartPrf } from "@/app/(app)/price-requests/native-actions";
 import { SendLink } from "@/components/forms/send-link";
 
 export type PrfCo = { id: string; name: string; contact_name: string | null; phone: string | null; email: string | null; bill_address: string | null; city: string | null; state: string | null;
   terms: string | null; credit_limit: number | null; credit_status: string | null; sales_rep_id: string | null };
 export type PrfItem = { id: string; sku: string; name: string; unit: string; category_id: string | null; list: number | null; sqft_per_unit: number | null };
-type Kind = "existing" | "new" | "previous";
+type Kind = "existing" | "new";
 type Line = { price: string; volume: string };
 
 const fmtTel = (v: string) => { const d = v.replace(/\D/g, "").replace(/^1(?=\d{10})/, "").slice(0, 10); return d.length < 4 ? d : d.length < 7 ? `(${d.slice(0, 3)}) ${d.slice(3)}` : `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
@@ -24,13 +24,14 @@ function fromCompany(c: PrfCo): PrfCustomer {
   const [first, ...rest] = (c.contact_name ?? "").trim().split(/\s+/);
   const lines = (c.bill_address ?? "").split(/\n/).map((x) => x.trim()).filter(Boolean);
   const m = /^(.*?),\s*([A-Za-z]{2})\s+(\d{5})/.exec(lines[1] ?? "");
-  const lim = Number(c.credit_limit ?? 0);
-  const range = !lim ? CREDIT_RANGES[0] : lim < 10000 ? CREDIT_RANGES[1] : lim < 25000 ? CREDIT_RANGES[2] : lim < 50000 ? CREDIT_RANGES[3] : lim < 100000 ? CREDIT_RANGES[4] : lim < 250000 ? CREDIT_RANGES[5] : CREDIT_RANGES[6];
-  const t = (c.terms ?? "").toLowerCase();
-  const terms = TERMS.find((x) => t.includes(x.toLowerCase().replace("due on receipt", "receipt"))) ?? (/net\s*30/.test(t) ? "Net 30" : "");
   return { ...EMPTY_CUSTOMER, legal_name: c.name, contact_first: first ?? "", contact_last: rest.join(" "), email: c.email ?? "", phone: c.phone ? fmtTel(c.phone) : "",
-    street: lines[0] ?? "", city: m?.[1] ?? c.city ?? "", state: (m?.[2] ?? c.state ?? "").toUpperCase(), zip: m?.[3] ?? "", billing_terms: terms, credit_range: range };
+    street: lines[0] ?? "", city: m?.[1] ?? c.city ?? "", state: (m?.[2] ?? c.state ?? "").toUpperCase(), zip: m?.[3] ?? "" };
 }
+
+/** Foam and fiberglass types, each with the products its price goes on. */
+const TYPE_BY_KEY = new Map(QUOTE_TYPES.map((t) => [t.key, t]));
+const BATT_RS = [11, 13, 15, 19, 30, 38];
+const money2 = (v: string) => v.replace(/[^\d.]/g, "");
 
 /**
  * The smart Price Request. Existing or new customer first; every customer box is required (existing customers come
@@ -66,11 +67,19 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
   };
   const t = q.trim().toLowerCase();
   const hits = t ? companies.filter((c) => `${c.name} ${c.contact_name ?? ""} ${c.city ?? ""}`.toLowerCase().includes(t)).slice(0, 8) : [];
+  // Intumescents and coatings are quoted item by item; foam and fiberglass by type (prices keyed "type:<key>").
   const shown = useMemo(() => items.filter((p) => linesOf(p).some((l) => lines.includes(l))), [items, lines]);
   const set = (k: keyof PrfCustomer, v: string) => { setCu((c) => ({ ...c, [k]: v })); setErrs((e) => { const n = { ...e }; delete n[k]; return n; }); };
   const priced = shown.filter((p) => Number(prices[p.id]?.price) > 0);
-  // ISO goes with every foam: show it once, under the first foam line picked.
-  const isoHome = PRODUCT_LINES.find((l) => ["insulation", "roofing", "lifting"].includes(l.key) && lines.includes(l.key))?.key;
+  const typeProducts = useMemo(() => new Map(QUOTE_TYPES.map((t) => [t.key, items.filter((p) => t.match(p))])), [items]);
+  const typesPriced = QUOTE_TYPES.filter((t) => lines.includes(t.line) && Number(prices[`type:${t.key}`]?.price) > 0);
+  const anyPriced = priced.length + typesPriced.length;
+  const setPrice = (k: string, v: Partial<Line>) => { setPrices((m) => ({ ...m, [k]: { ...(m[k] ?? { price: "", volume: "" }), ...v } })); setErrs({}); };
+  /** What an existing customer pays now for a type (when its products all have the same price). */
+  const theirsFor = (t: QuoteType) => {
+    const got = (typeProducts.get(t.key) ?? []).map((p) => theirs[p.id]).filter(Boolean);
+    return got.length && got.every((x) => x.price === got[0].price && x.basis === got[0].basis) ? got[0] : null;
+  };
 
   function rule(p: PrfItem, price: number): string | null {
     if (!rules || basisFor(p) !== "unit" || !p.list || rules.never.includes(p.category_id ?? "")) return null;
@@ -86,9 +95,10 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
       if (kind === "existing" && !co) e.co = "Pick the customer.";
     }
     if (step === 1) {
-      const need: (keyof PrfCustomer)[] = ["legal_name", "contact_first", "contact_last", "email", "phone", "street", "city", "state", "zip", "customer_type", "rigs", "monthly_sets", "current_mfr", "billing_terms", "credit_range", "freight_included", "tax_ack"];
-      if (kind !== "existing") need.push("wants_credit");
+      const need: (keyof PrfCustomer)[] = ["legal_name", "contact_first", "contact_last", "email", "phone", "street", "city", "state", "zip", "customer_type", "rigs", "monthly_sets", "current_mfr", "tax_ack"];
       for (const k of need) if (!cu[k].trim()) e[k] = "Required";
+      // A new customer: the credit line they'll ask for, if they want one.
+      if (kind === "new" && cu.wants_credit.startsWith("Yes") && !(Number(money2(cu.credit_requested)) > 0)) e.credit_requested = "How much credit they'll ask for";
       if (cu.email && !EMAIL.test(cu.email)) e.email = "Check the email";
       if (cu.phone && cu.phone.replace(/\D/g, "").length < 10) e.phone = "10 digits";
       if (cu.state && !/^[A-Za-z]{2}$/.test(cu.state)) e.state = "2 letters";
@@ -97,7 +107,7 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
       if (kind !== "existing" && companies.some((c) => c.name.trim().toLowerCase() === cu.legal_name.trim().toLowerCase())) e.legal_name = "This customer is already in the app. Go back and pick Existing.";
     }
     if (step === 2 && !lines.length) e.lines = "Pick at least one product line.";
-    if (step === 3 && !priced.length) e.prices = "Type a price for at least one item.";
+    if (step === 3 && !anyPriced) e.prices = "Type a price for at least one item.";
     if (step === 4 && !note.trim()) e.note = "Add a note.";
     setErrs(e);
     setMsg(Object.keys(e).length ? (e.legal_name && Object.keys(e).length === 1 ? e.legal_name : "Fill in the boxes marked in red.") : "");
@@ -109,8 +119,12 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
     if (!validate(4)) return;
     go(async () => {
       const r = await submitSmartPrf({
-        customer_kind: kind!, company_id: kind === "existing" ? co?.id ?? null : null, customer: cu, product_lines: lines, branch, note, valid_days: days,
-        lines: priced.map((p) => ({ product_id: p.id, price: prices[p.id].price, basis: basisFor(p), volume: prices[p.id].volume })),
+        customer_kind: kind!, company_id: kind === "existing" ? co?.id ?? null : null, product_lines: lines, branch, note, valid_days: days,
+        customer: { ...cu, wants_credit: kind === "new" ? (cu.wants_credit.startsWith("Yes") ? "Yes, they want terms" : "No, COD / prepay") : "", credit_requested: kind === "new" && cu.wants_credit.startsWith("Yes") ? money2(cu.credit_requested) : "" },
+        lines: [
+          ...typesPriced.map((t) => ({ type: t.key, label: t.label, unit: t.unit, products: (typeProducts.get(t.key) ?? []).map((p) => p.id), price: prices[`type:${t.key}`].price, basis: t.basis, volume: prices[`type:${t.key}`].volume ?? "" })),
+          ...priced.map((p) => ({ product_id: p.id, price: prices[p.id].price, basis: basisFor(p), volume: prices[p.id].volume })),
+        ],
       });
       if (!r.ok) { setMsg(r.error); return; }
       setDone(r); scrollTop();
@@ -156,9 +170,9 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
               {wantsCredit ? (
                 <div className="prf-next-card">
                   <span className="fx-tile-ic"><FileSignature size={18} /></span>
-                  <b>1. Credit Application</b><span className="tiny muted">They asked for terms. Bank, trade references, signatures.</span>
-                  <Link href={`/forms/credit_app?prf=${done.id}`} className="btn sm">Fill it in with them</Link>
-                  <SendLink formKey="credit_app" prf={done.id} company={null} prefill={{ ...prefill, ap_contact: name, ap_email: cu.email, ap_phone: cu.phone }} email={cu.email} name={name} title="Credit Application" />
+                  <b>1. Credit Application</b><span className="tiny muted">They&apos;ll need a credit line{money2(cu.credit_requested) ? ` (${money(Number(money2(cu.credit_requested)))})` : ""}. Bank, trade references, signatures.</span>
+                  <Link href={`/forms/credit_app?prf=${done.id}${money2(cu.credit_requested) ? `&credit_requested=${money2(cu.credit_requested)}` : ""}`} className="btn sm">Fill it in with them</Link>
+                  <SendLink formKey="credit_app" prf={done.id} company={null} prefill={{ ...prefill, ap_contact: name, ap_email: cu.email, ap_phone: cu.phone, ...(money2(cu.credit_requested) ? { credit_requested: money2(cu.credit_requested) } : {}) }} email={cu.email} name={name} title="Credit Application" />
                 </div>
               ) : null}
               <div className="prf-next-card">
@@ -185,8 +199,8 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
         {at === 0 ? (
           <>
             <header className="fx-card-head"><h2 className="h2">Who is it for?</h2><span className="small muted">Start here. New customers go on to the credit application and account setup.</span></header>
-            <div className="prf-kind">
-              {([["existing", "Existing customer", "Already buying from AMBIT", Building2], ["new", "New customer", "Never bought from us", UserPlus], ["previous", "Coming back", "Bought before, not in the app now", History]] as const).map(([k, l, h, I]) => (
+            <div className="prf-kind two">
+              {([["existing", "Existing customer", "Already buying from AMBIT", Building2], ["new", "New customer", "Not set up with AMBIT yet", UserPlus]] as const).map(([k, l, h, I]) => (
                 <button key={k} type="button" className={kind === k ? "on" : ""} onClick={() => { setKind(k); setErrs({}); if (k !== "existing") { setCo(null); setTheirs({}); setCu((c) => (co ? EMPTY_CUSTOMER : c)); } }}>
                   <I size={22} /><b>{l}</b><span className="tiny muted">{h}</span>
                 </button>
@@ -220,10 +234,21 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
               {field("city", "City")}{field("state", "State", 1)}{field("zip", "ZIP", 2, { inputMode: "numeric" })}
               {pills("customer_type", "They are a", CUSTOMER_TYPES)}
               {field("rigs", "Foam rigs", 2, { inputMode: "numeric" })}{field("monthly_sets", "Sets a month", 2, { inputMode: "numeric" })}{field("current_mfr", "Buying from now", 2, { placeholder: "e.g. Lapolla, or none" })}
-              {pills("billing_terms", "Billing terms they have now", TERMS)}
-              {pills("credit_range", "Credit line they have now", CREDIT_RANGES)}
-              {kind !== "existing" ? pills("wants_credit", "Do they want credit with AMBIT?", ["Yes, they want terms", "No, COD / prepay"]) : null}
-              {pills("freight_included", "Freight included in the price?", ["Yes", "No"])}
+              {kind === "new" ? (
+                <div className="fx-field w6">
+                  <button type="button" className={`prf-ack${cu.wants_credit.startsWith("Yes") ? " on" : ""}`} aria-pressed={cu.wants_credit.startsWith("Yes")}
+                    onClick={() => set("wants_credit", cu.wants_credit.startsWith("Yes") ? "" : "Yes, they want terms")}>
+                    <span className="fx-tick">{cu.wants_credit.startsWith("Yes") ? <Check size={13} /> : null}</span>Will Customer Require a Credit Line</button>
+                </div>
+              ) : null}
+              {kind === "new" && cu.wants_credit.startsWith("Yes") ? (
+                <div className="fx-field w3">
+                  <label className="fx-label" htmlFor="prf-credit_requested">Credit line they intend to request<i aria-hidden="true">*</i></label>
+                  <span className="cp-money"><span>$</span><input id="prf-credit_requested" className={`input${errs.credit_requested ? " bad" : ""}`} style={{ width: 200 }} inputMode="decimal" placeholder="25,000"
+                    value={cu.credit_requested} onChange={(e) => set("credit_requested", e.target.value.replace(/[^\d.,]/g, ""))} /></span>
+                  {errs.credit_requested ? <span className="fx-err">{errs.credit_requested}</span> : null}
+                </div>
+              ) : null}
               <div className="fx-field w6">
                 <button type="button" className={`prf-ack${cu.tax_ack ? " on" : ""}`} onClick={() => set("tax_ack", cu.tax_ack ? "" : "Yes")}>
                   <span className="fx-tick">{cu.tax_ack ? <Check size={13} /> : null}</span>I told the customer sales tax is added unless AMBIT has their exemption certificate.<i>*</i></button>
@@ -237,42 +262,108 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
             <div className="prf-lines">
               {PRODUCT_LINES.map((l) => {
                 const on = lines.includes(l.key);
-                const n = items.filter((p) => linesOf(p).includes(l.key)).length;
+                const types = QUOTE_TYPES.filter((t) => t.line === l.key).length;
+                const n = types || items.filter((p) => linesOf(p).includes(l.key)).length;
                 return <button key={l.key} type="button" className={on ? "on" : ""} onClick={() => { setLines(on ? lines.filter((x) => x !== l.key) : [...lines, l.key]); setErrs({}); }} disabled={!n}>
-                  <span className="fx-tick">{on ? <Check size={13} /> : null}</span><span className="col tight"><b>{l.label}</b><span className="tiny muted">{l.hint} · {n} items</span></span></button>;
+                  <span className="fx-tick">{on ? <Check size={13} /> : null}</span><span className="col tight"><b>{l.label}</b><span className="tiny muted">{l.hint}{types ? "" : ` · ${n} items`}</span></span></button>;
               })}
             </div>
             {errs.lines ? <span className="fx-err">{errs.lines}</span> : null}
           </>
         ) : at === 3 ? (
           <>
-            <header className="fx-card-head"><h2 className="h2">Prices</h2><span className="small muted">Type the price you need on each item you&apos;re quoting. Leave the rest blank. Foam is <b>per lb</b>, fiberglass <b>per sq ft</b>.</span></header>
-            {shown.length > 12 ? <input className="input" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find an item (R13, 23 in, Knauf, AMBI-TITE…)" aria-label="Find an item" /> : null}
-            {PRODUCT_LINES.filter((l) => lines.includes(l.key)).map((l) => (
+            <header className="fx-card-head"><h2 className="h2">Prices</h2><span className="small muted">Type the price you need on each one you&apos;re quoting and leave the rest blank. Foam is <b>per lb</b>, fiberglass <b>per sq ft</b>, Blow In <b>per bag</b>.</span></header>
+            {lines.includes("foam") ? (
+              <div className="col" style={{ gap: 6 }}>
+                <b className="small">AMBIT Foam Products</b>
+                <div className="prf-items">
+                  {QUOTE_TYPES.filter((t) => t.line === "foam").map((t) => {
+                    const k = `type:${t.key}`;
+                    const v = prices[k] ?? { price: "", volume: "" };
+                    const n = Number(v.price);
+                    const now = co ? theirsFor(t) : null;
+                    return (
+                      <div key={t.key} className={`prf-item${n > 0 ? " on" : ""}`}>
+                        <span className="col tight grow" style={{ minWidth: 0 }}>
+                          <b className="small">{t.label}</b>
+                          <span className="tiny faint">Price per lb{now ? ` · they pay ${rate(now.price)} ${BASIS_LABEL[now.basis]}` : ""}</span>
+                        </span>
+                        <span className="cp-money"><span>$</span><input className="input sm" inputMode="decimal" placeholder="0.00/lb" value={v.price} aria-label={`${t.label} price per lb`}
+                          onChange={(e) => setPrice(k, { price: money2(e.target.value) })} /></span>
+                        <input className="input sm prf-vol" placeholder="Volume" value={v.volume} aria-label={`${t.label} volume`} onChange={(e) => setPrice(k, { volume: e.target.value })} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            {lines.includes("fiberglass") ? (
+              <div className="col" style={{ gap: 6 }}>
+                <b className="small">Fiberglass</b>
+                <div className="prf-fg" role="table" aria-label="Fiberglass prices per sq ft">
+                  <div className="prf-fg-row head" role="row"><span role="columnheader" /><span role="columnheader">KFT (kraft faced)</span><span role="columnheader">UNF (unfaced)</span></div>
+                  {BATT_RS.map((r) => (
+                    <div key={r} className="prf-fg-row" role="row">
+                      <b role="rowheader">R-{r}</b>
+                      {(["K", "U"] as const).map((f) => {
+                        const t = TYPE_BY_KEY.get(`fg:R${r}${f}`)!;
+                        const k = `type:${t.key}`;
+                        const v = prices[k] ?? { price: "", volume: "" };
+                        const now = co ? theirsFor(t) : null;
+                        return (
+                          <span key={f} role="cell" className="col tight">
+                            <span className={`cp-money${Number(v.price) > 0 ? " on" : ""}`}><span>$</span><input className="input sm" inputMode="decimal" placeholder="0.000/sq ft" value={v.price}
+                              aria-label={`${t.label} price per sq ft`} onChange={(e) => setPrice(k, { price: money2(e.target.value) })} /></span>
+                            {now ? <span className="tiny faint">they pay {rate(now.price)}</span> : null}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+                {(() => {
+                  const t = TYPE_BY_KEY.get("fg:BLOWIN")!;
+                  const k = `type:${t.key}`;
+                  const v = prices[k] ?? { price: "", volume: "" };
+                  const now = co ? theirsFor(t) : null;
+                  return (
+                    <div className={`prf-item${Number(v.price) > 0 ? " on" : ""}`}>
+                      <span className="col tight grow" style={{ minWidth: 0 }}>
+                        <b className="small">Blow In</b>
+                        <span className="tiny faint">Price per bag{now ? ` · they pay ${rate(now.price)}` : ""}</span>
+                      </span>
+                      <span className="cp-money"><span>$</span><input className="input sm" inputMode="decimal" placeholder="0.00/bag" value={v.price} aria-label="Blow In price per bag" onChange={(e) => setPrice(k, { price: money2(e.target.value) })} /></span>
+                      <input className="input sm prf-vol" placeholder="Volume" value={v.volume} aria-label="Blow In volume" onChange={(e) => setPrice(k, { volume: e.target.value })} />
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : null}
+            {shown.length > 12 ? <input className="input" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Find an item (DC315, No-Burn, AMBI-SHIELD…)" aria-label="Find an item" /> : null}
+            {PRODUCT_LINES.filter((l) => lines.includes(l.key) && (l.key === "intumescent" || l.key === "coatings")).map((l) => (
               <div key={l.key} className="col" style={{ gap: 6 }}>
                 <b className="small">{l.label}</b>
                 <div className="prf-items">
-                  {items.filter((p) => linesOf(p).includes(l.key) && (!p.sku.toUpperCase().startsWith("ISO") || l.key === isoHome))
+                  {items.filter((p) => linesOf(p).includes(l.key))
                     .filter((p) => !find.trim() || Number(prices[p.id]?.price) > 0 || find.toLowerCase().split(/\s+/).filter(Boolean).every((w) => `${p.sku} ${p.name}`.toLowerCase().includes(w))).map((p) => {
-                    const b = basisFor(p);
                     const v = prices[p.id] ?? { price: "", volume: "" };
                     const n = Number(v.price);
-                    const each = n > 0 ? perUnit(n, b, { name: p.name, sqft_per_unit: p.sqft_per_unit }) : null;
                     const now = theirs[p.id];
                     const r = n > 0 ? rule(p, n) : null;
                     return (
                       <div key={p.id} className={`prf-item${n > 0 ? " on" : ""}`}>
                         <span className="col tight grow" style={{ minWidth: 0 }}>
                           <b className="small">{p.name}</b>
-                          <span className="tiny faint">{p.sku}{b === "unit" && p.list ? ` · list ${money(p.list)}` : ""}{now ? ` · they pay ${money(now.price)} ${BASIS_LABEL[now.basis]}` : ""}</span>
-                          {n > 0 ? <span className="tiny">{each !== null && b !== "unit" ? <>= {money(each)} / {p.unit} </> : null}{b === "unit" && p.list ? <span className={n < p.list ? "warn-text" : "ok-text"}>{n < p.list ? `${(((p.list - n) / p.list) * 100).toFixed(1)}% under list` : "at or over list"}</span> : null}{r ? <span className="ok-text"> · <Sparkles size={11} /> {r}</span> : null}</span> : null}
+                          <span className="tiny faint">{p.sku}{p.list ? ` · list ${money(p.list)}` : ""}{now ? ` · they pay ${money(now.price)} ${BASIS_LABEL[now.basis]}` : ""}</span>
+                          {n > 0 && p.list ? <span className="tiny"><span className={n < p.list ? "warn-text" : "ok-text"}>{n < p.list ? `${(((p.list - n) / p.list) * 100).toFixed(1)}% under list` : "at or over list"}</span>{r ? <span className="ok-text"> · <Sparkles size={11} /> {r}</span> : null}</span> : null}
                         </span>
-                        <span className="cp-money"><span>$</span><input className="input sm" inputMode="decimal" placeholder={b === "lb" ? "0.00/lb" : b === "sqft" ? "0.000/sqft" : "0.00"} value={v.price} aria-label={`${p.name} price ${BASIS_LABEL[b]}`}
-                          onChange={(e) => { setPrices((m) => ({ ...m, [p.id]: { ...v, price: e.target.value.replace(/[^\d.]/g, "") } })); setErrs({}); }} /></span>
-                        <input className="input sm prf-vol" placeholder="Volume" value={v.volume} aria-label={`${p.name} volume`} onChange={(e) => setPrices((m) => ({ ...m, [p.id]: { ...v, volume: e.target.value } }))} />
+                        <span className="cp-money"><span>$</span><input className="input sm" inputMode="decimal" placeholder="0.00" value={v.price} aria-label={`${p.name} price per ${p.unit}`}
+                          onChange={(e) => setPrice(p.id, { price: money2(e.target.value) })} /></span>
+                        <input className="input sm prf-vol" placeholder="Volume" value={v.volume} aria-label={`${p.name} volume`} onChange={(e) => setPrice(p.id, { volume: e.target.value })} />
                       </div>
                     );
                   })}
+                  {!items.some((p) => linesOf(p).includes(l.key)) ? <span className="small muted">No {l.label.toLowerCase()} in the catalog yet.</span> : null}
                 </div>
               </div>
             ))}
@@ -282,11 +373,14 @@ export function SmartPrf({ companies, items, rules, branch, startCompany }: {
           <>
             <header className="fx-card-head"><h2 className="h2">Check it and send</h2></header>
             <dl className="fx-dl">
-              <div><dt>Customer</dt><dd><b>{cu.legal_name}</b> ({kind === "existing" ? "existing" : kind === "new" ? "new" : "coming back"}) · {cu.contact_first} {cu.contact_last} · {cu.phone} · {cu.email}</dd></div>
+              <div><dt>Customer</dt><dd><b>{cu.legal_name}</b> ({kind === "existing" ? "existing" : "new"}) · {cu.contact_first} {cu.contact_last} · {cu.phone} · {cu.email}</dd></div>
               <div><dt>Address</dt><dd>{cu.street}, {cu.city}, {cu.state} {cu.zip}</dd></div>
               <div><dt>Business</dt><dd>{cu.customer_type} · {cu.rigs} rigs · {cu.monthly_sets} sets a month · buying from {cu.current_mfr}</dd></div>
-              <div><dt>Terms now</dt><dd>{cu.billing_terms} · {cu.credit_range}{cu.wants_credit ? ` · ${cu.wants_credit}` : ""} · freight {cu.freight_included === "Yes" ? "included" : "not included"}</dd></div>
-              <div><dt>Prices</dt><dd>{priced.map((p) => `${p.name}: ${money(Number(prices[p.id].price))} ${BASIS_LABEL[basisFor(p)]}${prices[p.id].volume ? ` (${prices[p.id].volume})` : ""}`).join("\n")}</dd></div>
+              {kind === "new" ? <div><dt>Credit</dt><dd>{cu.wants_credit.startsWith("Yes") ? `Will need a credit line: ${money(Number(money2(cu.credit_requested)))} requested` : "No credit line (COD / prepay)"}</dd></div> : null}
+              <div><dt>Prices</dt><dd>{[
+                ...typesPriced.map((t) => `${t.label}: ${rate(Number(prices[`type:${t.key}`].price))} per ${t.unit}${prices[`type:${t.key}`].volume ? ` (${prices[`type:${t.key}`].volume})` : ""}`),
+                ...priced.map((p) => `${p.name}: ${money(Number(prices[p.id].price))} ${BASIS_LABEL[basisFor(p)]}${prices[p.id].volume ? ` (${prices[p.id].volume})` : ""}`),
+              ].join("\n")}</dd></div>
             </dl>
             <div className="fx-grid">
               <div className="fx-field w6">
