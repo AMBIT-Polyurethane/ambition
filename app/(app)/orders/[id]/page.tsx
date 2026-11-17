@@ -8,7 +8,7 @@ import { OrderReturnsCard, type ReturnLine } from "@/components/order-returns-ca
 import { canCredit, creditFor } from "@/lib/credit";
 import { OrderChatButton } from "@/components/chat/order-button";
 import { notFound } from "next/navigation";
-import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, RefreshCw, Repeat } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, FileDown, History, MailCheck, PencilLine, Printer, RefreshCw, Repeat, ShieldAlert } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { TrackRecent } from "@/components/recent";
 import { DELIVERY_LABEL, dateShort, dateTime, money, orderNo, plural, qtyText } from "@/lib/format";
@@ -17,9 +17,9 @@ import { orderPicks, showsPicks } from "@/lib/order-doc/load";
 import type { LotPick } from "@/lib/order-doc/loads";
 import { ApprovalPill, StatusPill, TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
-import { cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderRep, setOrderStatus } from "@/app/(app)/orders/actions";
+import { approveOrderChange, cancelOrder, customerDecision, deleteOrder, recordApproval, resendApproval, resendOrderEmail, setOrderRep, setOrderStatus } from "@/app/(app)/orders/actions";
 import { HOUSE, RepOptions, staffName, type Staff } from "@/components/rep-options";
-import { changesText, editable, type OrderEdit } from "@/lib/order-edit";
+import { changeWaiting, changesText, editable, type OrderEdit } from "@/lib/order-edit";
 import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
 import { LotFixAfter, type LotLine, type LotOption } from "@/components/lot-check";
@@ -111,6 +111,8 @@ export default async function OrderDetailPage({
     ? await supabase.from("order_edits").select("*").eq("order_id", id).order("edited_at")
     : { data: null };
   const edits = ((editRows ?? []) as OrderEdit[]).map((e) => ({ ...e, changes: Array.isArray(e.changes) ? e.changes : [] }));
+  // Changes no admin has approved yet (0075): the order can't be loaded until one does.
+  const waitingEdits = edits.filter(changeWaiting);
   // Open orders: admins, Ordering and the order desk. A completed order (picked up / delivered): admins only (0046).
   const canEdit =
     emp &&
@@ -302,6 +304,50 @@ export default async function OrderDetailPage({
         />
       ) : null}
 
+      {emp && waitingEdits.length ? (
+        <section id="change-approval" className="card col change-wait" style={{ gap: 10 }}>
+          <div className="row" style={{ gap: 8, alignItems: "center" }}>
+            <ShieldAlert size={20} className="red" style={{ flex: "none" }} />
+            <b>Changed: waiting for an admin to approve</b>
+          </div>
+          <p className="small" style={{ margin: 0 }}>
+            {order.status === "completed"
+              ? "This order was corrected after it went out. An admin has to approve the change and make sure the QuickBooks invoice matches."
+              : `Don't load this order. It can't be marked ${order.delivery_method === "pickup" ? "picked up" : "shipped out"} until an admin approves the change, and its packing slip says DO NOT LOAD.`}
+          </p>
+          {waitingEdits.map((e) => (
+            <div key={e.id} className="col tight">
+              <span className="tiny faint">Revision {e.revision} · {e.edited_by_name ?? ""} · {dateTime(e.edited_at)}{e.admin_email_status === "sent" ? " · admins were emailed" : e.admin_email_status ? " · the email to admins didn't go out" : ""}</span>
+              <ul className="edit-changes small" style={{ margin: "2px 0 0" }}>{changesText(e.changes).map((t, i) => <li key={i}>{t}</li>)}</ul>
+              {e.note ? <span className="tiny muted">Why: {e.note}</span> : null}
+            </div>
+          ))}
+          {profile.role === "admin" ? (
+            <form action={approveOrderChange} className="col" style={{ gap: 8 }}>
+              <input type="hidden" name="id" value={order.id} />
+              <label className="check small">
+                <input type="checkbox" name="invoice_ok" value="1" required /> I made sure every change above is on the invoice in QuickBooks
+                {order.invoice_no ? ` (Invoice # ${order.invoice_no})` : ""}.
+              </label>
+              <input className="input sm" name="note" maxLength={500} placeholder="Note (optional): updated invoice 17702 in QuickBooks" aria-label="Note" />
+              <Submit className="btn" pendingText="Approving…">Approve the change</Submit>
+            </form>
+          ) : (
+            <p className="tiny faint" style={{ margin: 0 }}>
+              Only an admin can approve it.{" "}
+              {waitingEdits.some((e) => e.admin_email_status === "sent") ? "Admins were sent an email with a link to this page." : "The email to admins didn't go out, so tell an admin."}
+            </p>
+          )}
+        </section>
+      ) : null}
+
+      {emp && kind !== "return" && order.status !== "cancelled" && order.delivery_method !== "dropship" ? (
+        <a href={`/orders/${order.id}/packing-slip`} target="_blank" rel="noopener" className="btn dark block packing-slip-btn">
+          <Printer size={17} /> Print packing slip
+          <span className="tiny faint">For picking and loading: items, lots, Sales Order # and Invoice #, no prices</span>
+        </a>
+      ) : null}
+
       {canEdit ? (
         <Link href={`/orders/${order.id}/edit`} className="btn dark block edit-order-top">
           <PencilLine size={17} /> {order.status === "completed" ? "Correct this order (admin)" : "Edit order"}
@@ -436,6 +482,7 @@ export default async function OrderDetailPage({
           payDefaults={company ? { cod: Boolean(company.pay_cod), noChecks: Boolean(company.pay_no_checks) } : null}
           edits={edits}
           pickupLots={pickupLots}
+          changeWaiting={waitingEdits.length > 0}
           creditInfo={credit ? { limit: credit.credit_limit, balance: credit.balance, pastDue: credit.past_due, over90: credit.over_90, available: credit.available, lastPaid: credit.last_paid, lastPaidAmount: credit.last_paid_amount, asOf: credit.as_of, companyId: credit.company_id } : null}
         />
       ) : null}
@@ -511,6 +558,13 @@ export default async function OrderDetailPage({
                 </div>
                 <ul className="edit-changes small">{changesText(e.changes).map((t, i) => <li key={i}>{t}</li>)}</ul>
                 {e.note ? <div className="tiny muted">Why: {e.note}</div> : null}
+                {e.admin_needed ? (
+                  <div className={`tiny ${e.admin_approved_at ? "faint" : "red"}`}>
+                    {e.admin_approved_at
+                      ? `Approved by ${e.admin_approved_by_name ?? "an admin"} (QuickBooks invoice checked) · ${dateTime(e.admin_approved_at)}${e.admin_note ? ` · ${e.admin_note}` : ""}`
+                      : "Waiting for an admin to approve"}
+                  </div>
+                ) : null}
                 <div className="tiny faint">
                   {e.invoice_updated_at
                     ? `Invoice updated by ${e.invoice_updated_by_name ?? ""} · ${dateTime(e.invoice_updated_at)}${e.total_before !== null && e.total_after !== null ? ` · ${money(e.total_before)} → ${money(e.total_after)}` : ""}${e.credit_reopened ? " · credit checked again" : ""}`

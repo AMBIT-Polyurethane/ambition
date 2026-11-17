@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession, isEmployee } from "@/lib/session";
-import { sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendOrderUpdatedNotice, sendScheduledNotice } from "@/lib/order-send";
+import { sendAdminChangeApproval, sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendOrderUpdatedNotice, sendScheduledNotice } from "@/lib/order-send";
 import { loadOrderDoc } from "@/lib/order-doc/load";
 import type { Order } from "@/lib/types";
 import { kickForOrder } from "@/lib/inventory/sync";
@@ -173,7 +173,13 @@ export async function editOrder(input: { id: string; lines: EditLine[]; note: st
   const r = (data ?? {}) as { revision?: number; invoice_update?: boolean; customer?: boolean; closed?: boolean; changes?: OrderChange[]; lots?: number };
   const changes = changesText(r.changes);
   await kickForOrder(s.supabase, id, "order edited");
-  const rev = `Saved as revision ${r.revision ?? 2}.`;
+  // Every change to the items waits for an admin, who makes sure the QuickBooks invoice has it (0075).
+  const admins = changes.length
+    ? await sendAdminChangeApproval(s.supabase, id, { by: s.profile.full_name ?? s.profile.email ?? "AMBIT staff", revision: r.revision ?? 2, changes, note: String(input.note ?? "").trim() || null })
+    : null;
+  const rev = `Saved as revision ${r.revision ?? 2}.${
+    admins ? (admins.status === "sent" ? " Admins were emailed to approve the change." : " An admin has to approve the change (the email to admins didn't go out, so tell one).") : ""
+  }`;
   if (r.closed) {
     const sent = r.invoice_update ? await sendDeskNotice(s.supabase, id, "invoice_update", changes) : null;
     back(
@@ -415,6 +421,9 @@ export async function completeOrder(form: FormData) {
   const s = await getSession();
   if (!s?.profile) return;
   const id = String(form.get("id") ?? "");
+  // A change an admin hasn't approved yet: nothing goes out (0075).
+  const { count: waiting } = await s.supabase.from("order_edits").select("id", { count: "exact", head: true }).eq("order_id", id).eq("admin_needed", true).is("admin_approved_at", null);
+  if (waiting) back(id, "err", "Don't load this order: it was changed and an admin hasn't approved the change yet. Ask an admin to approve it on this page first.");
   const files = filesFrom(form);
   const fileErr = await addFiles(s, id, "bol", files);
   if (fileErr) back(id, "err", `The signed BOL wasn't saved: ${fileErr}`);
@@ -543,4 +552,19 @@ export async function swapItem(form: FormData) {
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "item type changed");
   back(id, "msg", `Now loading ${data}. The change is saved on the item variance table.`);
+}
+
+/** An admin approves the changes to an order, confirming the QuickBooks invoice has them (0075). */
+export async function approveOrderChange(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  if (s.profile.role !== "admin") back(id, "err", "Only an admin can approve changes to an order.");
+  const { data, error } = await s.supabase.rpc("order_change_approve", {
+    p_order: id,
+    p_invoice_ok: form.get("invoice_ok") === "1",
+    p_note: String(form.get("note") ?? "").slice(0, 500) || null,
+  });
+  if (error) back(id, "err", /order_change_approve|function/.test(error.message) && !/Tick|nothing|admin/i.test(error.message) ? "This needs the 0075 database update first." : error.message);
+  back(id, "msg", `Change approved${Number(data) > 1 ? ` (${data} revisions)` : ""}. The order can be loaded and marked picked up or shipped out.`);
 }

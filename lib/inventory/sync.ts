@@ -1322,7 +1322,12 @@ async function reconcilePending(
     if (o.stage === "scheduled" && !bols) {
       log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet. Finish the order in the app: tap Mark shipped out (or Mark picked up) and attach the signed BOL.`, null, null, null, "Spreadsheet");
     } else if (o.stage === "scheduled") {
-      await db.from("orders").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", id).neq("status", "completed");
+      const { error: closeErr } = await db.from("orders").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", id).neq("status", "completed");
+      if (closeErr) {
+        // For example a change an admin hasn't approved yet (0075).
+        log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet, but the order couldn't be closed in the app: ${closeErr.message}`, null, null, null, "Spreadsheet");
+        continue;
+      }
       log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet, so the order is complete in the app too.`, null, null, null, "Spreadsheet");
     } else {
       log("order", `${orderLabel(o.order_no)}: every line was marked Picked Up / Completed on the sheet. Finish the order in the app (it isn't scheduled yet).`, null, null, null, "Spreadsheet");

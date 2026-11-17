@@ -17,7 +17,17 @@ export type OrderEdit = {
   invoice_updated_by_name: string | null;
   total_after: number | null;
   credit_reopened: boolean | null;
+  /** 0075: every change waits for an admin, who makes sure the QuickBooks invoice has it. */
+  admin_needed?: boolean | null;
+  admin_approved_at?: string | null;
+  admin_approved_by_name?: string | null;
+  admin_note?: string | null;
+  admin_emailed_at?: string | null;
+  admin_email_status?: string | null;
 };
+
+/** A change no admin has approved yet (0075). */
+export const changeWaiting = (e: Pick<OrderEdit, "admin_needed" | "admin_approved_at">) => Boolean(e.admin_needed) && !e.admin_approved_at;
 
 /** "Added 4 drums AMBI-SEAL 5.0", "AMBI-TITE 204: 10 drums → 12 drums", "Removed B7700 (was 20 bags)". */
 export function changeText(c: OrderChange): string {

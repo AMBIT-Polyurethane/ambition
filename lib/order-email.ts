@@ -356,3 +356,56 @@ ${notOrderHtml}
   ].join("\n");
   return { subject, html: wrapEmail("Order scheduled", inner), text };
 }
+
+/**
+ * To every admin, whenever items on an order are added, removed or changed (0075): an admin approves the change,
+ * and is the one responsible for making sure the QuickBooks invoice has it. The warehouse can't mark the order
+ * picked up or shipped out until then.
+ */
+export function buildAdminChangeEmail(doc: OrderDoc, link: string, change: { by: string; revision: number; changes: string[]; note: string | null }) {
+  const o = doc.order;
+  const no = orderNo(o.order_no);
+  const who = o.account_no ? `${o.company_name} (${o.account_no})` : o.company_name;
+  const closed = o.status === "completed";
+  const done = o.delivery_method === "pickup" ? "picked up" : "shipped out";
+  const line = `${change.by} ${closed ? `corrected this order after it was ${done}` : "changed the items on this order"} (now revision ${change.revision}). An admin has to approve the change.`;
+  const duty = "As the approving admin, you are responsible for making sure every change below is on the invoice in QuickBooks: items added, removed or changed. Check the invoice, then approve the change on the order.";
+  const hold = closed
+    ? "This order already went out, so approving confirms the QuickBooks invoice matches what the customer got."
+    : `Until an admin approves, the warehouse can't mark this order ${done} and its packing slip says DO NOT LOAD.`;
+  const rows: [string, string][] = [
+    ["Order", no],
+    ["Customer", who],
+    ["Sales Order #", o.ambit_po ?? "-"],
+    ["Invoice #", o.invoice_no ?? "-"],
+    ["Customer PO", o.po_number ?? "-"],
+    ["Delivery", whereText(doc)],
+    ["Changed by", change.by],
+  ];
+  if (change.note) rows.push(["Why", change.note]);
+  const inner = `
+<div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#E33527;">ADMIN APPROVAL NEEDED</div>
+<div style="font-size:26px;font-weight:800;margin:4px 0 12px;">${h(no)} · ${h(o.company_name)}</div>
+<p style="font-size:15px;margin:0 0 12px;line-height:1.5;">${h(line)}</p>
+<div style="margin:0 0 12px;padding:12px 14px;border:2px solid #E33527;border-radius:8px;font-size:15px;font-weight:700;line-height:1.5;color:#B42318;">${h(duty)}</div>
+<p style="font-size:14px;margin:0 0 4px;line-height:1.5;color:#3f3f46;">${h(hold)}</p>
+${changesBox(change.changes)}
+<div style="height:12px;"></div>
+${detailTable(rows)}
+<p style="margin:20px 0 0;">${button(link, "REVIEW AND APPROVE")}</p>`;
+  const text = [
+    `ADMIN APPROVAL NEEDED ${no}`,
+    line,
+    "",
+    duty,
+    hold,
+    "",
+    "What changed:",
+    ...change.changes.map((c) => `- ${c}`),
+    "",
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    "",
+    link,
+  ].join("\n");
+  return { subject: `Admin approval needed: ${no} was changed · ${o.company_name}`, html: wrapEmail("Order change", inner), text };
+}

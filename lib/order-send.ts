@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canEmailCustomers, sendEmail, type SendResult } from "@/lib/email";
-import { buildApprovalRequestEmail, buildChangeRequestEmail, buildDeskEmail, buildOrderEmail, buildOrderUpdatedEmail, buildScheduledEmail, type DeskNotice } from "@/lib/order-email";
+import { buildAdminChangeEmail, buildApprovalRequestEmail, buildChangeRequestEmail, buildDeskEmail, buildOrderEmail, buildOrderUpdatedEmail, buildScheduledEmail, type DeskNotice } from "@/lib/order-email";
 import { loadOrderDoc } from "@/lib/order-doc/load";
 import { pdfFileName, renderOrderPdf, type PdfAudience } from "@/lib/order-doc/pdf";
 import type { OrderDoc } from "@/lib/order-doc/types";
@@ -178,5 +178,30 @@ export async function sendScheduledNotice(supabase: SupabaseClient, orderId: str
     ...buildScheduledEmail(doc),
   });
   await supabase.rpc("order_mark_notified", { p_order: orderId, p_status: result.status, p_error: result.error ?? null });
+  return result;
+}
+
+/** Every active admin's email. */
+async function adminEmails(supabase: SupabaseClient): Promise<string[]> {
+  const { data } = await supabase.from("profiles").select("email").eq("role", "admin").eq("status", "active");
+  return [...new Set(((data ?? []) as { email: string | null }[]).map((r) => r.email ?? "").filter(Boolean))];
+}
+
+/**
+ * Items on an order were added, removed or changed (0075): every admin is emailed to approve the change and make
+ * sure the QuickBooks invoice has it. The order records whether the email went out.
+ */
+export async function sendAdminChangeApproval(
+  supabase: SupabaseClient,
+  orderId: string,
+  change: { by: string; revision: number; changes: string[]; note: string | null },
+): Promise<SendResult> {
+  const doc = await loadOrderDoc(supabase, orderId);
+  if (!doc) return { status: "failed", error: "Order not found" };
+  let to = await adminEmails(supabase);
+  if (to.length === 0) to = [ORDERS_EMAIL];
+  const origin = await currentOrigin();
+  const result = await sendEmail({ to, ...buildAdminChangeEmail(doc, `${origin}/orders/${orderId}#change-approval`, change) });
+  await supabase.rpc("order_change_emailed", { p_order: orderId, p_status: result.status });
   return result;
 }

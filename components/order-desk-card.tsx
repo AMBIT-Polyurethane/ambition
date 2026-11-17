@@ -60,9 +60,12 @@ export function OrderDeskCard({
   closures = [],
   creditInfo = null,
   pickupLots = [],
+  changeWaiting = false,
 }: {
   /** Spray foam lots to check when the order is marked picked up / shipped out (0069). */
   pickupLots?: LotLine[];
+  /** A change no admin has approved yet (0075): nothing goes out until one does. */
+  changeWaiting?: boolean;
   /** The customer's credit right now (0066), shown at the credit check. */
   creditInfo?: { limit: number | null; balance: number; pastDue: number; over90: number; available: number | null; lastPaid: string | null; lastPaidAmount: number | null; asOf: string | null; companyId: string } | null;
   /** Days AMBIT is closed (0063), so the date box can warn. */
@@ -391,7 +394,16 @@ export function OrderDeskCard({
         ) : bols.length ? (
           <FileLinks orderId={o.id} files={bols} label="Signed BOL" />
         ) : null,
-      action: (desk || warehouse) && st === "scheduled" ? <CompleteForm orderId={o.id} pickup={pickup} hasBol={bols.length > 0} lots={pickupLots} /> : null,
+      action:
+        (desk || warehouse) && st === "scheduled" ? (
+          changeWaiting ? (
+            <div className="alert err small" role="alert">
+              Don&apos;t load this order. It was changed and an admin hasn&apos;t approved the change yet (see the top of this page).
+            </div>
+          ) : (
+            <CompleteForm orderId={o.id} pickup={pickup} hasBol={bols.length > 0} lots={pickupLots} />
+          )
+        ) : null,
     },
   ];
 
