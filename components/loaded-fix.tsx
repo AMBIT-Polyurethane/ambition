@@ -31,7 +31,7 @@ const num = (s: string | undefined) => {
   return /^\d+(\.\d{1,2})?$/.test(t) ? Number(t) : NaN;
 };
 
-export function LoadedFix({ orderId, items }: { orderId: string; items: FixItem[] }) {
+export function LoadedFix({ orderId, items, back }: { orderId: string; items: FixItem[]; back?: string }) {
   const start = useMemo(() => Object.fromEntries(items.map((it) => [it.item, Object.fromEntries(it.options.map((o) => [o.lot_id, o.mine ? q2(o.mine) : ""]))])), [items]);
   const [qty, setQty] = useState<Record<number, Record<number, string>>>(start);
   const [reason, setReason] = useState("");
@@ -58,6 +58,7 @@ export function LoadedFix({ orderId, items }: { orderId: string; items: FixItem[
     setBusy(true);
     const res = await rebuildLoaded({
       id: orderId,
+      back,
       reason: reason.trim(),
       items: todo.map((it) => ({ item: it.item, lots: it.options.map((o) => ({ lot: o.lot_id, qty: num(qty[it.item]?.[o.lot_id]) || 0 })).filter((x) => x.qty > 0) })),
     });

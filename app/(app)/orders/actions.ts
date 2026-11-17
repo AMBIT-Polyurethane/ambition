@@ -450,7 +450,7 @@ export async function fixLoadedLot(form: FormData) {
 }
 
 /** Admins, on a picked-up or shipped order: rebuild how many drums of each item came off each lot (0073). */
-export async function rebuildLoaded(input: { id: string; items: { item: number; lots: { lot: number; qty: number }[] }[]; reason: string }): Promise<{ ok: false; error: string } | never> {
+export async function rebuildLoaded(input: { id: string; items: { item: number; lots: { lot: number; qty: number }[] }[]; reason: string; back?: string }): Promise<{ ok: false; error: string } | never> {
   const s = await getSession();
   if (!s?.profile || s.profile.role !== "admin") return { ok: false, error: "Only an admin can change what was loaded after pickup." };
   const id = String(input.id ?? "");
@@ -462,6 +462,13 @@ export async function rebuildLoaded(input: { id: string; items: { item: number; 
   if (error) return { ok: false, error: /order_relot_items/.test(error.message) ? "This needs the 0073 database update first (Supabase > SQL Editor)." : error.message.replace(/^.*?ERROR:\s*/, "") };
   await kickForOrder(s.supabase, id, "lots corrected after pickup");
   const n = Number(data) || 0;
+  // From the BOL review page: back there, at this order.
+  const review = typeof input.back === "string" && input.back.startsWith("/orders/bol-review") ? input.back : null;
+  if (review) {
+    const [path, hash] = review.split("#");
+    revalidatePath("/orders/bol-review");
+    redirect(`${path}${path.includes("?") ? "&" : "?"}msg=${encodeURIComponent(`Saved ${n === 1 ? "1 item" : `${n} items`}. FOAM LOTS and PENDING ORDERS update in a moment.`)}${hash ? `#${hash}` : ""}`);
+  }
   back(id, "msg", `Saved. ${n === 1 ? "1 item" : `${n} items`} now show${n === 1 ? "s" : ""} the lots that really went out. FOAM LOTS and PENDING ORDERS update in a moment, and the change is on the item variance table.`);
 }
 

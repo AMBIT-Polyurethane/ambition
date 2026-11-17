@@ -3942,3 +3942,9 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .lf-qty { width: 64px; text-align: center; }
 .lf-qty.over { border-color: var(--red, #e5484d); }
 .lf-other > summary { cursor: pointer; padding: 4px 8px; color: var(--text3); }
+
+/* BOL review */
+.br-order { scroll-margin-top: 12px; }
+.br-recorded { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--s2); }
+.br-img { display: block; width: 100%; height: auto; border-radius: 10px; background: #fff; }
+.br-pdf { width: 100%; height: 1150px; border: 0; border-radius: 10px; background: #fff; }
