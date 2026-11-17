@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { getSession, isEmployee } from "@/lib/session";
 import { sendAdminChangeApproval, sendApprovalRequest, sendChangeRequestNotice, sendDeskNotice, sendOrderEmail, sendOrderUpdatedNotice, sendScheduledNotice } from "@/lib/order-send";
 import { loadOrderDoc } from "@/lib/order-doc/load";
@@ -12,6 +13,7 @@ import { can } from "@/lib/access";
 import { money } from "@/lib/format";
 import { changesText, detailsText, type DetailChange, type OrderChange } from "@/lib/order-edit";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
+import { bolCheckReady, checkOrderBol } from "@/lib/order-doc/bol-check";
 
 const STATUSES = ["new", "processing", "completed", "cancelled"];
 
@@ -441,6 +443,20 @@ export async function completeOrder(form: FormData) {
   const { error } = await s.supabase.rpc("order_complete", { p_order: id });
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "order completed");
+  // 0082: the AI reads the signed BOL just attached (right order? signed? lots match?) once the page has moved on.
+  if (files.length && bolCheckReady()) {
+    try {
+      after(async () => {
+        try {
+          await checkOrderBol(s.supabase, id);
+        } catch {
+          // read again from BOL review
+        }
+      });
+    } catch {
+      // not inside a request
+    }
+  }
   back(id, "msg", `Marked complete. The signed BOL is saved on the order.${moved ? ` ${moved} lot${moved === 1 ? "" : "s"} changed to what really went out (on the item variance table).` : ""}`);
 }
 

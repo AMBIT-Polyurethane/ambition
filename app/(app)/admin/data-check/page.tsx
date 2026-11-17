@@ -29,7 +29,7 @@ export default async function DataCheckPage({ searchParams }: { searchParams: Pr
   const emails = new Map(await Promise.all(people.map(async ([o]) => [o, await ownerEmails(supabase, o)] as const)));
 
   const href = (r: CheckRow) =>
-    r.order_id ? `/orders/${r.order_id}` : r.kind === "receiving_waiting" ? `/inventory/incoming?b=${r.branch}` : r.branch ? `/inventory/stock?b=${r.branch}` : null;
+    r.kind.startsWith("bol_") && r.order_no ? `/orders/bol-review?o=${r.order_no}` : r.order_id ? `/orders/${r.order_id}` : r.kind === "receiving_waiting" ? `/inventory/incoming?b=${r.branch}` : r.branch ? `/inventory/stock?b=${r.branch}` : null;
 
   return (
     <main className="shell wide">

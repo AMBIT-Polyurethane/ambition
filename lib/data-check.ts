@@ -2,6 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { escapeHtml as h } from "@/lib/format";
 import { wrapEmail } from "@/lib/email";
+import { BOL_KIND } from "@/lib/bol-audit";
+import { loadBolFindings } from "@/lib/order-doc/bol-check";
 
 // Admin > Data check (0080): everything that needs fixing, who it's on, and the email that tells them.
 
@@ -21,6 +23,9 @@ export const KINDS: Record<string, { label: string; tone: "err" | "warn" | "info
   lot_negative: { label: "Lots below zero", tone: "err" },
   lot_overpromised: { label: "Lots promised to more orders than they have", tone: "err" },
   lot_duplicate: { label: "The same lot on two rows", tone: "warn" },
+  bol_wrong: { label: "Wrong photo attached as the signed BOL", tone: "err" },
+  bol_lots: { label: "Lots on the signed BOL don't match the app", tone: "err" },
+  bol_unsigned: { label: "Signed BOL with no signature on it", tone: "warn" },
   open_past_date: { label: "Open orders past their pickup / delivery date", tone: "warn" },
   shipped_no_bol: { label: "Shipped with no signed BOL", tone: "warn" },
   shipped_no_lot: { label: "Shipped with no lot recorded", tone: "warn" },
@@ -28,6 +33,7 @@ export const KINDS: Record<string, { label: string; tone: "err" | "warn" | "info
   stuck: { label: "Orders stuck at a step", tone: "info" },
   change_waiting: { label: "Changes waiting for an admin", tone: "info", team: "Admins" },
   receiving_waiting: { label: "Receiving reports waiting for approval", tone: "info", team: "Admins" },
+  bol_check: { label: "BOLs for an admin to look at (AI wasn't sure)", tone: "info", team: "Admins" },
 };
 export const KIND_ORDER = Object.keys(KINDS);
 
@@ -36,14 +42,28 @@ export function ownersOf(r: CheckRow): string[] {
   if (r.who) return r.who.split(/,\s*/).filter(Boolean);
   if (r.kind === "stuck") return [/accounting/i.test(r.detail) ? "Accounting" : /customer/i.test(r.detail) ? "Sales reps" : "Order desk"];
   if (r.kind === "lot_negative" || r.kind === "lot_overpromised" || r.kind === "open_no_lot") return [`Warehouse ${(r.branch ?? "").toUpperCase()}`];
-  if (r.kind === "shipped_no_bol" || r.kind === "shipped_no_lot") return [`Warehouse ${(r.branch ?? "").toUpperCase()}`];
+  if (r.kind === "shipped_no_bol" || r.kind === "shipped_no_lot" || r.kind === "bol_wrong" || r.kind === "bol_lots" || r.kind === "bol_unsigned") return [`Warehouse ${(r.branch ?? "").toUpperCase()}`];
   return [KINDS[r.kind]?.team ?? "Admins"];
 }
 
 export async function loadCheck(db: SupabaseClient): Promise<{ rows: CheckRow[]; error: string | null }> {
-  const { data, error } = await db.rpc("data_check");
+  const [{ data, error }, bol] = await Promise.all([db.rpc("data_check"), loadBolFindings(db)]);
   if (error) return { rows: [], error: /data_check/.test(error.message) ? "The data check needs the 0080 database update first (Supabase > SQL Editor)." : error.message };
-  return { rows: (data ?? []) as CheckRow[], error: null };
+  // 0082: what the AI found on the signed BOLs, on whoever attached them (an admin for the ones it wasn't sure of).
+  const bolRows: CheckRow[] = bol.list.flatMap((f) =>
+    f.problems.map((p) => ({
+      kind: BOL_KIND[p.code],
+      branch: f.branch,
+      order_id: f.order_id,
+      order_no: f.order_no,
+      lot_id: null,
+      other_lot: null,
+      title: `ORD-${f.order_no}${f.company ? ` (${f.company})` : ""}`,
+      detail: p.text,
+      who: p.tone === "info" ? null : f.uploaders.join(", ") || null,
+    })),
+  );
+  return { rows: [...((data ?? []) as CheckRow[]), ...bolRows], error: null };
 }
 
 /** Everyone the email goes to for an owner: a person by name, or a team. */
@@ -75,7 +95,7 @@ export function buildCheckEmail(owner: string, rows: CheckRow[], from: string, l
     ...lines,
     "Please fix them by the end of the day tomorrow and reply to this email when they're done. If one of these isn't yours, reply and say so.",
     "",
-    "Going forward: close every order the day it goes out, attach the signed BOL every time, and type lot numbers exactly as they're printed on the drum.",
+    "Going forward: close every order the day it goes out; attach a clear photo of that order's own signed BOL every time (the whole page, flat, readable, signed, with the lot numbers that really went out); and type lot numbers exactly as they're printed on the drum.",
     "",
     from,
     link,
@@ -91,7 +111,7 @@ ${groups
   )
   .join("")}
 <p style="font-size:15px;margin:18px 0 0;line-height:1.5;"><b>Please fix them by the end of the day tomorrow</b> and reply to this email when they're done. If one of these isn't yours, reply and say so.</p>
-<p style="font-size:14px;margin:12px 0 0;line-height:1.5;color:#52525b;">Going forward: close every order the day it goes out, attach the signed BOL every time, and type lot numbers exactly as they're printed on the drum.</p>
+<p style="font-size:14px;margin:12px 0 0;line-height:1.5;color:#52525b;">Going forward: close every order the day it goes out; attach a clear photo of that order's own signed BOL every time (the whole page, flat, readable, signed, with the lot numbers that really went out); and type lot numbers exactly as they're printed on the drum.</p>
 <p style="font-size:15px;margin:16px 0 0;">${h(from)}</p>`,
   );
   return { subject, text, html };

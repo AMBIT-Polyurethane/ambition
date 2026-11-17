@@ -24,6 +24,7 @@ import { docState } from "@/lib/order-doc/types";
 import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
 import { LotFixAfter, type LotLine, type LotOption } from "@/components/lot-check";
 import { LoadedFix, type FixItem, type FixLot, type FixStockItem } from "@/components/loaded-fix";
+import { orderBolFinding } from "@/lib/order-doc/bol-check";
 import { fixStockList } from "@/lib/inventory/view";
 import type { Alternative, LotChoice, Variance, VarianceData } from "@/components/item-variance";
 import { can } from "@/lib/access";
@@ -193,6 +194,8 @@ export default async function OrderDetailPage({
   // Before update 0073: one lot per line.
   const fixLots = fixer && !fixItems.length ? await lotLines("done") : ([] as LotLine[]);
   const files = (fileRows ?? []) as OrderFile[];
+  // 0082: what the AI found on the signed BOL (staff only, once it's gone out).
+  const bolFinding = emp && order.status === "completed" && files.some((f) => f.kind === "bol") ? await orderBolFinding(supabase, order.id, order.order_no) : null;
   const variance: VarianceData | null = emp
     ? { orderId: order.id, lines, picks, choices, alternatives, log: (varRows ?? []) as Variance[], canEdit: canVary }
     : null;
@@ -561,6 +564,17 @@ export default async function OrderDetailPage({
           changeWaiting={waitingEdits.length > 0}
           creditInfo={credit ? { limit: credit.credit_limit, balance: credit.balance, pastDue: credit.past_due, over90: credit.over_90, available: credit.available, lastPaid: credit.last_paid, lastPaidAmount: credit.last_paid_amount, asOf: credit.as_of, companyId: credit.company_id } : null}
         />
+      ) : null}
+      {bolFinding?.problems.length ? (
+        <div className={`alert ${bolFinding.problems.some((p) => p.tone === "err") ? "err" : "warn"} small col`} role="alert" style={{ alignItems: "stretch", gap: 4 }}>
+          <span className="row" style={{ gap: 6 }}><CircleAlert size={16} style={{ flex: "none" }} /><b>The AI check of the signed BOL found a problem</b></span>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>{bolFinding.problems.map((p, i) => <li key={i}>{p.text}</li>)}</ul>
+          {profile.role === "admin" ? (
+            <Link href={`/orders/bol-review?o=${order.order_no}`}>Check it on BOL review</Link>
+          ) : (
+            <span className="tiny">Fix it (attach the right signed BOL with Mark picked up / shipped out, or tell an admin which lots really went out). If the AI got it wrong, tell an admin.</span>
+          )}
+        </div>
       ) : null}
       {fixItems.length ? <LoadedFix orderId={order.id} items={fixItems} stock={fixStock} /> : fixLots.length ? <LotFixAfter orderId={order.id} lines={fixLots} /> : null}
 
