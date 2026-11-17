@@ -372,7 +372,7 @@ export function buildAdminChangeEmail(doc: OrderDoc, link: string, change: { by:
   const duty = "As the approving admin, you are responsible for making sure every change below is on the invoice in QuickBooks: items added, removed or changed. Check the invoice, then approve the change on the order.";
   const hold = closed
     ? "This order already went out, so approving confirms the QuickBooks invoice matches what the customer got."
-    : `Until an admin approves, the warehouse can't mark this order ${done} and its packing slip says DO NOT LOAD.`;
+    : `Until an admin approves, the packing slip can't be printed and the warehouse can't mark this order ${done}.`;
   const rows: [string, string][] = [
     ["Order", no],
     ["Customer", who],

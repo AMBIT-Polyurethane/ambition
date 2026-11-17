@@ -67,23 +67,21 @@ const s = StyleSheet.create({
   cDesc: { flex: 1 },
   cQty: { width: 62, textAlign: "right", fontFamily: "Helvetica-Bold", fontSize: 10 },
   cTick: { width: 46, alignItems: "center" },
-  cLot: { width: 104 },
   tick: { width: 13, height: 13, borderWidth: 1.1, borderColor: INK, borderRadius: 1.5 },
-  lotLine: { borderBottomWidth: 0.8, borderBottomColor: INK, height: 13 },
-  noLot: { color: FAINT, textAlign: "center" },
   loadBreak: { borderTopWidth: 1.8, borderTopColor: INK },
   splitNote: { fontSize: 7, color: GRAY, marginTop: 1 },
-  pick: { fontSize: 7.4, color: INK, marginTop: 1.5 },
+  pick: { fontSize: 8, color: INK, marginTop: 1.5 },
   pickQ: { fontFamily: "Helvetica-Bold" },
   total: { flexDirection: "row", justifyContent: "space-between", marginTop: 6, fontSize: 8.6, lineHeight: 1.35 },
+  lotRule: { marginTop: 7, borderWidth: 1.2, borderColor: INK, borderRadius: 3, paddingVertical: 5, paddingHorizontal: 9, fontSize: 8.4, lineHeight: 1.35 },
   notes: { marginTop: 11, fontSize: 8.6, lineHeight: 1.35 },
-  stop: { flexDirection: "row", alignItems: "center", marginTop: 16, borderWidth: 2, borderColor: RED, borderRadius: 4, paddingVertical: 8, paddingHorizontal: 10 },
+  stop: { flexDirection: "row", alignItems: "center", marginTop: 12, borderWidth: 2, borderColor: RED, borderRadius: 4, paddingVertical: 7, paddingHorizontal: 10 },
   stopText: { flex: 1, marginLeft: 12, fontFamily: "Helvetica-Bold", fontSize: 9.4, lineHeight: 1.35, color: RED },
   boxes: { flexDirection: "row", marginTop: 10, fontSize: 8.6, lineHeight: 1.35 },
   box: { flex: 1, borderWidth: 1.1, borderColor: INK, borderRadius: 3, paddingVertical: 8, paddingHorizontal: 10 },
   h3t: { fontFamily: "Helvetica-Bold", fontSize: 7.8, letterSpacing: 0.9, marginBottom: 3 },
   attest: { fontSize: 7.4, lineHeight: 1.35, color: GRAY, marginBottom: 2 },
-  line: { flexDirection: "row", alignItems: "flex-end", marginTop: 12 },
+  line: { flexDirection: "row", alignItems: "flex-end", marginTop: 11 },
   lineL: { fontSize: 7.4, color: GRAY, marginRight: 5 },
   lineRule: { flex: 1, borderBottomWidth: 0.8, borderBottomColor: INK, height: 12 },
   foot: { position: "absolute", left: 36, right: 36, bottom: 20, borderTopWidth: 0.7, borderTopColor: RULE, paddingTop: 4, fontSize: 6.6, color: GRAY },
@@ -142,7 +140,7 @@ export function totalsText(items: { qty: number | string; unit: string }[]): str
   return [...by.entries()].map(([u, q]) => qtyText(q, u)).join("  ·  ");
 }
 
-function PackingSlip({ doc, printedBy, printedAt, changeWaiting }: { doc: OrderDoc; printedBy: string | null; printedAt: string; changeWaiting: boolean }) {
+function PackingSlip({ doc, printedBy, printedAt }: { doc: OrderDoc; printedBy: string | null; printedAt: string }) {
   const o = doc.order;
   const no = orderNo(o.order_no);
   const pickup = o.delivery_method === "pickup";
@@ -158,7 +156,7 @@ function PackingSlip({ doc, printedBy, printedAt, changeWaiting }: { doc: OrderD
   const groups = foamLoads(doc.items);
   let counter = 0;
   const rows = groups.flatMap((g, gi) => g.rows.map((row, ri) => ({ row, it: row.item, n: ++counter, first: gi > 0 && ri === 0 })));
-  const lotItem = (it: (typeof doc.items)[number]) => Boolean(it.picks?.length) || foamSide(it) !== null;
+  const hasLots = doc.items.some((it) => Boolean(it.picks?.length) || foamSide(it) !== null);
 
   // Reasons not to load yet, most serious first.
   const waiting = awaitingCustomer(doc.state);
@@ -229,13 +227,6 @@ function PackingSlip({ doc, printedBy, printedAt, changeWaiting }: { doc: OrderD
             <Text style={s.warnT}>ORDER CANCELLED</Text>
             <Text style={s.warnS}>Do not load anything on this packing slip.</Text>
           </View>
-        ) : changeWaiting ? (
-          <View style={s.warn}>
-            <Text style={s.warnT}>CHANGED · DO NOT LOAD</Text>
-            <Text style={s.warnS}>
-              This order was changed and an admin hasn&apos;t approved the change yet. Wait for the approval, then print a new packing slip.
-            </Text>
-          </View>
         ) : waiting ? (
           <View style={s.warn}>
             <Text style={s.warnT}>NOT APPROVED YET</Text>
@@ -298,7 +289,6 @@ function PackingSlip({ doc, printedBy, printedAt, changeWaiting }: { doc: OrderD
           <Text style={[s.th, s.cDesc]}>ITEM  ·  LOT TO LOAD</Text>
           <Text style={[s.th, s.cQty, { fontSize: 6.4 }]}>QTY</Text>
           <Text style={[s.th, s.cTick, { textAlign: "center" }]}>LOADED</Text>
-          <Text style={[s.th, s.cLot]}>LOT # ON THE DRUM</Text>
         </View>
         {rows.map(({ row, n, first, it }) => (
           <View key={`${it.id ?? n}-${n}`} style={[s.tr, n % 2 === 0 ? { backgroundColor: ZEBRA } : {}, first ? s.loadBreak : {}]} wrap={false}>
@@ -315,7 +305,6 @@ function PackingSlip({ doc, printedBy, printedAt, changeWaiting }: { doc: OrderD
             </View>
             <Text style={[s.td, s.cQty]}>{qtyText(row.qty, it.unit)}</Text>
             <View style={[s.td, s.cTick]}><View style={s.tick} /></View>
-            <View style={[s.td, s.cLot]}>{lotItem(it) ? <View style={s.lotLine} /> : <Text style={s.noLot}>–</Text>}</View>
           </View>
         ))}
         <View style={s.total} wrap={false}>
@@ -325,22 +314,32 @@ function PackingSlip({ doc, printedBy, printedAt, changeWaiting }: { doc: OrderD
           </Text>
           <Text style={s.sub}>{doc.items.length} {doc.items.length === 1 ? "line" : "lines"}</Text>
         </View>
+        {hasLots ? (
+          <View style={s.lotRule} wrap={false}>
+            <Text>
+              <Text style={s.b}>Load only the lots printed above. </Text>
+              If a drum&apos;s lot # is different, stop: the order has to be changed in the app and a new packing slip printed before it is loaded. Nothing is written in by hand.
+            </Text>
+          </View>
+        ) : null}
 
-        <View style={s.notes} wrap={false}>
-          <Label>Order notes</Label>
-          {o.notes ? <Text>{o.notes}</Text> : <Text style={{ color: FAINT }}>No notes.</Text>}
-        </View>
+        {o.notes ? (
+          <View style={s.notes} wrap={false}>
+            <Label>Order notes</Label>
+            <Text>{o.notes}</Text>
+          </View>
+        ) : null}
 
         <View wrap={false}>
           <View style={s.stop}>
-            <StopSign />
+            <StopSign size={58} />
             <Text style={s.stopText}>{STOP_TEXT}</Text>
           </View>
           <View style={s.boxes}>
             <View style={[s.box, { marginRight: 14, borderColor: RED, borderWidth: 1.6 }]}>
               <Text style={[s.h3t, { color: RED }]}>AMBIT EMPLOYEE · PICKED AND LOADED BY</Text>
               <Text style={s.attest}>
-                I loaded only the items and quantities on this packing slip, and I checked the lot # on every drum.
+                I loaded only the items, quantities and lots printed on this packing slip, and I checked the lot # on every drum.
               </Text>
               <Line label="Print name" />
               <Line label="Signature" />
@@ -369,10 +368,8 @@ function PackingSlip({ doc, printedBy, printedAt, changeWaiting }: { doc: OrderD
 }
 
 /** The packing slip as a PDF (AMBIT staff only: it shows the lots the app picked). */
-export async function renderPackingSlip(doc: OrderDoc, opts: { printedBy?: string | null; printedAt?: string; changeWaiting?: boolean } = {}): Promise<Buffer> {
-  return renderToBuffer(
-    <PackingSlip doc={doc} printedBy={opts.printedBy ?? null} printedAt={opts.printedAt ?? new Date().toISOString()} changeWaiting={Boolean(opts.changeWaiting)} />,
-  );
+export async function renderPackingSlip(doc: OrderDoc, opts: { printedBy?: string | null; printedAt?: string } = {}): Promise<Buffer> {
+  return renderToBuffer(<PackingSlip doc={doc} printedBy={opts.printedBy ?? null} printedAt={opts.printedAt ?? new Date().toISOString()} />);
 }
 
 export const packingSlipFileName = (doc: OrderDoc) => `AMBIT-Packing-Slip-${orderNo(doc.order.order_no)}.pdf`;

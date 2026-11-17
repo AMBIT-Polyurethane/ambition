@@ -313,7 +313,7 @@ export default async function OrderDetailPage({
           <p className="small" style={{ margin: 0 }}>
             {order.status === "completed"
               ? "This order was corrected after it went out. An admin has to approve the change and make sure the QuickBooks invoice matches."
-              : `Don't load this order. It can't be marked ${order.delivery_method === "pickup" ? "picked up" : "shipped out"} until an admin approves the change, and its packing slip says DO NOT LOAD.`}
+              : `Don't load this order. Its packing slip can't be printed, and it can't be marked ${order.delivery_method === "pickup" ? "picked up" : "shipped out"}, until an admin approves the change.`}
           </p>
           {waitingEdits.map((e) => (
             <div key={e.id} className="col tight">
@@ -342,10 +342,17 @@ export default async function OrderDetailPage({
       ) : null}
 
       {emp && kind !== "return" && order.status !== "cancelled" && order.delivery_method !== "dropship" ? (
-        <a href={`/orders/${order.id}/packing-slip`} target="_blank" rel="noopener" className="btn dark block packing-slip-btn">
-          <Printer size={17} /> Print packing slip
-          <span className="tiny faint">For picking and loading: items, lots, Sales Order # and Invoice #, no prices</span>
-        </a>
+        waitingEdits.length ? (
+          <div className="btn dark block packing-slip-btn" aria-disabled="true" style={{ opacity: 0.55, cursor: "not-allowed" }}>
+            <Printer size={17} /> Print packing slip
+            <span className="tiny faint">Not until an admin approves the change above</span>
+          </div>
+        ) : (
+          <a href={`/orders/${order.id}/packing-slip`} target="_blank" rel="noopener" className="btn dark block packing-slip-btn">
+            <Printer size={17} /> Print packing slip
+            <span className="tiny faint">For picking and loading: items, lots, Sales Order # and Invoice #, no prices</span>
+          </a>
+        )
       ) : null}
 
       {canEdit ? (

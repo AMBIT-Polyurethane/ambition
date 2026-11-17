@@ -1,9 +1,9 @@
 -- =====================================================================
 -- AMBIT Intelligence update 0075 - Admins approve every change to an order; packing slips
 -- * Whenever someone adds, removes or changes an item on an order (Edit order, or Correct this order after pickup),
---   every admin is emailed. An admin has to approve the change, ticking that the QuickBooks invoice has it, before
---   the order can be marked picked up or shipped out (in the app or from PENDING ORDERS). The packing slip says
---   DO NOT LOAD until then.
+--   every admin is emailed. An admin has to approve the change, ticking that the QuickBooks invoice has it. Until
+--   then the packing slip can't be printed and the order can't be marked picked up or shipped out (in the app or
+--   from PENDING ORDERS).
 -- * Changes made before this update count as approved.
 -- Run once in Supabase > SQL Editor, AFTER 0074. Safe to run again.
 -- =====================================================================
