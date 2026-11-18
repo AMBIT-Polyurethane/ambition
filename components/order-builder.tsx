@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
+import { CatIcon, lookFor } from "@/components/cat-icon";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, readLots, writeLots, NO_LOTS, type Cart, type LotPicks } from "@/lib/cart";
 import { money, plural } from "@/lib/format";
 import { customerDetails, customerFavorites, customerRep, placeOrder, type Favorite } from "@/app/(app)/order/actions";
@@ -330,7 +331,7 @@ export function OrderBuilder(props: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
-  const [showPop, setShowPop] = useState(true);
+  const [showPop, setShowPop] = useState(false);
 
   // The customer's sales rep (or House Account) fills in the Sales rep box; a different customer starts it over.
   useEffect(() => {
@@ -570,7 +571,7 @@ export function OrderBuilder(props: Props) {
         <img className={`thumb${size ? " " + size : ""}`} src={p.image_url} alt="" loading="lazy" />
       </button>
     ) : size ? null : (
-      <div className="ic"><Icon name={categoryIcon(p.category_id)} size={22} /></div>
+      <CatIcon look={lookFor(p.category_id, p.sku, p.name)} size={44} />
     );
 
   const lightbox = zoom ? (
@@ -1152,32 +1153,37 @@ export function OrderBuilder(props: Props) {
       <section className="pop-box">
         <div className="row between" style={{ gap: 8 }}>
           <span className="eyebrow">Quick picks</span>
-          <button type="button" className="linkbtn small" onClick={() => setShowPop((v) => !v)}>{showPop ? "Hide" : "Show"}</button>
+          {favRows.length + popRows.length > 4 ? (
+            <button type="button" className="linkbtn small" onClick={() => setShowPop((v) => !v)}>{showPop ? "Show fewer" : `Show all ${favRows.length + popRows.length}`}</button>
+          ) : null}
         </div>
-        {showPop ? (
+        {(() => {
+          const favShown = showPop ? favRows : favRows.slice(0, 4);
+          const popShown = showPop ? popRows : popRows.slice(0, Math.max(0, 4 - favShown.length));
+          return (
           <>
-            {favRows.length ? (
+            {favShown.length ? (
               <div className="col" style={{ gap: 6 }}>
                 <b className="small">{customer ? `${customer.name}'s` : "This customer's"} most ordered{favs && favs.days > 90 ? " (last 12 months)" : " · last 90 days"}</b>
                 <div className="list">
-                  {favRows.map((f) => {
+                  {favShown.map((f) => {
                     const p = byId.get(f.id)!;
                     return productRow(p, `${qtyText(f.qty)} ${plural(p.unit, f.qty)} on ${f.orders} ${f.orders === 1 ? "order" : "orders"} · last ${short(f.last)}`);
                   })}
                 </div>
               </div>
             ) : null}
-            {popRows.length ? (
+            {popShown.length ? (
               <div className="col" style={{ gap: 6 }}>
                 <b className="small">Most popular at {branch?.name ?? "this location"} · last 90 days</b>
                 <div className="list">
-                  {popRows.map((x) => productRow(byId.get(x.id)!, `On ${x.n} ${x.n === 1 ? "order" : "orders"} here`))}
+                  {popShown.map((x) => productRow(byId.get(x.id)!, `On ${x.n} ${x.n === 1 ? "order" : "orders"} here`))}
                 </div>
               </div>
             ) : null}
-            <div className="eyebrow" style={{ marginTop: 4 }}>Everything {branch ? `at ${branch.name}` : ""}</div>
           </>
-        ) : null}
+          );
+        })()}
       </section>
     ) : null;
 
@@ -1210,14 +1216,13 @@ export function OrderBuilder(props: Props) {
             <span className="avail-count">{availCount}</span>
           </button>
         ) : null}
-        <div className="chips" role="tablist" aria-label="Categories">
-          <button type="button" role="tab" aria-selected={catNow === "all"} className={`chip${catNow === "all" ? " on" : ""}`} onClick={() => setCat("all")}>All</button>
-          {catsHere.map((c) => (
-            <button key={c.id} type="button" role="tab" aria-selected={catNow === c.id} className={`chip${catNow === c.id ? " on" : ""}`} onClick={() => setCat(c.id)}>
-              {c.name}
-            </button>
-          ))}
-        </div>
+        {catNow !== "all" ? (
+          <div className="cat2-head">
+            <button type="button" className="o2-back" onClick={() => setCat("all")} aria-label="All categories"><ChevronLeft size={20} /></button>
+            <CatIcon look={lookFor(catNow, null, catsHere.find((c) => c.id === catNow)?.name)} size={36} />
+            <b>{catsHere.find((c) => c.id === catNow)?.name ?? "Category"}</b>
+          </div>
+        ) : null}
       </div>
 
       {notice ? <div className="alert info">{notice}</div> : null}
@@ -1225,7 +1230,25 @@ export function OrderBuilder(props: Props) {
 
       {popBox}
 
-      {shown.length === 0 ? (
+      {!needle && catNow === "all" && !availFilter ? (
+        <section className="col" style={{ gap: 10 }} aria-label="Categories">
+          <span className="eyebrow">Categories</span>
+          <div className="tiles2">
+            {catsHere.map((c) => {
+              const inCat = here.filter((p) => p.category_id === c.id);
+              const picked = inCat.reduce((n, p) => n + ((cart[p.id] ?? 0) > 0 ? 1 : 0), 0);
+              return (
+                <button key={c.id} type="button" className="tile2" onClick={() => { setCat(c.id); window.scrollTo(0, 0); }}>
+                  <CatIcon look={lookFor(c.id, null, c.name)} size={48} />
+                  <span className="tile2-n">{c.name}</span>
+                  <span className="tile2-s">{inCat.length} {inCat.length === 1 ? "item" : "items"}</span>
+                  {picked ? <span className="tile2-b" aria-label={`${picked} in this order`}>{picked}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : shown.length === 0 ? (
         <div className="card muted small center">
           {products.length === 0
             ? "The catalog is empty. An admin can import products in Admin → Products."

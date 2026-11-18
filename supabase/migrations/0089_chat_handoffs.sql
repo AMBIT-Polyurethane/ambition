@@ -1,5 +1,5 @@
 -- 0089: automatic hand-offs in the order chat. When an order moves to another department's step, the order chat gets a
--- note that tags the people who do the next step ("Credit released → @Kim Hight ready to schedule"). Each person tagged
+-- note that tags the people who do the next step ("Credit released, @Kim Hight ready to schedule"). Each person tagged
 -- gets it on their to-do list, and their earlier hand-off to-dos on that order tick themselves off when the order moves on.
 -- Never blocks an order: if anything here fails, the order change still goes through.
 
@@ -13,7 +13,7 @@ alter table public.chat_todos add constraint chat_todos_source_check check (sour
 -- and the ones at the order's location first (none there: everyone with it).
 drop function if exists public.handoff_people(text, text, int);
 create or replace function public.handoff_people(p_perm text, p_branch text, p_max int default 4, p_role text default null) returns uuid[]
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public as $fn$
   with c as (
     select id, branch_id, job_role from public.profiles
      where status = 'active' and coalesce(demo, false) = false and role in ('employee', 'admin') and p_perm = any(coalesce(perms, '{}'))
@@ -30,12 +30,12 @@ language sql stable security definer set search_path = public as $$
     select id from pool where not exists (select 1 from pool where p_branch is not null and branch_id = p_branch)
     limit p_max
   ) x
-$$;
+$fn$;
 
 -- The order desk person working on this order: whoever entered its Sales Order #, else whoever placed it (if they're on
 -- the desk), else the desk at its location.
 create or replace function public.handoff_desk(o public.orders) returns uuid[]
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql stable security definer set search_path = public as $fn$
 declare v uuid;
 begin
   if o.po_by_name is not null then
@@ -45,10 +45,10 @@ begin
   select id into v from public.profiles where id = o.placed_by and status = 'active' and 'order_desk' = any(coalesce(perms, '{}'));
   if v is not null then return array[v]; end if;
   return public.handoff_people('order_desk', o.branch_id, 2, 'crm');
-end $$;
+end $fn$;
 
 create or replace function public.order_handoff_note(o public.orders, p_old text) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public as $fn$
 declare
   v_chan uuid;
   v_msg bigint;
@@ -57,7 +57,7 @@ declare
   v_todo text;
   v_tags text;
   v_when text := case when o.scheduled_for is null then '' when o.scheduled_for = (now() at time zone 'America/Chicago')::date then 'today' else to_char(o.scheduled_for, 'Mon FMDD') end;
-  v_ref text := 'ORD-' || o.order_no || ' · ' || coalesce(o.company_name, '');
+  v_ref text := 'ORD-' || o.order_no || ' ' || chr(183) || ' ' || coalesce(o.company_name, '');
 begin
   if o.stage = 'needs_po' and p_old is distinct from 'invoice_update' then
     v_people := public.handoff_desk(o);
@@ -90,7 +90,7 @@ begin
     v_text := 'Order edited';
     v_todo := 'update the invoice';
   elsif o.stage = 'completed' and p_old is distinct from 'invoice_update' then
-    v_text := case o.delivery_method when 'pickup' then 'Picked up' when 'dropship' then 'Shipped' else 'Delivered' end || ' ✓';
+    v_text := case o.delivery_method when 'pickup' then 'Picked up' when 'dropship' then 'Shipped' else 'Delivered' end || ' ' || chr(10003);
   elsif o.stage = 'cancelled' then
     v_text := 'Cancelled' || coalesce(': ' || nullif(trim(o.cancel_reason), ''), '');
   else
@@ -116,7 +116,7 @@ begin
    where t.done_at is null and t.source = 'handoff' and t.channel_id = v_chan;
 
   insert into public.chat_messages (channel_id, user_id, body, mentions, kind)
-  values (v_chan, auth.uid(), v_text || case when v_tags is not null then ' → ' || v_tags || ' ' || v_todo else '' end, v_people, 'handoff')
+  values (v_chan, auth.uid(), v_text || case when v_tags is not null then ' ' || chr(8594) || ' ' || v_tags || ' ' || v_todo else '' end, v_people, 'handoff')
   returning id into v_msg;
   update public.chat_channels set last_message_at = now() where id = v_chan;
 
@@ -127,13 +127,13 @@ begin
     select x, left('ORD-' || o.order_no || ' ' || coalesce(o.company_name, '') || ': ' || v_todo, 200), v_chan, v_msg, 'AMBIT', auth.uid(), 'handoff'
       from unnest(v_people) x;
   end if;
-end $$;
+end $fn$;
 revoke all on function public.order_handoff_note(public.orders, text) from public, anon, authenticated;
 revoke all on function public.handoff_people(text, text, int, text) from public, anon, authenticated;
 revoke all on function public.handoff_desk(public.orders) from public, anon, authenticated;
 
 create or replace function public.orders_handoff_trigger() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public as $fn$
 begin
   begin
     perform public.order_handoff_note(new, case when tg_op = 'UPDATE' then old.stage else null end);
@@ -141,7 +141,7 @@ begin
     null; -- a hand-off note must never stop an order from moving
   end;
   return null;
-end $$;
+end $fn$;
 
 drop trigger if exists orders_handoff on public.orders;
 create trigger orders_handoff after update on public.orders
@@ -152,13 +152,13 @@ create trigger orders_handoff_new after insert on public.orders
 
 -- The app sends the phone notification for each hand-off once (pushed_at), right after the step that caused it.
 create or replace function public.chat_handoffs_to_push(p_order uuid) returns table (id bigint, channel_id uuid, body text, mentions uuid[])
-language sql security definer set search_path = public as $$
+language sql security definer set search_path = public as $fn$
   update public.chat_messages m set pushed_at = now()
     from public.chat_channels c
    where c.id = m.channel_id and c.order_id = p_order and m.kind = 'handoff' and m.pushed_at is null
      and m.created_at > now() - interval '10 minutes' and public.is_employee()
   returning m.id, m.channel_id, m.body, m.mentions
-$$;
+$fn$;
 revoke all on function public.chat_handoffs_to_push(uuid) from public, anon;
 grant execute on function public.chat_handoffs_to_push(uuid) to authenticated;
 

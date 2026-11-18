@@ -4297,3 +4297,13 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .chat2-compose .chat-compose { background: transparent; padding: 0 12px; }
 .chat2-compose .chat-hint { display: none; }
 .chat2-f { padding: 10px 18px 16px; }
+/* New order: category tiles (the approved redesign) */
+.tiles2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.tile2 { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; border-radius: 18px; background: var(--s1); border: 1px solid var(--line); color: var(--text); font: inherit; text-align: left; cursor: pointer; min-height: 132px; }
+.tile2:hover { border-color: var(--line-hover); background: var(--s2); }
+.tile2-n { font-size: 15.5px; font-weight: 750; line-height: 20px; }
+.tile2-s { font-size: 13px; color: var(--text3); margin-top: auto; }
+.tile2-b { position: absolute; top: 12px; right: 12px; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px; background: #cf2e20; color: #fff; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.cat2-head { display: flex; align-items: center; gap: 12px; }
+.cat2-head b { font-size: 20px; font-weight: 800; }
+@media (max-width: 420px) { .tiles2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile2 { min-height: 118px; padding: 14px; } }
