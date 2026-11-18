@@ -5,6 +5,7 @@ import { dateShort, orderNo, qtyText } from "@/lib/format";
 import { TopBar } from "@/components/ui";
 import { LoadedFix, type FixItem, type FixLot, type FixStockItem } from "@/components/loaded-fix";
 import { fixStockList } from "@/lib/inventory/view";
+import { loadFixItems } from "@/lib/order-doc/fix-items";
 import { BolAuditRunner } from "@/components/bol-audit-runner";
 import { bolsToCheck, loadBolFindings } from "@/lib/order-doc/bol-check";
 import { bolLooksRight, recheckBol } from "./actions";
@@ -16,7 +17,7 @@ export const maxDuration = 60;
 const PER = 8;
 
 type O = { id: string; order_no: number; company_name: string | null; branch_id: string | null; completed_at: string | null; delivery_method: string };
-type It = { id: number; order_id: string; sku: string; name: string; unit: string; qty: number };
+type It = { id: number; order_id: string; sku: string; name: string; unit: string; qty: number; product_id: string | null };
 type Ln = { order_item_id: number | null; order_id: string; sku: string; qty: number; lot_no: string | null; lot_id: number | null };
 type F = { id: number; order_id: string; path: string; name: string | null; created_at: string };
 
@@ -39,7 +40,7 @@ export default async function BolReviewPage({ searchParams }: { searchParams: Pr
   const orders = (oRows ?? []) as O[];
   const ids = orders.map((o) => o.id);
   const [{ data: itRows }, { data: lnRows }, { data: fRows }] = await Promise.all([
-    ids.length ? supabase.from("order_items").select("id, order_id, sku, name, unit, qty").in("order_id", ids).order("id") : Promise.resolve({ data: [] }),
+    ids.length ? supabase.from("order_items").select("id, order_id, sku, name, unit, qty, product_id").in("order_id", ids).order("id") : Promise.resolve({ data: [] }),
     ids.length ? supabase.from("inventory_lines").select("order_item_id, order_id, sku, qty, lot_no, lot_id").in("order_id", ids).eq("state", "done").order("id") : Promise.resolve({ data: [] }),
     ids.length ? supabase.from("order_files").select("id, order_id, path, name, created_at").in("order_id", ids).eq("kind", "bol").order("id") : Promise.resolve({ data: [] }),
   ]);
@@ -54,27 +55,8 @@ export default async function BolReviewPage({ searchParams }: { searchParams: Pr
   await Promise.all(
     orders.map(async (o) => {
       const mine = items.filter((i) => i.order_id === o.id);
-      const out = await Promise.all(
-        mine.map(async (it): Promise<FixItem | null> => {
-          const done = lines.filter((l) => l.order_item_id === it.id);
-          if (!done.length) return null;
-          const { data, error } = await supabase.rpc("order_item_lot_options", { p_item: it.id });
-          if (error || !data?.length) return null;
-          // This page is for spray foam by lot: items counted by total (fiberglass, supplies) are fixed on the order page.
-          const opts = data as FixLot[];
-          if (!done.some((l) => l.lot_id) && !opts.some((x) => x.same_type && !x.by_total)) return null;
-          return {
-            item: it.id,
-            name: it.name,
-            sku: it.sku,
-            unit: it.unit,
-            total: done.reduce((t, l) => t + Number(l.qty), 0),
-            noLot: done.filter((l) => !l.lot_id).reduce((t, l) => t + Number(l.qty), 0),
-            options: (data as FixLot[]).map((x) => ({ ...x, remaining: Number(x.remaining), mine: Number(x.mine) })),
-          };
-        }),
-      );
-      fixOf.set(o.id, out.filter((x): x is FixItem => x !== null));
+      // Every spray foam item, also ones with nothing recorded (older orders, 0083).
+      fixOf.set(o.id, await loadFixItems(supabase, mine.map((i) => ({ ...i, product_id: i.product_id ?? null })), lines.filter((l) => l.order_id === o.id)));
     }),
   );
 

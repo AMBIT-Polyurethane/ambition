@@ -5,7 +5,12 @@ import { orderNo } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
 import { carriedAt } from "@/lib/inventory/carried";
 import { TopBar } from "@/components/ui";
-import { OrderEditor, type AddChoice, type EditItem, type LotChoice } from "@/components/order-editor";
+import { OrderEditor, type AddChoice, type EditItem, type LotChoice, type LotHit } from "@/components/order-editor";
+import { LoadedFix } from "@/components/loaded-fix";
+import { loadFixItems } from "@/lib/order-doc/fix-items";
+import { fixStockList } from "@/lib/inventory/view";
+import Link from "next/link";
+import { CircleAlert } from "lucide-react";
 import type { Order, OrderItem } from "@/lib/types";
 
 export const metadata = { title: "Edit order" };
@@ -28,13 +33,13 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
   }
   const [{ data: itemRows }, { data: picked }, carried, { data: products }, { data: lotRows }] = await Promise.all([
     supabase.from("order_items").select("*").eq("order_id", id).order("id"),
-    supabase.from("inventory_lines").select("order_item_id").eq("order_id", id).eq("state", "done"),
+    supabase.from("inventory_lines").select("order_item_id, qty, lot_id").eq("order_id", id).eq("state", "done"),
     carriedAt(supabase, order.branch_id),
     // Every product, hidden ones too: the ISO brands are hidden from the catalog but their lots are what went out.
     supabase.from("products").select("id, sku, name, unit, stock_of, active").order("sort").order("name"),
     order.branch_id
-      ? supabase.from("inventory_lots").select("product_id").eq("branch_id", order.branch_id).eq("on_sheet", true)
-      : Promise.resolve({ data: [] as { product_id: string }[] }),
+      ? supabase.from("inventory_lots").select("id, product_id, sku, lot_no, exp, use_by, remaining").eq("branch_id", order.branch_id).eq("on_sheet", true)
+      : Promise.resolve({ data: [] as { id: number; product_id: string; sku: string; lot_no: string | null; exp: string | null; use_by: string | null; remaining: number }[] }),
   ]);
   type P = { id: string; sku: string; name: string; unit: string; stock_of: string | null; active: boolean };
   const prods = (products ?? []) as P[];
@@ -42,7 +47,17 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
   const lotIds = new Set(((lotRows ?? []) as { product_id: string }[]).map((l) => l.product_id));
   const byLot = new Set<string>(lotIds);
   for (const p of prods) if (lotIds.has(p.id) && p.stock_of) byLot.add(p.stock_of);
-  const done = new Set(((picked ?? []) as { order_item_id: number | null }[]).map((p) => p.order_item_id));
+  const doneLines = (picked ?? []) as { order_item_id: number | null; qty: number; lot_id: number | null }[];
+  const done = new Set(doneLines.map((p) => p.order_item_id));
+  // Find a lot or brand in "Add an item": every lot at this location, added as the catalog item it sells as.
+  const prodOf = new Map(prods.map((p) => [p.id, p]));
+  const lotHits: LotHit[] = ((lotRows ?? []) as { id: number; product_id: string; sku: string; lot_no: string | null; exp: string | null; use_by: string | null; remaining: number }[])
+    .filter((l) => prodOf.get(l.product_id))
+    .map((l) => {
+      const lp = prodOf.get(l.product_id)!;
+      const cat = (lp.stock_of && prodOf.get(lp.stock_of)) || lp;
+      return { lot_id: l.id, product_id: cat.id, cat_sku: cat.sku, cat_name: cat.name, unit: cat.unit, sku: l.sku, lot_no: l.lot_no, exp: l.exp ?? l.use_by, remaining: Number(l.remaining) };
+    });
   const items: EditItem[] = ((itemRows ?? []) as OrderItem[]).map((i) => ({
     id: i.id,
     product_id: i.product_id ?? null,
@@ -58,7 +73,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
   // Correcting a completed order: the lots each spray foam item could have come from (0070).
   const lotChoices: Record<string, LotChoice[]> = {};
   if (closed && order.branch_id && byLot.size) {
-    const want = [...new Set([...choices.filter((c) => c.lots).map((c) => c.product_id), ...items.map((i) => i.product_id).filter((x): x is string => !!x)])];
+    const want = [...new Set([...choices.filter((c) => c.lots).map((c) => c.product_id), ...items.map((i) => i.product_id).filter((x): x is string => !!x), ...lotHits.map((l) => l.product_id)])];
     // Holds for other customers show on each lot (0071); before 0071 the function has no p_company.
     let { data: lc, error: le } = await supabase.rpc("inventory_lot_choices_for", { p_branch: order.branch_id, p_products: want, p_company: order.company_id });
     if (le) ({ data: lc } = await supabase.rpc("inventory_lot_choices_for", { p_branch: order.branch_id, p_products: want }));
@@ -66,6 +81,14 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
       (lotChoices[r.for_product] ??= []).push({ ...r, remaining: Number(r.remaining), available: Number(r.available) });
     }
   }
+  // Correcting a completed order: the lots each spray foam item really came from, any product, also items with
+  // nothing recorded (0083). Type a lot # or brand to find it.
+  const [fixItems, fixStock] = closed && order.branch_id
+    ? await Promise.all([
+        loadFixItems(supabase, ((itemRows ?? []) as OrderItem[]).map((i) => ({ id: i.id, sku: i.sku, name: i.name, unit: i.unit, qty: i.qty, product_id: i.product_id ?? null })), doneLines),
+        fixStockList(supabase, order.branch_id),
+      ])
+    : [[], []];
   const st = stageOf(order);
   const where = order.delivery_method === "pickup" ? "picked up" : "shipped out";
   const next = closed
@@ -83,11 +106,17 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
       </p>
       {closed ? (
         <p className="small muted" style={{ margin: 0 }}>
-          Wrong brand or lot on an item that&apos;s already here? Go back and use <b>Wrong lot or brand went out?</b> on the order page instead of
-          taking it off and adding it again. For spray foam you add or change here, pick the exact lot that went out.
+          Which lots or brand went out: set them in <b>What went out, lot by lot</b> (type a lot # or brand to find it). To add an item that
+          went out, find it below by SKU, name, brand or lot #.
         </p>
       ) : null}
-      <OrderEditor orderId={id} items={items} choices={choices} next={next} closed={closed} lotChoices={lotChoices} />
+      {closed && !order.branch_id ? (
+        <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>This order has no location, so lots can&apos;t be recorded on it. Set its location first: <Link href={`/orders/${id}/details`}>Edit details</Link>, then Location. Then come back here.</span></div>
+      ) : null}
+      {fixItems.length ? (
+        <LoadedFix orderId={id} items={fixItems} stock={fixStock} open title="What went out, lot by lot" back={`/orders/${id}/edit`} />
+      ) : null}
+      <OrderEditor orderId={id} items={items} choices={choices} next={next} closed={closed} lotChoices={lotChoices} lots={lotHits} />
     </main>
   );
 }

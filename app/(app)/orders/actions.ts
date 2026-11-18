@@ -169,18 +169,55 @@ export async function editOrder(input: { id: string; lines: EditLine[]; note: st
   const lines = (input.lines ?? [])
     .map((l) => ({ id: l.id ?? null, product_id: l.product_id ?? null, qty: Math.round(Number(l.qty) * 100) / 100, lot_id: Number(l.lot_id) > 0 ? Number(l.lot_id) : null }))
     .filter((l) => Number.isFinite(l.qty) && l.qty >= 0 && (l.id || l.product_id));
+  const { data: cur } = await s.supabase.from("orders").select("status").eq("id", id).maybeSingle<{ status: string }>();
+  const closedOrder = cur?.status === "completed";
   // Spray foam on a completed order: each line goes on the exact lot picked for it (0070).
-  const withLots = lines.some((l) => l.lot_id);
-  const { data, error } = await s.supabase.rpc(withLots ? "order_edit_lots" : "order_edit", { p_order: id, p_lines: lines, p_note: String(input.note ?? "").slice(0, 500) || null });
-  if (error) return { ok: false, error: /order_edit_lots/.test(error.message) ? "Picking the lot needs the 0070 database update first (Supabase > SQL Editor)." : error.message };
-  const r = (data ?? {}) as { revision?: number; invoice_update?: boolean; customer?: boolean; closed?: boolean; changes?: OrderChange[]; lots?: number };
+  const withLots = closedOrder && lines.some((l) => l.lot_id);
+  // An open order: lines picked by lot # in "Add an item" are moved onto that lot after saving (Change lot).
+  const pins = closedOrder ? [] : lines.filter((l) => l.lot_id);
+  const sameQty = async () => {
+    // Only a lot was picked (no quantity changed): nothing to save on the items.
+    const { data: now } = await s.supabase.from("order_items").select("id, qty").eq("order_id", id);
+    const q = new Map(((now ?? []) as { id: number; qty: number }[]).map((x) => [x.id, Number(x.qty)]));
+    return lines.every((l) => l.id && q.get(Number(l.id)) === l.qty);
+  };
+  let r: { revision?: number; invoice_update?: boolean; customer?: boolean; closed?: boolean; changes?: OrderChange[]; lots?: number } = {};
+  if (!(pins.length && (await sameQty()))) {
+    const { data, error } = await s.supabase.rpc(withLots ? "order_edit_lots" : "order_edit", {
+      p_order: id,
+      p_lines: withLots ? lines : lines.map(({ lot_id: _lot, ...l }) => l),
+      p_note: String(input.note ?? "").slice(0, 500) || null,
+    });
+    if (error) return { ok: false, error: /order_edit_lots/.test(error.message) ? "Picking the lot needs the 0070 database update first (Supabase > SQL Editor)." : error.message };
+    r = (data ?? {}) as typeof r;
+  }
+  // Put each picked line on its lot.
+  const lotNotes: string[] = [];
+  for (const l of pins) {
+    let itemId = l.id ? Number(l.id) : null;
+    if (!itemId && l.product_id) {
+      const { data: it } = await s.supabase.from("order_items").select("id").eq("order_id", id).eq("product_id", l.product_id).order("id", { ascending: false }).limit(1).maybeSingle<{ id: number }>();
+      itemId = it?.id ?? null;
+    }
+    if (!itemId) continue;
+    const { data: res } = await s.supabase.from("inventory_lines").select("id, lot_id").eq("order_item_id", itemId).eq("state", "reserved");
+    for (const ln of (res ?? []) as { id: number; lot_id: number | null }[]) {
+      if (ln.lot_id === l.lot_id) continue;
+      const { data: msg, error: re } = await s.supabase.rpc("inventory_repick", { p_line: ln.id, p_lot: l.lot_id });
+      lotNotes.push(re ? `Couldn't put it on that lot: ${re.message.replace(/^.*?ERROR:\s*/, "")}` : `Now from lot ${String(msg ?? "")}.`);
+    }
+  }
+  if (pins.length && !r.revision) {
+    await kickForOrder(s.supabase, id, "lot changed");
+    back(id, lotNotes.some((t) => t.startsWith("Couldn't")) ? "err" : "msg", lotNotes.join(" ") || "Saved.");
+  }
   const changes = changesText(r.changes);
   await kickForOrder(s.supabase, id, "order edited");
   // Every change to the items waits for an admin, who makes sure the QuickBooks invoice has it (0075).
   const admins = changes.length
     ? await sendAdminChangeApproval(s.supabase, id, { by: s.profile.full_name ?? s.profile.email ?? "AMBIT staff", revision: r.revision ?? 2, changes, note: String(input.note ?? "").trim() || null })
     : null;
-  const rev = `Saved as revision ${r.revision ?? 2}.${
+  const rev = `${lotNotes.length ? `${lotNotes.join(" ")} ` : ""}Saved as revision ${r.revision ?? 2}.${
     admins ? (admins.status === "sent" ? " Admins were emailed to approve the change." : " An admin has to approve the change (the email to admins didn't go out, so tell one).") : ""
   }`;
   if (r.closed) {

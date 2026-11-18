@@ -30,7 +30,11 @@ export type FixLot = {
   expired: boolean;
   held_for: string | null;
 };
-export type FixItem = { item: number; name: string; sku: string; unit: string; total: number; noLot: number; options: FixLot[] };
+/** recorded: what the app has as gone out (0 = nothing recorded, an older order: 0083). */
+export type FixItem = { item: number; name: string; sku: string; unit: string; total: number; noLot: number; options: FixLot[]; recorded?: number };
+
+/** Lot numbers compared without spaces, dashes or letter case. */
+const flat = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 const q2 = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
 const num = (s: string | undefined) => {
@@ -42,12 +46,28 @@ const num = (s: string | undefined) => {
 /** A lot ("l12") or an item counted by total ("p<product id>"). */
 const keyOf = (o: Pick<FixLot, "lot_id" | "product_id">) => (o.lot_id ? `l${o.lot_id}` : `p${o.product_id}`);
 
-export function LoadedFix({ orderId, items, back, stock = [] }: { orderId: string; items: FixItem[]; back?: string; stock?: FixStockItem[] }) {
+export function LoadedFix({
+  orderId,
+  items,
+  back,
+  stock = [],
+  open = false,
+  title = "Fix what went out",
+}: {
+  orderId: string;
+  items: FixItem[];
+  back?: string;
+  stock?: FixStockItem[];
+  open?: boolean;
+  title?: string;
+}) {
   const start = useMemo(() => Object.fromEntries(items.map((it) => [it.item, Object.fromEntries(it.options.map((o) => [keyOf(o), o.mine ? q2(o.mine) : ""]))])), [items]);
   const [qty, setQty] = useState<Record<number, Record<string, string>>>(start);
   // Items counted by total added from the search, per order line.
   const [added, setAdded] = useState<Record<number, FixLot[]>>({});
   const [find, setFind] = useState<Record<number, string>>({});
+  // Find a lot or brand: type a lot # (spaces and dashes don't matter) or a brand / SKU.
+  const [look, setLook] = useState<Record<number, string>>({});
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +81,9 @@ export function LoadedFix({ orderId, items, back, stock = [] }: { orderId: strin
   };
   const step = (item: number, key: string, d: number) => set(item, key, q2(Math.max(0, (num(qty[item]?.[key]) || 0) + d)));
   const sumOf = (it: FixItem) => optsOf(it).reduce((t, o) => t + (num(qty[it.item]?.[keyOf(o)]) || 0), 0);
-  const changed = (it: FixItem) => noLotOf(it) > 0 || optsOf(it).some((o) => (num(qty[it.item]?.[keyOf(o)]) || 0) !== o.mine);
+  const unrecorded = (it: FixItem) => it.recorded === 0;
+  const changed = (it: FixItem) =>
+    unrecorded(it) ? sumOf(it) > 0 : noLotOf(it) > 0 || optsOf(it).some((o) => (num(qty[it.item]?.[keyOf(o)]) || 0) !== o.mine);
   const bad = items.find((it) => optsOf(it).some((o) => Number.isNaN(num(qty[it.item]?.[keyOf(o)]))));
   const add = (it: FixItem, p: FixStockItem) => {
     if (optsOf(it).some((o) => o.by_total && o.product_id === p.product_id)) return;
@@ -163,8 +185,8 @@ export function LoadedFix({ orderId, items, back, stock = [] }: { orderId: strin
   };
 
   return (
-    <details className="card lotfix" open={false}>
-      <summary><b>Fix what went out</b> <span className="tiny faint">· admins: what really left, lot by lot, any product</span></summary>
+    <details className="card lotfix" open={open}>
+      <summary><b>{title}</b> <span className="tiny faint">· admins: what really left, lot by lot, any product</span></summary>
       <p className="tiny faint" style={{ margin: "6px 0 4px" }}>
         Type how many {items.every((i) => i.unit === items[0]?.unit) ? plural(items[0]?.unit ?? "drum", 2) : "drums"} came off each lot, the way the packing slip shows it.
         Another product went out (a different resin, drums instead of a tote, anything at this location)? Open &ldquo;A different product went out&rdquo;.
@@ -173,7 +195,7 @@ export function LoadedFix({ orderId, items, back, stock = [] }: { orderId: strin
       </p>
       {items.map((it) => {
         const total = sumOf(it);
-        const ok = Math.abs(total - it.total) < 0.001;
+        const ok = Math.abs(total - it.total) < 0.001 || (unrecorded(it) && total === 0);
         const opts = optsOf(it);
         const same = opts.filter((o) => o.same_type);
         const other = opts.filter((o) => !o.same_type);
@@ -183,13 +205,44 @@ export function LoadedFix({ orderId, items, back, stock = [] }: { orderId: strin
             <div className="row between" style={{ gap: 10, alignItems: "flex-start" }}>
               <div className="col tight" style={{ minWidth: 0 }}>
                 <b>{it.name}</b>
-                <span className="tiny faint">{it.sku}{noLot ? ` · ${q2(noLot)} had no lot recorded: put them on their lot` : ""}</span>
+                <span className="tiny faint">
+                  {it.sku}
+                  {unrecorded(it) ? ` · no lots were recorded for this item: enter the lots all ${q2(it.total)} came from` : noLot ? ` · ${q2(noLot)} had no lot recorded: put them on their lot` : ""}
+                </span>
               </div>
               <span className={`pill ${ok ? "ok" : "red"} nowrap`}>
                 {ok ? <CircleCheck size={13} /> : <CircleAlert size={13} />} {q2(total)} of {q2(it.total)} {plural(it.unit, it.total)}
               </span>
             </div>
-            {same.map((o) => row(it, o))}
+            {(() => {
+              const t = (look[it.item] ?? "").trim();
+              const words = t.toLowerCase().split(/\s+/).filter(Boolean);
+              const hits = words.length
+                ? opts.filter((o) => {
+                    const hay = `${o.sku} ${o.name} ${o.lot_no ?? ""} ${flat(o.lot_no)}`.toLowerCase();
+                    return words.every((w) => hay.includes(w) || hay.includes(flat(w).toLowerCase()));
+                  })
+                : [];
+              return (
+                <div className="lf-find">
+                  <input
+                    className="input sm"
+                    value={look[it.item] ?? ""}
+                    onChange={(e) => setLook((f) => ({ ...f, [it.item]: e.target.value }))}
+                    placeholder="Find a lot # or brand (PA86002841, LW8019, Covestro, Wanhua…)"
+                    aria-label={`Find the lot or brand that went out for ${it.name}`}
+                  />
+                  {words.length ? (
+                    hits.length ? (
+                      <div className="col" style={{ gap: 6 }}>{hits.slice(0, 12).map((o) => row(it, o))}</div>
+                    ) : (
+                      <span className="tiny faint">No lot or brand at this location matches &ldquo;{t}&rdquo;.</span>
+                    )
+                  ) : null}
+                </div>
+              );
+            })()}
+            {(look[it.item] ?? "").trim() ? null : same.map((o) => row(it, o))}
             <details className="lf-other" open={other.some((o) => o.mine > 0 || o.by_total)}>
               <summary className="tiny">
                 A different product went out{other.filter((o) => !o.by_total).length ? ` (${other.filter((o) => !o.by_total).length} lots, or anything counted by total)` : " (anything at this location)"}

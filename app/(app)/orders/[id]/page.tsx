@@ -25,6 +25,7 @@ import { OrderDeskCard, type OrderFile } from "@/components/order-desk-card";
 import { LotFixAfter, type LotLine, type LotOption } from "@/components/lot-check";
 import { LoadedFix, type FixItem, type FixLot, type FixStockItem } from "@/components/loaded-fix";
 import { orderBolFinding } from "@/lib/order-doc/bol-check";
+import { loadFixItems } from "@/lib/order-doc/fix-items";
 import { fixStockList } from "@/lib/inventory/view";
 import type { Alternative, LotChoice, Variance, VarianceData } from "@/components/item-variance";
 import { can } from "@/lib/access";
@@ -167,25 +168,13 @@ export default async function OrderDetailPage({
   };
   // After pickup (0073): admins rebuild how many drums of each item came off each lot.
   const fixer = emp && profile.role === "admin" && order.status === "completed";
-  const fixItemsOf = async (): Promise<FixItem[]> => {
-    const withDone = lines.filter((l) => (picks.get(l.id) ?? []).some((p) => p.state === "done"));
-    const out = await Promise.all(withDone.map(async (l): Promise<FixItem | null> => {
-      const { data, error } = await supabase.rpc("order_item_lot_options", { p_item: l.id });
-      if (error || !data?.length) return null;
-      // Before 0078 the options have no product_id.
-      const done = (picks.get(l.id) ?? []).filter((p) => p.state === "done");
-      return {
-        item: l.id,
-        name: l.name,
-        sku: l.sku,
-        unit: l.unit,
-        total: done.reduce((t, p) => t + Number(p.qty), 0),
-        noLot: done.filter((p) => !p.lot_id).reduce((t, p) => t + Number(p.qty), 0),
-        options: (data as FixLot[]).map((o) => ({ ...o, remaining: Number(o.remaining), mine: Number(o.mine) })),
-      };
-    }));
-    return out.filter((x): x is FixItem => x !== null);
-  };
+  // Every spray foam item, also ones with nothing recorded (older orders, 0083).
+  const fixItemsOf = (): Promise<FixItem[]> =>
+    loadFixItems(
+      supabase,
+      lines.map((l) => ({ id: l.id, sku: l.sku, name: l.name, unit: l.unit, qty: l.qty, product_id: l.product_id ?? null })),
+      lines.flatMap((l) => (picks.get(l.id) ?? []).filter((p) => p.state === "done").map((p) => ({ order_item_id: l.id, qty: p.qty, lot_id: p.lot_id }))),
+    );
   const [pickupLots, fixItems, fixStock] = await Promise.all([
     closer && st0 === "scheduled" && order.status !== "completed" && order.status !== "cancelled" ? lotLines("reserved") : Promise.resolve([] as LotLine[]),
     fixer ? fixItemsOf() : Promise.resolve([] as FixItem[]),
@@ -576,7 +565,10 @@ export default async function OrderDetailPage({
           )}
         </div>
       ) : null}
-      {fixItems.length ? <LoadedFix orderId={order.id} items={fixItems} stock={fixStock} /> : fixLots.length ? <LotFixAfter orderId={order.id} lines={fixLots} /> : null}
+      {fixer && !order.branch_id ? (
+        <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>This order has no location, so the lots that went out can&apos;t be recorded. Set its location first: <Link href={`/orders/${order.id}/details`}>Edit details</Link>, then Location.</span></div>
+      ) : null}
+      {fixItems.length ? <LoadedFix orderId={order.id} items={fixItems} stock={fixStock} open={fixItems.some((i) => i.recorded === 0)} /> : fixLots.length ? <LotFixAfter orderId={order.id} lines={fixLots} /> : null}
 
       <section className="section">
         <div className="row between" style={{ gap: 8 }}>
