@@ -3,8 +3,7 @@ import { holidaySettings } from "@/lib/holidays-server";
 import { todayCentral } from "@/lib/sale";
 import { addDaysIso, closureText, closuresAround, greetingOn, seasonOn } from "@/lib/holidays";
 import { Festive, HolidayCard } from "@/components/holiday";
-import { myTodos, unreadTotal } from "@/lib/chat";
-import { TodoList } from "@/components/chat/todos";
+import { unreadTotal } from "@/lib/chat";
 import { unstable_cache } from "next/cache";
 import { Bell, CalendarClock, ChevronRight, Landmark, Plus, RefreshCw, Sparkles, UserCheck } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -29,6 +28,7 @@ import { OutlookCalendarWidget, OutlookMailWidget } from "@/components/outlook-w
 import { CustomizeButton, HomeBoard } from "@/components/home-board";
 import { arrangeBoard, parseHomeLayout } from "@/lib/home-board";
 import { Suspense } from "react";
+import { MyWork } from "@/components/home/my-work";
 import { Loading } from "@/components/home-widgets";
 import type { Course, DocumentRow, Order } from "@/lib/types";
 
@@ -208,25 +208,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       </section>
     )),
   });
-  // My to-dos (0063): what people asked of me in chat (@mentions), plus my own.
-  if (emp) {
-    const todos = await myTodos(supabase, profile.id, { limit: 6 });
-    if (todos.length) {
-      cards.push({
-        key: "todos",
-        title: "My to-dos",
-        node: show("todos", () => (
-          <section className="section">
-            <div className="row between" style={{ alignItems: "baseline" }}>
-              <span className="sec-title">My to-dos</span>
-              <Link href="/chat/todos" className="sec-link">All</Link>
-            </div>
-            <div className="card"><TodoList todos={todos} adding={false} compact /></div>
-          </section>
-        )),
-      });
-    }
-  }
+  // My to-dos (0063) are part of My work now, at the top of the page.
   if (canOrder) {
     cards.push({
       key: "order",
@@ -374,6 +356,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <span className="grow ellipsis">Ask AMBIT about products, building science, codes or the app…</span>
           <ChevronRight size={18} />
         </Link>
+      ) : null}
+
+      {emp ? (
+        <Suspense fallback={<Loading title="My work" />}>
+          <MyWork db={supabase} profile={profile} />
+        </Suspense>
       ) : null}
 
       {sp.password === "updated" ? <div className="alert ok">Your password was updated.</div> : null}
