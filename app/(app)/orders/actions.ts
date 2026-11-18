@@ -160,62 +160,133 @@ export type EditLine = { id?: number | null; product_id?: string | null; qty: nu
  * the customer gets a fresh approval email (still waiting on them), the CRM gets "invoice update needed"
  * (the Invoice # was already in), or orders@ gets the updated order.
  */
-export async function editOrder(input: { id: string; lines: EditLine[]; note: string }): Promise<{ ok: false; error: string } | never> {
+export type SheetRow = { item_id?: number | null; product_id: string | null; lot_id: number | null; qty: number };
+
+/**
+ * Edit order as a sheet (0086): any number of rows, any item in inventory, the same item on as many rows as you like,
+ * each on its own lot. Rows of one item add up to its quantity; the lots on its rows are what it holds (open order)
+ * or what went out (picked up / shipped). Then whoever's next hears about it, as before.
+ */
+export async function saveOrderSheet(input: { id: string; rows: SheetRow[]; note: string; belowZero?: boolean; recordOnly?: boolean }): Promise<{ ok: false; error: string } | never> {
   const s = await getSession();
   if (!s?.profile || !isEmployee(s.profile) || !(s.profile.role === "admin" || can(s.profile, "ordering") || can(s.profile, "order_desk"))) {
     return { ok: false, error: "You don't have access to edit orders." };
   }
   const id = String(input.id ?? "");
-  const lines = (input.lines ?? [])
-    .map((l) => ({ id: l.id ?? null, product_id: l.product_id ?? null, qty: Math.round(Number(l.qty) * 100) / 100, lot_id: Number(l.lot_id) > 0 ? Number(l.lot_id) : null }))
-    .filter((l) => Number.isFinite(l.qty) && l.qty >= 0 && (l.id || l.product_id));
-  const { data: cur } = await s.supabase.from("orders").select("status").eq("id", id).maybeSingle<{ status: string }>();
-  const closedOrder = cur?.status === "completed";
-  // Spray foam on a completed order: each line goes on the exact lot picked for it (0070).
-  const withLots = closedOrder && lines.some((l) => l.lot_id);
-  // An open order: lines picked by lot # in "Add an item" are moved onto that lot after saving (Change lot).
-  const pins = closedOrder ? [] : lines.filter((l) => l.lot_id);
-  const sameQty = async () => {
-    // Only a lot was picked (no quantity changed): nothing to save on the items.
-    const { data: now } = await s.supabase.from("order_items").select("id, qty").eq("order_id", id);
-    const q = new Map(((now ?? []) as { id: number; qty: number }[]).map((x) => [x.id, Number(x.qty)]));
-    return lines.every((l) => l.id && q.get(Number(l.id)) === l.qty);
-  };
+  const note = String(input.note ?? "").trim().slice(0, 500);
+  const UUIDISH = /^[0-9a-f-]{36}$/i;
+  const rows = (input.rows ?? [])
+    .map((r) => ({
+      item_id: Number(r.item_id) > 0 ? Number(r.item_id) : null,
+      product_id: r.product_id && UUIDISH.test(String(r.product_id)) ? String(r.product_id) : null,
+      lot_id: Number(r.lot_id) > 0 ? Number(r.lot_id) : null,
+      qty: Math.round(Number(r.qty) * 100) / 100,
+    }))
+    .filter((r) => Number.isFinite(r.qty) && r.qty >= 0 && (r.product_id || r.item_id));
+  const [{ data: o }, { data: itRows }] = await Promise.all([
+    s.supabase.from("orders").select("status, branch_id, order_no").eq("id", id).maybeSingle<{ status: string; branch_id: string | null; order_no: number }>(),
+    s.supabase.from("order_items").select("id, product_id, qty, name, sku").eq("order_id", id).order("id"),
+  ]);
+  if (!o) return { ok: false, error: "Order not found." };
+  if (o.status === "completed" && s.profile.role !== "admin") return { ok: false, error: "Only an admin can correct an order that already went out." };
+  const closed = o.status === "completed";
+  type It = { id: number; product_id: string | null; qty: number; name: string; sku: string };
+  const items = (itRows ?? []) as It[];
+
+  // What each item should be: its rows added up, and the lots on them.
+  const want = new Map<string, { qty: number; lots: Map<number, number> }>();
+  for (const r of rows) {
+    if (!r.product_id || r.qty <= 0) continue;
+    const w = want.get(r.product_id) ?? { qty: 0, lots: new Map<number, number>() };
+    w.qty = Math.round((w.qty + r.qty) * 100) / 100;
+    if (r.lot_id) w.lots.set(r.lot_id, Math.round(((w.lots.get(r.lot_id) ?? 0) + r.qty) * 100) / 100);
+    want.set(r.product_id, w);
+  }
+  const freeQty = new Map(rows.filter((r) => !r.product_id && r.item_id).map((r) => [r.item_id!, r.qty]));
+  const firstOf = new Map<string, number>();
+  for (const it of items) if (it.product_id && !firstOf.has(it.product_id)) firstOf.set(it.product_id, it.id);
+  const lines: { id?: number; product_id?: string; qty: number }[] = [];
+  for (const it of items) {
+    const q = it.product_id ? (firstOf.get(it.product_id) === it.id ? want.get(it.product_id)?.qty ?? 0 : 0) : freeQty.get(it.id) ?? Number(it.qty);
+    lines.push({ id: it.id, qty: q });
+  }
+  for (const [pid, w] of want) if (!firstOf.has(pid)) lines.push({ product_id: pid, qty: w.qty });
+  const qtyChanged = lines.some((l) => !l.id || Number(items.find((i) => i.id === l.id)?.qty) !== l.qty);
+  if (!lines.some((l) => l.qty > 0)) return { ok: false, error: "An order needs at least one item. To drop everything, cancel the order instead." };
+
+  // Gone out already: every drum of an item counted by lot needs its lot (that's what went out).
+  const lotWanted = [...want.entries()].filter(([, w]) => w.lots.size > 0);
+  if (closed && lotWanted.length) {
+    if (!o.branch_id) return { ok: false, error: "This order has no location, so its lots can't be recorded. Set the location first (Edit details)." };
+    for (const [pid, w] of lotWanted) {
+      const onLots = [...w.lots.values()].reduce((t, q) => t + q, 0);
+      if (Math.abs(onLots - w.qty) > 0.001) {
+        const it = items.find((i) => i.product_id === pid);
+        return { ok: false, error: `${it?.name ?? "That item"}: ${onLots} of its ${w.qty} have a lot. On an order that already went out, give every row of it a lot (or none).` };
+      }
+    }
+  }
+  if (!qtyChanged && !lotWanted.length) return { ok: false, error: "Nothing changed yet." };
+
   let r: { revision?: number; invoice_update?: boolean; customer?: boolean; closed?: boolean; changes?: OrderChange[]; lots?: number } = {};
-  if (!(pins.length && (await sameQty()))) {
-    const { data, error } = await s.supabase.rpc(withLots ? "order_edit_lots" : "order_edit", {
-      p_order: id,
-      p_lines: withLots ? lines : lines.map(({ lot_id: _lot, ...l }) => l),
-      p_note: String(input.note ?? "").slice(0, 500) || null,
-    });
-    if (error) return { ok: false, error: /order_edit_lots/.test(error.message) ? "Picking the lot needs the 0070 database update first (Supabase > SQL Editor)." : error.message };
+  // Before the quantities change: which items had nothing recorded as gone out ("Just record the lots").
+  const { data: doneRows } = closed ? await s.supabase.from("inventory_lines").select("order_item_id").eq("order_id", id).eq("state", "done") : { data: [] };
+  const hadDone = new Set(((doneRows ?? []) as { order_item_id: number | null }[]).map((d) => d.order_item_id));
+  if (qtyChanged) {
+    const { data, error } = await s.supabase.rpc("order_edit", { p_order: id, p_lines: lines, p_note: note || null });
+    if (error) return { ok: false, error: error.message.replace(/^.*?ERROR:\s*/, "") };
     r = (data ?? {}) as typeof r;
   }
-  // Put each picked line on its lot.
+
+  // The lots.
   const lotNotes: string[] = [];
-  for (const l of pins) {
-    let itemId = l.id ? Number(l.id) : null;
-    if (!itemId && l.product_id) {
-      const { data: it } = await s.supabase.from("order_items").select("id").eq("order_id", id).eq("product_id", l.product_id).order("id", { ascending: false }).limit(1).maybeSingle<{ id: number }>();
-      itemId = it?.id ?? null;
-    }
-    if (!itemId) continue;
-    const { data: res } = await s.supabase.from("inventory_lines").select("id, lot_id").eq("order_item_id", itemId).eq("state", "reserved");
-    for (const ln of (res ?? []) as { id: number; lot_id: number | null }[]) {
-      if (ln.lot_id === l.lot_id) continue;
-      const { data: msg, error: re } = await s.supabase.rpc("inventory_repick", { p_line: ln.id, p_lot: l.lot_id });
-      lotNotes.push(re ? `Couldn't put it on that lot: ${re.message.replace(/^.*?ERROR:\s*/, "")}` : `Now from lot ${String(msg ?? "")}.`);
+  let lotErr: string | null = null;
+  if (lotWanted.length) {
+    const { data: now } = await s.supabase.from("order_items").select("id, product_id, name").eq("order_id", id).order("id");
+    const itemOf = new Map<string, { id: number; name: string }>();
+    for (const it of (now ?? []) as { id: number; product_id: string | null; name: string }[]) if (it.product_id && !itemOf.has(it.product_id)) itemOf.set(it.product_id, it);
+    if (!closed) {
+      for (const [pid, w] of lotWanted) {
+        const it = itemOf.get(pid);
+        if (!it) continue;
+        const { data: txt, error } = await s.supabase.rpc("order_item_set_lots", {
+          p_item: it.id,
+          p_lots: [...w.lots.entries()].map(([lot, qty]) => ({ lot, qty })),
+          p_below_zero: input.belowZero === true,
+          p_reason: note || "Edit order",
+        });
+        if (error) {
+          lotErr = /order_item_set_lots/.test(error.message) ? "Putting rows on their lots needs the 0086 database update first (Supabase > SQL Editor)." : `${it.name}: ${error.message.replace(/^.*?ERROR:\s*/, "")}`;
+          break;
+        }
+        lotNotes.push(`${it.name}: ${String(txt ?? "")}.`);
+      }
+    } else {
+      const relot = lotWanted
+        .map(([pid, w]) => {
+          const it = itemOf.get(pid);
+          if (!it) return null;
+          return {
+            item: it.id,
+            lots: [...w.lots.entries()].map(([lot, qty]) => ({ lot, qty })),
+            ...(input.belowZero === true ? { below_zero: true } : {}),
+            ...(input.recordOnly === true && !hadDone.has(it.id) && !qtyChanged ? { record_only: true } : {}),
+          };
+        })
+        .filter((x) => x !== null);
+      const { data: n, error } = await s.supabase.rpc("order_relot_items", { p_order: id, p_items: relot, p_reason: note || "Edit order" });
+      if (error && !/Nothing changed/.test(error.message)) lotErr = error.message.replace(/^.*?ERROR:\s*/, "");
+      else if (!error) lotNotes.push(`${Number(n) || 0} item${Number(n) === 1 ? "" : "s"} now show the lots that went out.`);
     }
   }
-  if (pins.length && !r.revision) {
-    await kickForOrder(s.supabase, id, "lot changed");
-    back(id, lotNotes.some((t) => t.startsWith("Couldn't")) ? "err" : "msg", lotNotes.join(" ") || "Saved.");
-  }
-  const changes = changesText(r.changes);
   await kickForOrder(s.supabase, id, "order edited");
+  if (lotErr) back(id, "err", `${qtyChanged ? `The quantities were saved (revision ${r.revision ?? ""}), but the lots weren't: ` : "The lots weren't saved: "}${lotErr}`);
+  if (!qtyChanged) back(id, "msg", `Saved. ${lotNotes.join(" ")}`);
+
+  const changes = changesText(r.changes);
   // Every change to the items waits for an admin, who makes sure the QuickBooks invoice has it (0075).
   const admins = changes.length
-    ? await sendAdminChangeApproval(s.supabase, id, { by: s.profile.full_name ?? s.profile.email ?? "AMBIT staff", revision: r.revision ?? 2, changes, note: String(input.note ?? "").trim() || null })
+    ? await sendAdminChangeApproval(s.supabase, id, { by: s.profile.full_name ?? s.profile.email ?? "AMBIT staff", revision: r.revision ?? 2, changes, note: note || null })
     : null;
   const rev = `${lotNotes.length ? `${lotNotes.join(" ")} ` : ""}Saved as revision ${r.revision ?? 2}.${
     admins ? (admins.status === "sent" ? " Admins were emailed to approve the change." : " An admin has to approve the change (the email to admins didn't go out, so tell one).") : ""
@@ -225,26 +296,22 @@ export async function editOrder(input: { id: string; lines: EditLine[]; note: st
     back(
       id,
       "msg",
-      `${rev} Stock was corrected (what changed went back in, the new amounts came out${r.lots ? ", from the lots you picked" : ""}), and the spreadsheet updates on its next sync.${
+      `${rev} Stock was corrected (what changed went back in, the new amounts came out), and the spreadsheet updates on its next sync.${
         r.invoice_update ? ` The order desk${sent?.status === "sent" ? " was emailed to" : " needs to"} update the invoice. If the total changes, the credit team is emailed to collect or credit the difference.` : ""
       }`,
     );
   }
   if (r.customer) {
-    const { data: o } = await s.supabase.from("orders").select("approval_email").eq("id", id).maybeSingle<{ approval_email: string | null }>();
-    if (o?.approval_email) {
-      const sent = await sendApprovalRequest(s.supabase, id, o.approval_email);
-      back(id, sent.status === "sent" ? "msg" : "err", `${rev} ${sent.status === "sent" ? `A fresh approval email went to ${o.approval_email} (the old link no longer works).` : `The new approval email didn't go out (${sent.error ?? sent.status}). Use Resend below.`}`);
+    const { data: oc } = await s.supabase.from("orders").select("approval_email").eq("id", id).maybeSingle<{ approval_email: string | null }>();
+    if (oc?.approval_email) {
+      const sent = await sendApprovalRequest(s.supabase, id, oc.approval_email);
+      back(id, sent.status === "sent" ? "msg" : "err", `${rev} ${sent.status === "sent" ? `A fresh approval email went to ${oc.approval_email} (the old link no longer works).` : `The new approval email didn't go out (${sent.error ?? sent.status}). Use Resend below.`}`);
     }
     back(id, "msg", `${rev} The customer still needs to approve it.`);
   }
   if (r.invoice_update) {
     const sent = await sendDeskNotice(s.supabase, id, "invoice_update", changes);
-    back(
-      id,
-      "msg",
-      `${rev} It went back to the order desk for an invoice update${sent.status === "sent" ? " (they were emailed)" : ""}. If the total goes up, accounting checks credit again.`,
-    );
+    back(id, "msg", `${rev} It went back to the order desk for an invoice update${sent.status === "sent" ? " (they were emailed)" : ""}. If the total goes up, accounting checks credit again.`);
   }
   const sent = await sendOrderEmail(s.supabase, id, { changes });
   back(id, "msg", `${rev}${sent.status === "sent" ? " The updated order went to orders@ambitpu.com." : ""}`);

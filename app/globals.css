@@ -4076,3 +4076,27 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
   .flow-wide { display: none; }
   .flow-narrow { display: block; }
 }
+
+/* ---------- Edit order as a sheet (0086) ---------- */
+.sheet { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; background: var(--s1); overflow: hidden; }
+.sheet-head, .sheet-row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.6fr) auto auto; gap: 10px; align-items: center; padding: 10px 12px; }
+.sheet-head { color: var(--text3); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+.sheet-row { border-bottom: 1px solid var(--line); }
+.sheet-row.removed { opacity: 0.5; }
+.sheet-item { min-width: 0; }
+.sheet-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-width: 0; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 6px 8px; color: var(--text); cursor: pointer; }
+.sheet-pick:hover:not(:disabled) { border-color: var(--line); background: var(--s2); }
+.sheet-pick .ellipsis { max-width: 100%; }
+.sheet-find { display: flex; flex-direction: column; gap: 6px; }
+.sheet-lot .select { width: 100%; }
+.sheet-qty { display: flex; align-items: center; gap: 4px; }
+.sheet-qty .input { width: 64px; text-align: center; }
+.sheet-add { align-self: flex-start; margin: 10px 12px; }
+@media (max-width: 720px) {
+  .sheet-head { display: none; }
+  .sheet-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "item del" "lot lot" "qty qty"; }
+  .sheet-item { grid-area: item; }
+  .sheet-lot { grid-area: lot; }
+  .sheet-qty { grid-area: qty; }
+  .sheet-del { grid-area: del; }
+}
