@@ -6,7 +6,7 @@ import { claudeReady, costCents, fillForm } from "@/lib/ai/claude";
 import { shrinkImage } from "@/lib/image-shrink";
 import { loadAiSettings } from "@/lib/assistant/settings";
 import { qtyText } from "@/lib/format";
-import { bolProblems, type BolOrder, type BolProblem, type BolSeen } from "@/lib/bol-audit";
+import { bolProblems, fileVerdicts, type BolOrder, type BolProblem, type BolSeen, type FileVerdict } from "@/lib/bol-audit";
 
 // 0082: the app reads an order's signed BOL photos with AI and saves what's on them (order number, customer,
 // signature, lot numbers). bolProblems() compares that with the order.
@@ -301,7 +301,7 @@ export async function markBolError(supabase: SupabaseClient, orderId: string, ms
 }
 
 /** Which order a number on a BOL belongs to: its ORD number, AMBIT Sales Order # or invoice #. */
-async function orderIndex(supabase: SupabaseClient): Promise<(num: string) => number | null> {
+export async function orderIndex(supabase: SupabaseClient): Promise<(num: string) => number | null> {
   const { data } = await supabase.from("orders").select("order_no, ambit_po, invoice_no").order("order_no", { ascending: false }).range(0, 4999);
   const map = new Map<string, number>();
   const num = (x: string | null | undefined) => (/(\d{3,8})/.exec(x ?? "") ?? [])[1] ?? "";
@@ -310,4 +310,41 @@ async function orderIndex(supabase: SupabaseClient): Promise<(num: string) => nu
   }
   for (const o of (data ?? []) as { order_no: number }[]) map.set(String(o.order_no), o.order_no);
   return (n: string) => map.get(n) ?? null;
+}
+
+/** What the AI made of each signed BOL / packing slip page on an order, by file id (the Files panel). */
+export async function orderFileVerdicts(supabase: SupabaseClient, orderId: string): Promise<Map<number, FileVerdict>> {
+  const out = new Map<number, FileVerdict>();
+  const [{ data: c, error }, { data: me }, { data: sig }, { data: fl }] = await Promise.all([
+    supabase.from("order_bol_checks").select("file_ids, seen, status").eq("order_id", orderId).maybeSingle<{ file_ids: number[]; seen: BolSeen | null; status: string }>(),
+    supabase.from("orders").select("order_no, ambit_po, invoice_no, po_number").eq("id", orderId).maybeSingle<BolOrder>(),
+    supabase.from("packing_slip_signatures").select("file_path").eq("order_id", orderId),
+    supabase.from("order_files").select("id, path").eq("order_id", orderId).eq("kind", "bol"),
+  ]);
+  const onScreen = new Set(((sig ?? []) as { file_path: string | null }[]).map((r) => r.file_path).filter(Boolean));
+  for (const f of (fl ?? []) as { id: number; path: string }[]) if (onScreen.has(f.path)) out.set(Number(f.id), { tone: "ok", text: "Signed in the app", belongsTo: null });
+  if (error || !c || !me) return out;
+  const ids = (c.file_ids ?? []).map(Number);
+  if (c.status === "error") return out;
+  const v = fileVerdicts(me, c.seen, await orderIndex(supabase));
+  for (const [n, verdict] of v) {
+    const id = ids[n - 1];
+    if (id && !out.has(id)) out.set(id, verdict);
+  }
+  return out;
+}
+
+/** Read the order's signed paperwork now, but give up after a while (the page can't wait forever). */
+export async function checkOrderBolNow(supabase: SupabaseClient, orderId: string, ms = 35_000): Promise<{ ok: boolean; late?: boolean; error?: string }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<{ ok: false; late: true }>((r) => {
+    timer = setTimeout(() => r({ ok: false, late: true }), ms);
+  });
+  try {
+    return await Promise.race([checkOrderBol(supabase, orderId), late]);
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) };
+  } finally {
+    clearTimeout(timer);
+  }
 }

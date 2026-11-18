@@ -226,7 +226,7 @@ export function CompleteForm({ orderId, pickup, hasBol, lots = [] }: { orderId: 
   return (
     <form onSubmit={submit} className="col" style={{ gap: 10 }}>
       <LotPickupCheck lines={lots} />
-      <FilePick label={hasBol ? "Signed BOL (already attached, add more pages if needed)" : "Signed BOL (photo or scan, required)"} files={files} setFiles={setFiles} required={!hasBol} camera />
+      <FilePick label={hasBol ? "Signed packing slip or BOL (attached; add pages if needed)" : "Signed packing slip or BOL (photo or scan)"} files={files} setFiles={setFiles} required={!hasBol} camera />
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="submit" className="btn dark sm" disabled={busy || (!files.length && !hasBol)} style={{ alignSelf: "flex-start", gap: 8 }}>
         {busy ? <LoaderCircle size={16} className="spin" /> : null}

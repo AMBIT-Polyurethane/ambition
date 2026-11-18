@@ -6,7 +6,7 @@ import { can } from "@/lib/access";
 import { orderNo } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
 import { carriedAt } from "@/lib/inventory/carried";
-import { TopBar } from "@/components/ui";
+import { EditTabs } from "@/components/order2/edit-tabs";
 import { OrderSheet, type SheetLot, type SheetProduct, type SheetStart } from "@/components/order-sheet";
 import type { Order, OrderItem } from "@/lib/types";
 
@@ -91,10 +91,14 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
         : `The Invoice # is already in (${st ? STAGES[st].short : ""}): saving sends the order back to the order desk to update the invoice. Changing only the lots doesn't.`;
   return (
     <main className="shell wide">
-      <TopBar title={`${closed ? "Correct" : "Edit"} ${orderNo(order.order_no)}`} back={`/orders/${id}`} />
-      <p className="small muted" style={{ margin: 0 }}>
-        {order.company_name} · revision {order.revision ?? 1}. Edit it like a sheet: add rows, change items, lots and quantities, then tap Save changes.
-      </p>
+      <EditTabs
+        id={id}
+        title={`Edit ${orderNo(order.order_no)}`}
+        on="items"
+        items
+        details={profile.role === "admin" || ((can(profile, "ordering") || can(profile, "order_desk")) && order.delivery_method !== "pickup")}
+        help={<>{order.company_name} · revision {order.revision ?? 1}. Add rows, change items, lots and quantities, then tap Save changes.</>}
+      />
       {!order.branch_id && order.delivery_method !== "dropship" ? (
         <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>This order has no location, so no lots show. Set its location first: <Link href={`/orders/${id}/details`}>Edit details</Link>, then Location.</span></div>
       ) : null}

@@ -13,7 +13,7 @@ import { can } from "@/lib/access";
 import { money } from "@/lib/format";
 import { changesText, detailsText, type DetailChange, type OrderChange } from "@/lib/order-edit";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
-import { bolCheckReady, checkOrderBol } from "@/lib/order-doc/bol-check";
+import { bolCheckReady, checkOrderBol, checkOrderBolNow, orderFileVerdicts } from "@/lib/order-doc/bol-check";
 
 const STATUSES = ["new", "processing", "completed", "cancelled"];
 
@@ -534,6 +534,16 @@ export async function completeOrder(form: FormData) {
   const files = filesFrom(form);
   const fileErr = await addFiles(s, id, "bol", files);
   if (fileErr) back(id, "err", `The signed BOL wasn't saved: ${fileErr}`);
+  // The AI reads the paperwork just added before anything closes: another order's slip stops it here.
+  let checked = false;
+  if (files.length && bolCheckReady()) {
+    const r = await checkOrderBolNow(s.supabase, id);
+    checked = r.ok;
+    if (r.ok) {
+      const bad = await wrongPages(s, id, files);
+      if (bad) back(id, "err", `Nothing was closed. ${bad} Move it or remove it under Files, then add the right one. If the AI is wrong, tap the same button again.`);
+    }
+  }
   // Spray foam: the lots that really went on the truck (0069). A different one is saved as an item variance first.
   let moved = 0;
   for (const [k, v] of form.entries()) {
@@ -548,7 +558,7 @@ export async function completeOrder(form: FormData) {
   if (error) back(id, "err", error.message);
   await kickForOrder(s.supabase, id, "order completed");
   // 0082: the AI reads the signed BOL just attached (right order? signed? lots match?) once the page has moved on.
-  if (files.length && bolCheckReady()) {
+  if (files.length && bolCheckReady() && !checked) {
     try {
       after(async () => {
         try {
@@ -816,4 +826,118 @@ export async function signPackingSlip(input: {
   }
   await kickForOrder(s.supabase, id, "order completed");
   back(id, "msg", `Signed and marked ${doc.order.delivery_method === "pickup" ? "picked up" : "shipped out"}. The signed packing slip is saved on the order as its signed BOL.`);
+}
+
+// ------------------------------------------------------------------ the order's files (0087)
+
+function toFiles(id: string, kind: "msg" | "err", text: string): never {
+  revalidatePath(`/orders/${id}`);
+  redirect(`/orders/${id}?do=files&${kind}=${encodeURIComponent(text)}`);
+}
+
+const needs0087 = (m: string) => /order_file_(remove|move)|function|schema cache/i.test(m) && !/raise|only|gone|already|found/i.test(m);
+
+/** The pages just added that the AI says are another order's (or not paperwork): one sentence, or null. */
+async function wrongPages(s: NonNullable<Awaited<ReturnType<typeof getSession>>>, id: string, added: { path: string }[]): Promise<string | null> {
+  const { data } = await s.supabase.from("order_files").select("id, path").eq("order_id", id).eq("kind", "bol");
+  const want = new Set(added.map((f) => f.path));
+  const ids = ((data ?? []) as { id: number; path: string }[]).filter((f) => want.has(f.path)).map((f) => Number(f.id));
+  const v = await orderFileVerdicts(s.supabase, id);
+  const bad = ids.map((i) => v.get(i)).filter((x) => x && x.tone === "err");
+  if (!bad.length) return null;
+  const other = bad.find((x) => x!.belongsTo)?.belongsTo;
+  if (other) {
+    const { data: o } = await s.supabase.from("orders").select("company_name").eq("order_no", other).maybeSingle<{ company_name: string | null }>();
+    return `The page you added looks like ORD-${other}${o?.company_name ? ` (${o.company_name})` : ""}, not this order.`;
+  }
+  return bad[0]!.text === "Not paperwork" ? "The photo you added isn't the signed paperwork." : "The page you added isn't this order's paperwork.";
+}
+
+/** Add signed paperwork (or an invoice) to any order, any time. The AI reads a signed BOL / packing slip straight away. */
+export async function addOrderFiles(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const id = String(form.get("id") ?? "");
+  const kind = form.get("kind") === "invoice" ? "invoice" : "bol";
+  const files = filesFrom(form);
+  if (!files.length) toFiles(id, "err", "Pick a file first.");
+  const err = await addFiles(s, id, kind, files);
+  if (err) toFiles(id, "err", `Not saved: ${err}`);
+  if (kind === "bol" && bolCheckReady()) {
+    const r = await checkOrderBolNow(s.supabase, id);
+    if (r.ok) {
+      const bad = await wrongPages(s, id, files);
+      if (bad) toFiles(id, "err", `${bad} Move it or remove it below.`);
+      toFiles(id, "msg", "Added. The AI checked it: it's this order's paperwork.");
+    }
+    try {
+      after(async () => {
+        try {
+          if (r.late) await checkOrderBol(s.supabase, id);
+        } catch {
+          // BOL review reads it again
+        }
+      });
+    } catch {
+      // not inside a request
+    }
+    toFiles(id, "msg", r.late ? "Added. The AI is still reading it: look again in a minute." : "Added. The AI couldn't read it just now; BOL review reads it again later.");
+  }
+  toFiles(id, "msg", "Added.");
+}
+
+/** Take a wrong file off an order (kept in the log, never really lost). */
+export async function removeOrderFile(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const id = String(form.get("id") ?? "");
+  const file = Number(form.get("file"));
+  const reason = String(form.get("reason") ?? "").trim();
+  const { error } = await s.supabase.rpc("order_file_remove", { p_file: file, p_reason: reason || null });
+  if (error) toFiles(id, "err", needs0087(error.message) ? "This needs database update 0087 first (Supabase > SQL Editor)." : error.message);
+  if (bolCheckReady()) {
+    try {
+      after(async () => {
+        try {
+          await checkOrderBol(s.supabase, id);
+        } catch {
+          // read again from BOL review
+        }
+      });
+    } catch {
+      // not inside a request
+    }
+  }
+  toFiles(id, "msg", "Removed from this order.");
+}
+
+/** Move a file to the order it really belongs to (by its ORD number). */
+export async function moveOrderFile(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile || !isEmployee(s.profile)) return;
+  const id = String(form.get("id") ?? "");
+  const file = Number(form.get("file"));
+  const no = Number(String(form.get("to") ?? "").replace(/\D/g, ""));
+  if (!no) toFiles(id, "err", "Type the order number it belongs to, like 1240.");
+  const { data: to } = await s.supabase.from("orders").select("id, order_no, company_name").eq("order_no", no).maybeSingle<{ id: string; order_no: number; company_name: string | null }>();
+  if (!to) toFiles(id, "err", `ORD-${no} wasn't found.`);
+  const { error } = await s.supabase.rpc("order_file_move", { p_file: file, p_to: to!.id, p_reason: String(form.get("reason") ?? "").trim() || null });
+  if (error) toFiles(id, "err", needs0087(error.message) ? "This needs database update 0087 first (Supabase > SQL Editor)." : error.message);
+  revalidatePath(`/orders/${to!.id}`);
+  if (bolCheckReady()) {
+    try {
+      after(async () => {
+        for (const o of [id, to!.id]) {
+          try {
+            await checkOrderBol(s.supabase, o);
+          } catch {
+            // read again from BOL review
+          }
+        }
+      });
+    } catch {
+      // not inside a request
+    }
+  }
+  toFiles(id, "msg", `Moved to ORD-${to!.order_no}${to!.company_name ? ` (${to!.company_name})` : ""}.`);
 }

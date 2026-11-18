@@ -115,3 +115,27 @@ export function bolProblems(order: BolOrder, seen: BolSeen | null, recorded: (st
   }
   return out;
 }
+
+/** What the AI made of one attached page: the right order, another order's, or not paperwork at all. */
+export type FileVerdict = { tone: "ok" | "err" | "warn" | "none"; text: string; belongsTo: number | null };
+
+/** One verdict per page the AI read (by its file number, 1 = the first file). */
+export function fileVerdicts(order: BolOrder, seen: BolSeen | null, whoIs: (num: string) => number | null = () => null): Map<number, FileVerdict> {
+  const out = new Map<number, FileVerdict>();
+  if (!seen) return out;
+  const mine = new Set([String(order.order_no), digits(order.ambit_po), digits(order.invoice_no), digits(order.po_number)].filter(Boolean));
+  for (const p of seen.files ?? []) {
+    const nums = [...new Set((p.order_numbers ?? []).map(digits).filter(Boolean))];
+    const ours = nums.some((n) => mine.has(n) || whoIs(n) === order.order_no);
+    const others = [...new Set(nums.filter((n) => !mine.has(n)).map((n) => whoIs(n)).filter((n): n is number => n !== null && n !== order.order_no))];
+    let v: FileVerdict;
+    if (p.kind === "not_a_document") v = { tone: "err", text: "Not paperwork", belongsTo: null };
+    else if (p.kind === "unreadable") v = { tone: "warn", text: "Too blurry to read", belongsTo: null };
+    else if (ours) v = { tone: "ok", text: p.signed ? "Right order · signed" : "Right order · no signature", belongsTo: null };
+    else if (others.length) v = { tone: "err", text: `Looks like ORD-${others[0]}`, belongsTo: others[0] };
+    else if (seen.matches_order === "no") v = { tone: "err", text: "Not this order's paperwork", belongsTo: null };
+    else v = { tone: "none", text: "No order # on it", belongsTo: null };
+    out.set(Number(p.file), v);
+  }
+  return out;
+}

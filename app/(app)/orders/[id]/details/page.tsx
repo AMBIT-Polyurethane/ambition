@@ -3,7 +3,7 @@ import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
 import { orderNo } from "@/lib/format";
 import { packCustomer } from "@/lib/customers";
-import { TopBar } from "@/components/ui";
+import { EditTabs } from "@/components/order2/edit-tabs";
 import { OrderDetailsForm } from "@/components/order-details-form";
 import type { Order } from "@/lib/types";
 
@@ -44,13 +44,18 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
   }
 
   return (
-    <main className="shell">
-      <TopBar title={`Details · ${orderNo(order.order_no)}`} back={`/orders/${id}`} />
-      <p className="small muted" style={{ margin: 0 }}>
-        {admin
-          ? "Change anything below except the items (use Edit order for those), then tap Save. Detail changes don't need an admin to approve them; once the order is in QuickBooks the order desk is emailed to check the invoice."
-          : "Change where this order ships to, then tap Save. Only an admin can change the customer, location, PO, dates or notes; ask one if those are wrong."}
-      </p>
+    <main className="shell wide">
+      <EditTabs
+        id={id}
+        title={`Edit ${orderNo(order.order_no)}`}
+        on="details"
+        details
+        items={order.status !== "cancelled" && (order.status !== "completed" ? admin || can(profile, "ordering") || can(profile, "order_desk") : admin)}
+        help={admin
+          ? "Change anything here, then tap Save. No admin approval needed; once it's in QuickBooks the order desk is emailed to check the invoice."
+          : "Change where it ships to, then tap Save. Only an admin can change the customer, location, PO, dates or notes."}
+      />
+      <div style={{ maxWidth: 760, width: "100%" }}>
       <OrderDetailsForm
         admin={admin}
         order={{
@@ -78,6 +83,7 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
           canMove ? null : !open ? `This order is ${order.status === "completed" ? "already picked up or shipped out" : "cancelled"}, so where it ships from can't change.` : "Some of it was already picked up on the spreadsheet, so where it ships from can't change."
         }
       />
+      </div>
     </main>
   );
 }

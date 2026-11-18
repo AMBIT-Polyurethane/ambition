@@ -31,3 +31,22 @@ export function OrderChatButton({ orderId, count = 0, big = false }: { orderId: 
     </span>
   );
 }
+
+/** Anything that opens the order's chat when tapped (the chat card on the order screen). */
+export function OrderChatOpen({ orderId, channel, className, children, label = "Open the order chat" }: { orderId: string; channel?: string | null; className?: string; children: React.ReactNode; label?: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (busy) return;
+    if (channel) return router.push(`/chat/${channel}`);
+    setBusy(true);
+    const r = await chatOrderId(orderId);
+    if (r.ok) router.push(`/chat/${r.id}`);
+    else setBusy(false);
+  };
+  return (
+    <button type="button" className={className} onClick={go} disabled={busy} aria-label={label} aria-busy={busy}>
+      {children}
+    </button>
+  );
+}
