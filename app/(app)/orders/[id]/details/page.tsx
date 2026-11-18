@@ -28,9 +28,14 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
       : Promise.resolve({ data: [] }),
     supabase.from("inventory_lines").select("id", { count: "exact", head: true }).eq("order_id", id).eq("state", "done"),
   ]);
+  // 0084: went out with no location on it (an older order) and nothing in stock tied to it: an admin can say where from.
+  const { count: anyLines } = order.status === "completed" && !order.branch_id
+    ? await supabase.from("inventory_lines").select("id", { count: "exact", head: true }).eq("order_id", id).neq("state", "cancelled")
+    : { count: 1 };
+  const noPlace = admin && order.status === "completed" && !order.branch_id && !anyLines;
   const open = order.status === "new" || order.status === "processing";
   // Moving where it ships from moves the stock it holds: only before anything is picked up.
-  const canMove = open && !done;
+  const canMove = (open && !done) || noPlace;
   const o = order as Order & { pay_cod?: boolean; pay_no_checks?: boolean; pay_prepaid?: boolean; invoice_no?: string | null };
   // The customer on the order may no longer be active: keep it in the list so it shows.
   const list = (companies ?? []) as Parameters<typeof packCustomer>[0][];
