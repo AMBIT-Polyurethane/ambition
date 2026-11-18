@@ -26,6 +26,8 @@ import { LotFixAfter, type LotLine, type LotOption } from "@/components/lot-chec
 import { LoadedFix, type FixItem, type FixLot, type FixStockItem } from "@/components/loaded-fix";
 import { orderBolFinding } from "@/lib/order-doc/bol-check";
 import { loadFixItems } from "@/lib/order-doc/fix-items";
+import { orderFlow } from "@/lib/order-flow";
+import { OrderFlow } from "@/components/order-flow";
 import { fixStockList } from "@/lib/inventory/view";
 import type { Alternative, LotChoice, Variance, VarianceData } from "@/components/item-variance";
 import { can } from "@/lib/access";
@@ -263,6 +265,36 @@ export default async function OrderDetailPage({
     </div>
   );
 
+  // The Flow view (staff): every step of the order's life cycle, who does it, and what's up now.
+  if (emp && sp.view === "flow") {
+    const { count: signedCount } = await supabase.from("packing_slip_signatures").select("id", { count: "exact", head: true }).eq("order_id", order.id);
+    const load = lines.map((l) => {
+      const lots = (picks.get(l.id) ?? []).filter((p) => p.state === "reserved" && p.lot_no);
+      return `${qtyText(Number(l.qty), l.unit)} ${l.name}${lots.length ? ` (${lots.map((p) => `lot ${p.lot_no}${lots.length > 1 ? ` × ${Number(p.qty)}` : ""}`).join(", ")})` : ""}`;
+    });
+    const m = orderFlow({
+      order,
+      branchName: branch?.name ?? (order.branch_id ? order.branch_id.toUpperCase() : null),
+      edits,
+      signedOnScreen: (signedCount ?? 0) > 0,
+      bolFiles: files.filter((f) => f.kind === "bol").length,
+      load,
+      canSign: closer && !waitingEdits.length,
+    });
+    const head = [order.company_name, order.delivery_method === "pickup" ? `Pickup at ${branch ? `${branch.name}, ${branch.state}` : (order.branch_id ?? "").toUpperCase()}` : order.delivery_method === "dropship" ? "Ships from the supplier" : "Delivery", order.ambit_po ? `Sales Order # ${order.ambit_po}` : null, order.invoice_no ? `Invoice # ${order.invoice_no}` : null].filter(Boolean).join(" · ");
+    return (
+      <main className="shell wide">
+        <TopBar title={orderNo(order.order_no)} back="/orders" right={stageOf(order) ? <span className={STAGES[stageOf(order)!].pill}>{STAGES[stageOf(order)!].short}</span> : <StatusPill status={order.status} />} />
+        <span className="small muted">{head}</span>
+        <nav className="flow-toggle" aria-label="Order view">
+          <Link href={`/orders/${order.id}`}>DETAILS</Link>
+          <Link href={`/orders/${order.id}?view=flow`} className="on" aria-current="page">FLOW</Link>
+        </nav>
+        <OrderFlow m={m} />
+      </main>
+    );
+  }
+
   return (
     <main className="shell">
       <TrackRecent uid={profile.id} kind="order" href={`/orders/${order.id}`} title={emp ? order.company_name : orderNo(order.order_no)} sub={emp ? orderNo(order.order_no) : "Order"} />
@@ -313,6 +345,12 @@ export default async function OrderDetailPage({
         <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div>
       ) : null}
 
+      {emp ? (
+        <nav className="flow-toggle" aria-label="Order view">
+          <Link href={`/orders/${order.id}`} className="on" aria-current="page">DETAILS</Link>
+          <Link href={`/orders/${order.id}?view=flow`}>FLOW</Link>
+        </nav>
+      ) : null}
       {emp ? <OrderChatButton orderId={order.id} count={(await orderBoardCounts(supabase, [order.id])).get(order.id) ?? 0} big /> : null}
       {emp ? (
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
