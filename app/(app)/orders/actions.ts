@@ -516,7 +516,7 @@ export async function fixLoadedLot(form: FormData) {
 export async function rebuildLoaded(input: {
   id: string;
   /** Per item, each lot ({ lot }) or item counted by total ({ product }, 0078) and how many came off it. */
-  items: { item: number; lots: ({ lot: number; qty: number } | { product: string; qty: number })[] }[];
+  items: { item: number; lots: ({ lot: number; qty: number } | { product: string; qty: number })[]; record_only?: boolean; below_zero?: boolean }[];
   reason: string;
   back?: string;
 }): Promise<{ ok: false; error: string } | never> {
@@ -526,6 +526,8 @@ export async function rebuildLoaded(input: {
   const UUIDISH = /^[0-9a-f-]{36}$/i;
   const items = (input.items ?? []).map((it) => ({
     item: Number(it.item),
+    ...(it.record_only === true ? { record_only: true } : {}),
+    ...(it.below_zero === true ? { below_zero: true } : {}),
     lots: (it.lots ?? [])
       .map((l): { lot: number; qty: number } | { product: string; qty: number } | null => {
         const qty = Math.round(Number(l.qty) * 100) / 100;

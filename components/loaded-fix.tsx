@@ -69,6 +69,9 @@ export function LoadedFix({
   // Find a lot or brand: type a lot # (spaces and dashes don't matter) or a brand / SKU.
   const [look, setLook] = useState<Record<number, string>>({});
   const [reason, setReason] = useState("");
+  // 0085: older orders. Already off the count: just record the lots. Another order took these drums: below zero.
+  const [recordOnly, setRecordOnly] = useState(false);
+  const [belowZero, setBelowZero] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +112,8 @@ export function LoadedFix({
       reason: reason.trim(),
       items: todo.map((it) => ({
         item: it.item,
+        record_only: recordOnly && it.recorded === 0,
+        below_zero: belowZero,
         lots: optsOf(it)
           .map((o) => ({ ...(o.lot_id ? { lot: o.lot_id } : { product: o.product_id }), qty: num(qty[it.item]?.[keyOf(o)]) || 0 }))
           .filter((x) => x.qty > 0),
@@ -254,6 +259,22 @@ export function LoadedFix({
           </section>
         );
       })}
+      {items.some((it) => it.recorded === 0) ? (
+        <label className="row" style={{ gap: 10, alignItems: "flex-start" }}>
+          <input type="checkbox" checked={recordOnly} onChange={(e) => setRecordOnly(e.target.checked)} style={{ marginTop: 3 }} />
+          <span className="small">
+            <b>Just record the lots, don&apos;t change stock.</b>{" "}
+            <span className="muted">For items with no lots recorded whose drums are already off the count (the lot shows 0 because it was counted or fixed by hand after this order went out). FOAM LOTS stays as it is.</span>
+          </span>
+        </label>
+      ) : null}
+      <label className="row" style={{ gap: 10, alignItems: "flex-start" }}>
+        <input type="checkbox" checked={belowZero} onChange={(e) => setBelowZero(e.target.checked)} style={{ marginTop: 3 }} />
+        <span className="small">
+          <b>Let a lot go below zero.</b>{" "}
+          <span className="muted">When another order took these drums by mistake: the lot shows below zero until you fix that order too (Admin &gt; Data check lists every lot below zero).</span>
+        </span>
+      </label>
       <label className="field">
         <span className="label">Why (shows on the item variance table)</span>
         <input className="input sm" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} placeholder="Packing slip shows all 22 Winter 5.0 from LW7991" />
