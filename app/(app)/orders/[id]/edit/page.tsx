@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CircleAlert } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
@@ -7,34 +6,40 @@ import { orderNo } from "@/lib/format";
 import { STAGES, stageOf } from "@/lib/order-desk";
 import { carriedAt } from "@/lib/inventory/carried";
 import { EditTabs } from "@/components/order2/edit-tabs";
-import { OrderSheet, type SheetLot, type SheetProduct, type SheetStart } from "@/components/order-sheet";
+import type { SheetLot, SheetProduct, SheetStart } from "@/components/order-sheet";
+import { EditOrder } from "@/components/order2/edit-order";
+import { packCustomer } from "@/lib/customers";
+import { editable } from "@/lib/order-edit";
 import type { Order, OrderItem } from "@/lib/types";
 
 export const metadata = { title: "Edit order" };
 export const dynamic = "force-dynamic";
 
 /** AMBIT staff: edit an order like a sheet (0086). Any rows, any item in inventory, each row on its own lot. */
-export default async function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditOrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { id } = await params;
+  const sp = await searchParams;
   const { supabase, profile } = await requireActive();
-  if (!isEmployee(profile) || !(profile.role === "admin" || can(profile, "ordering") || can(profile, "order_desk"))) redirect(`/orders/${id}`);
+  const admin = profile.role === "admin";
+  const staffEdit = isEmployee(profile) && (admin || can(profile, "ordering") || can(profile, "order_desk"));
+  if (!staffEdit) redirect(`/orders/${id}`);
   const { data: order } = await supabase.from("orders").select("*").eq("id", id).maybeSingle<Order>();
   if (!order) notFound();
-  if (order.status === "cancelled") {
-    redirect(`/orders/${id}?err=${encodeURIComponent("This order was cancelled. Place a new order instead.")}`);
-  }
-  // A completed order (picked up / delivered): only an admin corrects it (0046).
   const closed = order.status === "completed";
-  if (closed && profile.role !== "admin") {
-    redirect(`/orders/${id}?err=${encodeURIComponent("This order is completed. Only an admin can correct a completed order.")}`);
+  // Items and lots: open orders (admins, Ordering, the order desk); a completed one only an admin corrects (0046).
+  const canItems = order.status !== "cancelled" && (closed ? admin : editable(order));
+  // Customer, ship-to, location, PO, dates (0076): ship-to for anyone who edits orders, everything for admins.
+  const canDetails = admin || (order.status !== "cancelled" && order.delivery_method !== "pickup");
+  if (!canItems && !canDetails) {
+    redirect(`/orders/${id}?err=${encodeURIComponent(order.status === "cancelled" ? "This order was cancelled. Place a new order instead." : "Only an admin can correct a completed order.")}`);
   }
   const [{ data: itemRows }, { data: lineRows }, carried, { data: products }, { data: lotRows }] = await Promise.all([
     supabase.from("order_items").select("*").eq("order_id", id).order("id"),
     supabase.from("inventory_lines").select("order_item_id, qty, lot_id, state").eq("order_id", id).in("state", closed ? ["done"] : ["reserved"]),
     carriedAt(supabase, order.branch_id),
     // Every product, hidden ones too: the ISO brands are hidden from the catalog but their lots are what went out.
-    supabase.from("products").select("id, sku, name, unit, stock_of, active").order("sort").order("name"),
-    order.branch_id
+    canItems ? supabase.from("products").select("id, sku, name, unit, stock_of, active").order("sort").order("name") : Promise.resolve({ data: [] }),
+    canItems && order.branch_id
       ? supabase.from("inventory_lots").select("id, product_id, sku, lot_no, exp, use_by, remaining, on_sheet").eq("branch_id", order.branch_id)
       : Promise.resolve({ data: [] }),
   ]);
@@ -89,20 +94,61 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
       : !order.ambit_po
         ? "The Sales Order # isn't in yet: saving sends the updated order to orders@ambitpu.com. Stock is held on the lots you picked right away."
         : `The Invoice # is already in (${st ? STAGES[st].short : ""}): saving sends the order back to the order desk to update the invoice. Changing only the lots doesn't.`;
+  // The details part (the same as the old Details page).
+  let details: React.ComponentProps<typeof EditOrder>["details"] = null;
+  if (canDetails) {
+    const [{ data: branches }, { data: companies }, { count: done }] = await Promise.all([
+      supabase.from("branches").select("id, name, state").order("sort"),
+      admin
+        ? supabase.from("companies").select("id, name, account_no, contact_name, city, state, default_branch_id, needs_qb_setup").eq("active", true).order("name").range(0, 4999)
+        : Promise.resolve({ data: [] }),
+      supabase.from("inventory_lines").select("id", { count: "exact", head: true }).eq("order_id", id).eq("state", "done"),
+    ]);
+    const { count: anyLines } = closed && !order.branch_id
+      ? await supabase.from("inventory_lines").select("id", { count: "exact", head: true }).eq("order_id", id).neq("state", "cancelled")
+      : { count: 1 };
+    const noPlace = admin && closed && !order.branch_id && !anyLines;
+    const open = order.status === "new" || order.status === "processing";
+    const canMove = (open && !done) || noPlace;
+    const o = order as Order & { pay_cod?: boolean; pay_no_checks?: boolean; pay_prepaid?: boolean; invoice_no?: string | null };
+    const list = (companies ?? []) as Parameters<typeof packCustomer>[0][];
+    if (admin && order.company_id && !list.some((c) => c.id === order.company_id)) {
+      list.unshift({ id: order.company_id, name: order.company_name, account_no: order.account_no, contact_name: null, city: null, state: null, default_branch_id: null, needs_qb_setup: false });
+    }
+    details = {
+      admin,
+      order: {
+        id: order.id, company_id: order.company_id, company_name: order.company_name, delivery_method: order.delivery_method, branch_id: order.branch_id,
+        ship_address: order.ship_address, po_number: order.po_number, needed_by: order.needed_by, notes: order.notes, ambit_po: order.ambit_po ?? null,
+        invoice_no: o.invoice_no ?? null, pay_cod: Boolean(o.pay_cod), pay_no_checks: Boolean(o.pay_no_checks), pay_prepaid: Boolean(o.pay_prepaid), status: order.status,
+      },
+      branches: ((branches ?? []) as { id: string; name: string; state: string }[]).map((b) => ({ id: b.id, name: `${b.name}, ${b.state}` })),
+      companies: list.map(packCustomer),
+      canMove,
+      firstPlace: noPlace,
+      moveWhy: canMove ? null : !open ? `This order is ${closed ? "already picked up or shipped out" : "cancelled"}, so where it ships from can't change.` : "Some of it was already picked up on the spreadsheet, so where it ships from can't change.",
+    };
+  }
+
   return (
     <main className="shell wide">
       <EditTabs
         id={id}
         title={`Edit ${orderNo(order.order_no)}`}
         on="items"
-        items
-        details={profile.role === "admin" || ((can(profile, "ordering") || can(profile, "order_desk")) && order.delivery_method !== "pickup")}
-        help={<>{order.company_name} · revision {order.revision ?? 1}. Add rows, change items, lots and quantities, then tap Save changes.</>}
+        items={false}
+        details={false}
+        help={<>{order.company_name} · revision {order.revision ?? 1}. Change anything on either tab, then tap Save once at the bottom.</>}
       />
-      {!order.branch_id && order.delivery_method !== "dropship" ? (
-        <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>This order has no location, so no lots show. Set its location first: <Link href={`/orders/${id}/details`}>Edit details</Link>, then Location.</span></div>
+      {canItems && !order.branch_id && order.delivery_method !== "dropship" ? (
+        <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>This order has no location, so no lots show. Set its Location on the Customer, ship-to &amp; dates tab and Save first.</span></div>
       ) : null}
-      <OrderSheet orderId={id} closed={closed} next={next} products={choices} lots={lots} start={start} noneRecorded={noneRecorded} />
+      <EditOrder
+        id={id}
+        start={sp.tab === "details" ? "details" : "items"}
+        items={canItems ? { closed, next, products: choices, lots, start, noneRecorded } : null}
+        details={details}
+      />
     </main>
   );
 }

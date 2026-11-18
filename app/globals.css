@@ -4307,3 +4307,15 @@ label.inv-plain.on { background: color-mix(in srgb, var(--red) 9%, transparent);
 .cat2-head { display: flex; align-items: center; gap: 12px; }
 .cat2-head b { font-size: 20px; font-weight: 800; }
 @media (max-width: 420px) { .tiles2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tile2 { min-height: 118px; padding: 14px; } }
+.seg2 button { height: 40px; padding: 0 16px; border-radius: 10px; display: flex; align-items: center; gap: 8px; font: inherit; font-size: 15px; font-weight: 700; color: var(--text2); background: none; border: 0; cursor: pointer; white-space: nowrap; }
+.seg2 button:hover { color: var(--text); }
+.seg2 button.on { background: var(--s3); color: var(--text); }
+.seg2-n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #cf2e20; color: #fff; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+/* Edit order: one Save for everything */
+.save2 { position: sticky; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 10px); z-index: 20; background: var(--s1); border: 1px solid var(--line-hover); border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow); }
+.save2-in { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.save2-list { flex: none; }
+.save2-list > summary { cursor: pointer; font-weight: 800; font-size: 15px; }
+.save2-list[open] ul { margin: 8px 0 0; max-height: 40vh; overflow: auto; }
+.save2-why { flex: 1 1 200px; min-width: 0; }
+@media (min-width: 1024px) { .save2 { bottom: 16px; } }

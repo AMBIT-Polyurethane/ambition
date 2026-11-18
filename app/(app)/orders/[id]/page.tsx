@@ -686,7 +686,7 @@ export default async function OrderDetailPage({
             </div>
             <div className="o2-head-r">
               {canEdit || canEditDetails ? (
-                <Link href={canEdit ? `/orders/${order.id}/edit` : `/orders/${order.id}/details`} className="b2 quiet"><Pencil size={17} /> Edit order</Link>
+                <Link href={canEdit ? `/orders/${order.id}/edit` : `/orders/${order.id}/edit?tab=details`} className="b2 quiet"><Pencil size={17} /> Edit order</Link>
               ) : null}
               {menu}
             </div>

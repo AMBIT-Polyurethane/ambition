@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { CircleAlert, Save } from "lucide-react";
 import { editOrderDetails } from "@/app/(app)/orders/actions";
 import { CustomerPicker } from "@/components/customer-picker";
@@ -33,6 +33,13 @@ const METHODS: { key: Method; label: string; hint: string }[] = [
 ];
 
 /** Change an order's details (0076). Staff: ship-to. Admins: everything but the items. */
+export type DetailsState = { set: Record<string, string | boolean | null>; summary: string[]; problem: string | null };
+
+const FIELD: Record<string, string> = {
+  company_id: "Customer", delivery_method: "Pickup or delivery", branch_id: "Location", ship_address: "Ship-to address", po_number: "Customer PO",
+  needed_by: "Needed by", notes: "Notes", ambit_po: "Sales Order #", invoice_no: "Invoice #", pay_cod: "COD", pay_no_checks: "No checks", pay_prepaid: "Already paid",
+};
+
 export function OrderDetailsForm({
   admin,
   order,
@@ -41,6 +48,8 @@ export function OrderDetailsForm({
   canMove,
   moveWhy,
   firstPlace = false,
+  embedded = false,
+  onState,
 }: {
   admin: boolean;
   order: Details;
@@ -50,6 +59,9 @@ export function OrderDetailsForm({
   moveWhy: string | null;
   /** 0084: it went out with no location on it; saving only records where it went out from. */
   firstPlace?: boolean;
+  /** Inside the one Edit order screen: no Save of its own; it tells the screen what would change. */
+  embedded?: boolean;
+  onState?: (s: DetailsState) => void;
 }) {
   const [customers, setCustomers] = useState(() => companies.map(unpackCustomer));
   const [company, setCompany] = useState(order.company_id ?? "");
@@ -92,6 +104,22 @@ export function OrderDetailsForm({
   const changed = Object.keys(set).length > 0;
   const moving = admin && (branch !== (order.branch_id ?? "") && method !== "dropship" || (method === "dropship") !== wasDropship);
   const blocked = moving && !canMove;
+
+  const problem = !changed
+    ? null
+    : method !== "pickup" && !t(ship)
+      ? "Enter the ship-to address."
+      : admin && method !== "dropship" && !branch
+        ? "Pick the AMBIT location."
+        : blocked
+          ? moveWhy ?? "Where it ships from can't change now."
+          : null;
+  const summary = Object.keys(set).filter((k) => !(k === "branch_id" && "delivery_method" in set && set.branch_id === order.branch_id)).map((k) => FIELD[k] ?? k);
+  const stateKey = JSON.stringify([set, problem]);
+  useEffect(() => {
+    onState?.({ set, summary, problem });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stateKey]);
 
   const save = () => {
     setErr(null);
@@ -213,7 +241,7 @@ export function OrderDetailsForm({
         </section>
       ) : null}
 
-      <section className="card col" style={{ gap: 10 }}>
+      {embedded ? null : <section className="card col" style={{ gap: 10 }}>
         <label className="field">
           <span className="label">Why (optional)</span>
           <input className="input" value={why} onChange={(e) => setWhy(e.target.value)} maxLength={500} placeholder={admin ? "Wrong customer picked, new job site, …" : "New job site, customer called, …"} />
@@ -222,7 +250,7 @@ export function OrderDetailsForm({
         <button type="button" className="btn block" disabled={!changed || pending || blocked} onClick={save}>
           <Save size={16} /> {pending ? "Saving…" : changed ? "Save" : "Nothing changed yet"}
         </button>
-      </section>
+      </section>}
     </div>
   );
 }

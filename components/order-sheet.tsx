@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CircleAlert, LoaderCircle, Minus, Plus, Search, Trash2 } from "lucide-react";
-import { saveOrderSheet } from "@/app/(app)/orders/actions";
+import { saveOrderSheet, type SheetRow } from "@/app/(app)/orders/actions";
 import { dateShort, plural } from "@/lib/format";
 
 // Edit order as a sheet (0086): add as many rows as you like, any item in inventory, the same resin or ISO on as many
@@ -21,6 +21,8 @@ const q2 = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n
 let seq = 0;
 const key = () => `r${++seq}`;
 
+export type SheetState = { changes: string[]; problem: string | null; payload: { rows: SheetRow[]; belowZero: boolean; recordOnly: boolean } };
+
 export function OrderSheet({
   orderId,
   closed,
@@ -29,6 +31,8 @@ export function OrderSheet({
   lots,
   start,
   noneRecorded = [],
+  embedded = false,
+  onState,
 }: {
   orderId: string;
   closed: boolean;
@@ -38,6 +42,9 @@ export function OrderSheet({
   start: SheetStart[];
   /** Completed order: items with nothing recorded as gone out ("Just record the lots"). */
   noneRecorded?: string[];
+  /** Inside the one Edit order screen: no Save of its own; it tells the screen what would change. */
+  embedded?: boolean;
+  onState?: (s: SheetState) => void;
 }) {
   const [rows, setRows] = useState<Row[]>(() =>
     start.map((r) => ({ key: key(), item_id: r.item_id, product_id: r.product_id, sku: r.sku, name: r.name, unit: r.unit, lot: r.lot_id ? String(r.lot_id) : "", qty: q2(r.qty), finding: false, find: "" })),
@@ -96,6 +103,14 @@ export function OrderSheet({
   const partial = closed ? [...after.values()].filter((a) => a.lots.size > 0 && a.noLot > 0) : [];
   const bad = rows.find((r) => (r.product_id || r.item_id) && num(r.qty) === null);
   const blank = rows.find((r) => !r.product_id && !r.item_id && !r.finding);
+
+  const payloadRows = rows.filter((r) => r.product_id || r.item_id).map((r) => ({ item_id: r.product_id ? null : r.item_id, product_id: r.product_id, lot_id: r.lot ? Number(r.lot) : null, qty: num(r.qty) ?? 0 }));
+  const problem = bad ? `Check the quantity on the ${bad.sku} row (a number, 0 to take it off).` : partial.length ? `${partial[0].name}: give every row a lot (or none), since it already went out.` : null;
+  const stateKey = JSON.stringify([changes, problem, payloadRows, belowZero, recordOnly]);
+  useEffect(() => {
+    onState?.({ changes, problem, payload: { rows: payloadRows, belowZero, recordOnly } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stateKey]);
 
   const save = async () => {
     setError(null);
@@ -228,6 +243,7 @@ export function OrderSheet({
         </label>
       ) : null}
 
+      {embedded ? null : <>
       <label className="field">
         <span className="label">Why (shows in the order history)</span>
         <input className="input sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Javier: 15 from AP9166AB, 1 from AP9168AB" />
@@ -239,13 +255,16 @@ export function OrderSheet({
           <ul className="edit-changes small">{changes.map((c, i) => <li key={i}>{c}</li>)}</ul>
         </section>
       ) : null}
+      </>}
       {partial.length ? <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>{partial.map((p) => p.name).join(", ")}: give every row a lot, since it already went out.</span></div> : null}
       {blank ? <span className="tiny faint">Pick an item for the empty row, or delete it.</span> : null}
+      {embedded ? null : <>
       <div className="alert info small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>{next}</span></div>
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="button" className="btn" onClick={save} disabled={busy || !changes.length} style={{ gap: 8 }}>
         {busy ? <LoaderCircle size={16} className="spin" /> : null} Save changes
       </button>
+      </>}
     </div>
   );
 }

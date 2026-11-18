@@ -185,7 +185,15 @@ export type SheetRow = { item_id?: number | null; product_id: string | null; lot
  * each on its own lot. Rows of one item add up to its quantity; the lots on its rows are what it holds (open order)
  * or what went out (picked up / shipped). Then whoever's next hears about it, as before.
  */
+type Saved = { ok: false; error: string } | { ok: true; kind: "msg" | "err"; text: string };
+
 export async function saveOrderSheet(input: { id: string; rows: SheetRow[]; note: string; belowZero?: boolean; recordOnly?: boolean }): Promise<{ ok: false; error: string } | never> {
+  const r = await sheetCore(input);
+  if (!r.ok) return r;
+  back(String(input.id ?? ""), r.kind, r.text);
+}
+
+async function sheetCore(input: { id: string; rows: SheetRow[]; note: string; belowZero?: boolean; recordOnly?: boolean }): Promise<Saved> {
   const s = await getSession();
   if (!s?.profile || !isEmployee(s.profile) || !(s.profile.role === "admin" || can(s.profile, "ordering") || can(s.profile, "order_desk"))) {
     return { ok: false, error: "You don't have access to edit orders." };
@@ -298,8 +306,8 @@ export async function saveOrderSheet(input: { id: string; rows: SheetRow[]; note
     }
   }
   await kickForOrder(s.supabase, id, "order edited");
-  if (lotErr) back(id, "err", `${qtyChanged ? `The quantities were saved (revision ${r.revision ?? ""}), but the lots weren't: ` : "The lots weren't saved: "}${lotErr}`);
-  if (!qtyChanged) back(id, "msg", `Saved. ${lotNotes.join(" ")}`);
+  if (lotErr) return { ok: true, kind: "err", text: `${qtyChanged ? `The quantities were saved (revision ${r.revision ?? ""}), but the lots weren't: ` : "The lots weren't saved: "}${lotErr}` };
+  if (!qtyChanged) return { ok: true, kind: "msg", text: `Saved. ${lotNotes.join(" ")}` };
 
   const changes = changesText(r.changes);
   // Every change to the items waits for an admin, who makes sure the QuickBooks invoice has it (0075).
@@ -311,28 +319,28 @@ export async function saveOrderSheet(input: { id: string; rows: SheetRow[]; note
   }`;
   if (r.closed) {
     const sent = r.invoice_update ? await sendDeskNotice(s.supabase, id, "invoice_update", changes) : null;
-    back(
-      id,
-      "msg",
-      `${rev} Stock was corrected (what changed went back in, the new amounts came out), and the spreadsheet updates on its next sync.${
+    return {
+      ok: true,
+      kind: "msg",
+      text: `${rev} Stock was corrected (what changed went back in, the new amounts came out), and the spreadsheet updates on its next sync.${
         r.invoice_update ? ` The order desk${sent?.status === "sent" ? " was emailed to" : " needs to"} update the invoice. If the total changes, the credit team is emailed to collect or credit the difference.` : ""
       }`,
-    );
+    };
   }
   if (r.customer) {
     const { data: oc } = await s.supabase.from("orders").select("approval_email").eq("id", id).maybeSingle<{ approval_email: string | null }>();
     if (oc?.approval_email) {
       const sent = await sendApprovalRequest(s.supabase, id, oc.approval_email);
-      back(id, sent.status === "sent" ? "msg" : "err", `${rev} ${sent.status === "sent" ? `A fresh approval email went to ${oc.approval_email} (the old link no longer works).` : `The new approval email didn't go out (${sent.error ?? sent.status}). Use Resend below.`}`);
+      return { ok: true, kind: sent.status === "sent" ? "msg" : "err", text: `${rev} ${sent.status === "sent" ? `A fresh approval email went to ${oc.approval_email} (the old link no longer works).` : `The new approval email didn't go out (${sent.error ?? sent.status}). Use Resend below.`}` };
     }
-    back(id, "msg", `${rev} The customer still needs to approve it.`);
+    return { ok: true, kind: "msg", text: `${rev} The customer still needs to approve it.` };
   }
   if (r.invoice_update) {
     const sent = await sendDeskNotice(s.supabase, id, "invoice_update", changes);
-    back(id, "msg", `${rev} It went back to the order desk for an invoice update${sent.status === "sent" ? " (they were emailed)" : ""}. If the total goes up, accounting checks credit again.`);
+    return { ok: true, kind: "msg", text: `${rev} It went back to the order desk for an invoice update${sent.status === "sent" ? " (they were emailed)" : ""}. If the total goes up, accounting checks credit again.` };
   }
   const sent = await sendOrderEmail(s.supabase, id, { changes });
-  back(id, "msg", `${rev}${sent.status === "sent" ? " The updated order went to orders@ambitpu.com." : ""}`);
+  return { ok: true, kind: "msg", text: `${rev}${sent.status === "sent" ? " The updated order went to orders@ambitpu.com." : ""}` };
 }
 
 /** A signed-in contractor approves, or asks to change, an order AMBIT placed for their company. */
@@ -741,6 +749,40 @@ export async function approveOrderChange(form: FormData) {
 
 /** Change an order's details (0076): ship-to for staff who edit orders; everything for admins. No admin approval. */
 export async function editOrderDetails(input: { id: string; set: Record<string, string | boolean | null>; note: string }): Promise<{ ok: false; error: string } | never> {
+  const r = await detailsCore(input);
+  if (!r.ok) return r;
+  back(String(input.id ?? ""), r.kind, r.text);
+}
+
+/** One Save for all of Edit order: the details first (customer, ship-to, location, PO, dates), then the items and lots. */
+export async function saveEditOrder(input: {
+  id: string;
+  note: string;
+  details?: Record<string, string | boolean | null> | null;
+  sheet?: { rows: SheetRow[]; belowZero?: boolean; recordOnly?: boolean } | null;
+}): Promise<{ ok: false; error: string } | never> {
+  const id = String(input.id ?? "");
+  const hasDetails = Boolean(input.details && Object.keys(input.details).length);
+  if (!hasDetails && !input.sheet) return { ok: false, error: "Nothing changed yet." };
+  let first: string | null = null;
+  if (hasDetails) {
+    const d = await detailsCore({ id, set: input.details!, note: input.note });
+    if (!d.ok) return d;
+    first = d.text;
+  }
+  if (input.sheet) {
+    const r = await sheetCore({ id, rows: input.sheet.rows, note: input.note, belowZero: input.sheet.belowZero, recordOnly: input.sheet.recordOnly });
+    if (!r.ok) {
+      // The details went in; say so, and what's still wrong with the items.
+      if (first) back(id, "err", `${first} The items weren't saved: ${r.error}`);
+      return r;
+    }
+    back(id, r.kind, first ? `${first} ${r.text}` : r.text);
+  }
+  back(id, "msg", first ?? "Saved.");
+}
+
+async function detailsCore(input: { id: string; set: Record<string, string | boolean | null>; note: string }): Promise<Saved> {
   const s = await getSession();
   if (!s?.profile || !isEmployee(s.profile) || !(s.profile.role === "admin" || can(s.profile, "ordering") || can(s.profile, "order_desk"))) {
     return { ok: false, error: "You don't have access to edit orders." };
@@ -774,7 +816,7 @@ export async function editOrderDetails(input: { id: string; set: Record<string, 
     r.customer && r.approval_pending ? "It's still waiting on the customer: resend the approval below so it goes to the new customer." : "",
     r.scheduled && !r.customer ? "It's already scheduled: if the customer needs the new details, resend the scheduled email." : "",
   ];
-  back(id, "msg", parts.filter(Boolean).join(" "));
+  return { ok: true, kind: "msg", text: parts.filter(Boolean).join(" ") };
 }
 
 /** 0076: the packing slip signed on a phone or iPad. Saves the signed slip as the BOL and marks the order picked up / shipped out. */
