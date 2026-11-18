@@ -1,6 +1,7 @@
 -- =====================================================================
 -- 0084: an order that went out with NO location on it (older orders like ORD-1007) can be given one, so its lots
---   can be recorded. Nothing else about a shipped order's location changes. Also sets ORD-1007 to Oklahoma City.
+--   can be recorded (also one entered as Ship from supplier that really went out from a location). Nothing
+--   else about a shipped order's location changes. Also sets ORD-1007 to Oklahoma City.
 -- Run once in Supabase > SQL Editor. Safe to run again.
 -- =====================================================================
 
@@ -163,16 +164,22 @@ begin
                             'scheduled', o.scheduled_for is not null and o.status in ('new', 'processing'));
 end $$;
 
--- ORD-1007 (Got Foam) went out from Oklahoma City (its BOL is from OKC, with OKC lots). Saved as a detail change.
+-- ORD-1007 (Got Foam) went out from Oklahoma City (its BOL is from OKC, with OKC lots). It was entered as
+-- "Ship from supplier", which is why it had no location: it becomes a Delivery from Oklahoma City. Saved as a detail change.
 do $$
-declare admin uuid; oid uuid;
+declare admin uuid; o record; s jsonb;
 begin
-  select id into oid from public.orders where order_no = 1007 and branch_id is null and status = 'completed';
-  if oid is null then raise notice 'ORD-1007 already has a location: skipped.'; return; end if;
+  select id, delivery_method into o from public.orders where order_no = 1007 and branch_id is null and status = 'completed';
+  if o.id is null then raise notice 'ORD-1007 already has a location: skipped.'; return; end if;
   select id into admin from public.profiles where role = 'admin' and status = 'active' order by (full_name ilike 'jeremiah%') desc, created_at limit 1;
   perform set_config('request.jwt.claims', json_build_object('sub', admin, 'role', 'authenticated')::text, true);
-  perform public.order_edit_details(oid, '{"branch_id": "okc"}'::jsonb, 'It went out from Oklahoma City (BOL)');
-  raise notice 'ORD-1007 now shows Oklahoma City.';
+  s := case when o.delivery_method = 'dropship' then '{"delivery_method": "jobsite", "branch_id": "okc"}'::jsonb else '{"branch_id": "okc"}'::jsonb end;
+  begin
+    perform public.order_edit_details(o.id, s, 'It went out from Oklahoma City (BOL)');
+    raise notice 'ORD-1007 now shows Oklahoma City.';
+  exception when others then
+    raise notice 'ORD-1007 wasn''t changed: %', sqlerrm;
+  end;
 end $$;
 
 select 'Ready (should be 1)' as "Check", count(*) as "Count" from public.orders where order_no = 1007 and branch_id = 'okc';
