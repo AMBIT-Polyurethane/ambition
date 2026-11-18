@@ -73,6 +73,7 @@ export default async function OrderDetailsPage({ params }: { params: Promise<{ i
         branches={((branches ?? []) as { id: string; name: string; state: string }[]).map((b) => ({ id: b.id, name: `${b.name}, ${b.state}` }))}
         companies={list.map(packCustomer)}
         canMove={canMove}
+        firstPlace={noPlace}
         moveWhy={
           canMove ? null : !open ? `This order is ${order.status === "completed" ? "already picked up or shipped out" : "cancelled"}, so where it ships from can't change.` : "Some of it was already picked up on the spreadsheet, so where it ships from can't change."
         }

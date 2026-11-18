@@ -652,7 +652,17 @@ export async function editOrderDetails(input: { id: string; set: Record<string, 
   const set = Object.fromEntries(Object.entries(input.set ?? {}).filter(([, v]) => v !== undefined));
   if (!Object.keys(set).length) return { ok: false, error: "Nothing changed." };
   const { data, error } = await s.supabase.rpc("order_edit_details", { p_order: id, p_set: set, p_note: String(input.note ?? "").slice(0, 500) || null });
-  if (error) return { ok: false, error: /order_edit_details/.test(error.message) ? "Editing order details needs the 0076 database update first (Supabase > SQL Editor)." : error.message.replace(/^.*?ERROR:\s*/, "") };
+  if (error) {
+    if (/order_edit_details/.test(error.message)) return { ok: false, error: "Editing order details needs the 0076 database update first (Supabase > SQL Editor)." };
+    // The page lets a shipped order with no location get one (0084); the database needs that update too.
+    if (/location and Ship from supplier can't be changed/.test(error.message) && set.branch_id) {
+      const { data: o } = await s.supabase.from("orders").select("branch_id, status").eq("id", id).maybeSingle<{ branch_id: string | null; status: string }>();
+      if (o && !o.branch_id && o.status === "completed") {
+        return { ok: false, error: "The database needs update-0084 first: in Supabase > SQL Editor, run update-0084-location-on-orders-with-none.sql from the AMBITION App folder, then Save again." };
+      }
+    }
+    return { ok: false, error: error.message.replace(/^.*?ERROR:\s*/, "") };
+  }
   const r = (data ?? {}) as { changes?: DetailChange[]; restocked?: boolean; stage?: string; customer?: boolean; approval_pending?: boolean; scheduled?: boolean };
   const changes = detailsText(r.changes);
   if (r.restocked) await kickForOrder(s.supabase, id, "order moved");

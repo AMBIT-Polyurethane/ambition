@@ -40,6 +40,7 @@ export function OrderDetailsForm({
   companies,
   canMove,
   moveWhy,
+  firstPlace = false,
 }: {
   admin: boolean;
   order: Details;
@@ -47,6 +48,8 @@ export function OrderDetailsForm({
   companies: PackedCustomer[];
   canMove: boolean;
   moveWhy: string | null;
+  /** 0084: it went out with no location on it; saving only records where it went out from. */
+  firstPlace?: boolean;
 }) {
   const [customers, setCustomers] = useState(() => companies.map(unpackCustomer));
   const [company, setCompany] = useState(order.company_id ?? "");
@@ -150,7 +153,9 @@ export function OrderDetailsForm({
                 <div className="alert err small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>{moveWhy}</span></div>
               ) : (
                 <p className="tiny warn-t" style={{ margin: 0 }}>
-                  {method === "dropship"
+                  {firstPlace
+                    ? "This order went out with no location on it. Saving just records where it went out from (no stock moves). Then record its lots with Correct this order."
+                    : method === "dropship"
                     ? "The stock this order holds is released (it ships from the supplier)."
                     : "The stock this order holds moves to this location: released where it was, held here (taking lots the same way a new order does)."}
                 </p>
