@@ -6,7 +6,7 @@ import { claudeReady, costCents, fillForm } from "@/lib/ai/claude";
 import { shrinkImage } from "@/lib/image-shrink";
 import { loadAiSettings } from "@/lib/assistant/settings";
 import { qtyText } from "@/lib/format";
-import { bolProblems, type BolProblem, type BolSeen } from "@/lib/bol-audit";
+import { bolProblems, type BolOrder, type BolProblem, type BolSeen } from "@/lib/bol-audit";
 
 // 0082: the app reads an order's signed BOL photos with AI and saves what's on them (order number, customer,
 // signature, lot numbers). bolProblems() compares that with the order.
@@ -206,13 +206,14 @@ export async function loadBolFindings(supabase: SupabaseClient): Promise<{ list:
   const got = await Promise.all(
     chunks.map((ch) =>
       Promise.all([
-        supabase.from("orders").select("id, order_no, company_name, branch_id, status").in("id", ch),
+        supabase.from("orders").select("id, order_no, company_name, branch_id, status, ambit_po, invoice_no, po_number").in("id", ch),
         supabase.from("inventory_lines").select("order_id, lot_no").in("order_id", ch).eq("state", "done"),
         supabase.from("order_files").select("order_id, uploaded_by_name").in("order_id", ch).eq("kind", "bol"),
       ]),
     ),
   );
-  const orders = got.flatMap(([a]) => (a.data ?? []) as { id: string; order_no: number; company_name: string | null; branch_id: string | null; status: string }[]);
+  const orders = got.flatMap(([a]) => (a.data ?? []) as { id: string; order_no: number; company_name: string | null; branch_id: string | null; status: string; ambit_po: string | null; invoice_no: string | null; po_number: string | null }[]);
+  const whoIs = await orderIndex(supabase);
   const lines = got.flatMap(([, b]) => (b.data ?? []) as { order_id: string; lot_no: string | null }[]);
   const files = got.flatMap(([, , c]) => (c.data ?? []) as { order_id: string; uploaded_by_name: string | null }[]);
   const byId = new Map(orders.map((o) => [o.id, o]));
@@ -225,7 +226,7 @@ export async function loadBolFindings(supabase: SupabaseClient): Promise<{ list:
     if (!o || o.status !== "completed") continue;
     const same = new Set<number>();
     for (const h of c.file_hashes ?? []) for (const other of hashOrders.get(h) ?? []) if (other !== c.order_id && byId.get(other)) same.add(byId.get(other)!.order_no);
-    const problems = c.status === "read" || same.size ? bolProblems(o.order_no, c.seen, lines.filter((l) => l.order_id === c.order_id).map((l) => l.lot_no), [...same].sort()) : [];
+    const problems = c.status === "read" || same.size ? bolProblems(o, c.seen, lines.filter((l) => l.order_id === c.order_id).map((l) => l.lot_no), [...same].sort(), whoIs) : [];
     list.push({
       order_id: c.order_id,
       order_no: o.order_no,
@@ -286,7 +287,8 @@ export async function orderBolFinding(supabase: SupabaseClient, orderId: string,
   ]);
   type O = { orders: { order_no: number } | { order_no: number }[] };
   const same = ((others ?? []) as O[]).map((r) => (Array.isArray(r.orders) ? r.orders[0]?.order_no : r.orders?.order_no)).filter((n): n is number => !!n);
-  const problems = c.status === "read" || same.length ? bolProblems(orderNo, c.seen, ((ln ?? []) as { lot_no: string | null }[]).map((l) => l.lot_no), same.sort()) : [];
+  const { data: me } = await supabase.from("orders").select("order_no, ambit_po, invoice_no, po_number").eq("id", orderId).maybeSingle<BolOrder>();
+  const problems = c.status === "read" || same.length ? bolProblems(me ?? { order_no: orderNo }, c.seen, ((ln ?? []) as { lot_no: string | null }[]).map((l) => l.lot_no), same.sort(), await orderIndex(supabase)) : [];
   return { problems, status: c.status, ok_by_name: null };
 }
 
@@ -296,4 +298,16 @@ export async function markBolError(supabase: SupabaseClient, orderId: string, ms
   const ids = ((data ?? []) as { id: number }[]).map((f) => f.id);
   if (!ids.length) return;
   await supabase.rpc("order_bol_check_save", { p_order: orderId, p_file_ids: ids, p_hashes: [], p_seen: null, p_status: "error", p_error: msg, p_model: null, p_cost: 0 });
+}
+
+/** Which order a number on a BOL belongs to: its ORD number, AMBIT Sales Order # or invoice #. */
+async function orderIndex(supabase: SupabaseClient): Promise<(num: string) => number | null> {
+  const { data } = await supabase.from("orders").select("order_no, ambit_po, invoice_no").order("order_no", { ascending: false }).range(0, 4999);
+  const map = new Map<string, number>();
+  const num = (x: string | null | undefined) => (/(\d{3,8})/.exec(x ?? "") ?? [])[1] ?? "";
+  for (const o of (data ?? []) as { order_no: number; ambit_po: string | null; invoice_no: string | null }[]) {
+    for (const k of [num(o.ambit_po), num(o.invoice_no)]) if (k && !map.has(k)) map.set(k, o.order_no);
+  }
+  for (const o of (data ?? []) as { order_no: number }[]) map.set(String(o.order_no), o.order_no);
+  return (n: string) => map.get(n) ?? null;
 }
