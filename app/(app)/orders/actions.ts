@@ -9,6 +9,7 @@ import { loadOrderDoc } from "@/lib/order-doc/load";
 import { renderPackingSlip, signedSlipFileName } from "@/lib/order-doc/packing-slip";
 import type { Order } from "@/lib/types";
 import { kickForOrder } from "@/lib/inventory/sync";
+import { pushHandoffs } from "@/lib/chat-handoff";
 import { can } from "@/lib/access";
 import { money } from "@/lib/format";
 import { changesText, detailsText, type DetailChange, type OrderChange } from "@/lib/order-edit";
@@ -20,7 +21,24 @@ const STATUSES = ["new", "processing", "completed", "cancelled"];
 function back(id: string, kind: "msg" | "err", text: string): never {
   revalidatePath(`/orders/${id}`);
   revalidatePath("/orders");
+  if (kind === "msg") handoffPush(id);
   redirect(`/orders/${id}?${kind}=${encodeURIComponent(text)}`);
+}
+
+/** 0089: a phone notification for whoever the order chat just tagged for the next step (once the page has moved on). */
+function handoffPush(id: string) {
+  try {
+    after(async () => {
+      try {
+        const s = await getSession();
+        if (s?.supabase) await pushHandoffs(s.supabase, id);
+      } catch {
+        // the note and the to-do are there anyway
+      }
+    });
+  } catch {
+    // not inside a request
+  }
 }
 
 export async function setOrderStatus(form: FormData) {

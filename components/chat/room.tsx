@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowDown, ArrowLeft, Bell, BellOff, Check, ClipboardList, Copy, FileText, Hash, ListTodo, LoaderCircle, Lock, MessageSquareReply, Mic, MoreHorizontal,
+  ArrowDown, ArrowLeft, ArrowRight, Bell, BellOff, Check, ClipboardList, Copy, FileText, Hash, ListTodo, LoaderCircle, Lock, MessageSquareReply, Mic, MoreHorizontal,
   Paperclip, Pencil, Pin, PinOff, Send, Settings, SmilePlus, Sparkles, Square, Trash2, Users, X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -346,7 +346,7 @@ export function ChatRoom({
         ) : null}
         {canPost ? (
           <Composer
-            roomId={room.id} me={me} staff={staff} members={room.kind === "channel" && !room.private ? null : members} aiReady={aiReady} parent={null}
+            roomId={room.id} me={me} staff={staff} members={room.kind === "dm" || room.private ? members : null} aiReady={aiReady} parent={null}
             placeholder={room.kind === "dm" ? `Message ${room.title}` : room.kind === "order" ? `Message about ORD-${room.order?.no ?? ""}` : `Message #${room.title}`}
             onTyping={() => rt.current?.send({ type: "broadcast", event: "typing", payload: { id: me.id, name: meStaff?.first ?? me.name } })}
             onSent={async () => { await refreshRef.current(); setMember(true); toBottom(true); }}
@@ -380,7 +380,7 @@ export function ChatRoom({
           </div>
           {canPost ? (
             <Composer
-              roomId={room.id} me={me} staff={staff} members={room.kind === "channel" && !room.private ? null : members} aiReady={aiReady} parent={thread}
+              roomId={room.id} me={me} staff={staff} members={room.kind === "dm" || room.private ? members : null} aiReady={aiReady} parent={thread}
               placeholder="Reply in the thread"
               onTyping={() => {}}
               onSent={async () => { setThreadMsgs(await chatThread(thread)); await refreshRef.current(); }}
@@ -405,6 +405,17 @@ function Message({
   const [sure, setSure] = useState(false);
   const mine = m.user_id === me.id;
   if (m.kind === "system") return <div className="chat-sys tiny muted">{m.body} · {time(m.created_at)}</div>;
+  if (m.kind === "handoff") {
+    return (
+      <div id={`m-${m.id}`} className={`chat-handoff${m.mentions.includes(me.id) ? " mentioned" : ""}${flash ? " flash" : ""}`}>
+        <span className="chat-handoff-i" aria-hidden><ArrowRight size={15} strokeWidth={2.4} /></span>
+        <span className="col" style={{ gap: 2, minWidth: 0 }}>
+          <span><Body text={m.body} staff={staff} me={me.id} /></span>
+          <span className="tiny faint">Automatic{m.by && m.by !== "AMBIT" ? ` · ${m.by}` : ""} · {time(m.created_at)}</span>
+        </span>
+      </div>
+    );
+  }
   const mentioned = m.mentions.includes(me.id);
   return (
     <div id={`m-${m.id}`} className={`chat-msg${grouped ? " grouped" : ""}${flash ? " flash" : ""}${mentioned ? " mentioned" : ""}${m.pinned_at ? " pinned" : ""}`} onMouseLeave={() => (setMenu(null), setSure(false))}>
@@ -492,7 +503,41 @@ function Message({
 
 // ------------------------------------------------------------------ the box at the bottom
 
-function Composer({
+const ROLE: Record<string, string> = { warehouse: "Warehouse", crm: "Order desk", sales_rep: "Sales", accounting: "Accounting", admin: "Admin", tech: "Tech" };
+const roleText = (s: Staff) => [s.role ? ROLE[s.role] ?? s.role : null, s.branch ? s.branch.toUpperCase() : null].filter(Boolean).join(" · ");
+
+/** The name in the @ list, with the letters typed so far in blue. */
+function Hl({ name, q }: { name: string; q: string }) {
+  const i = q ? name.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i < 0) return <>{name}</>;
+  return <>{name.slice(0, i)}<span className="at-q">{name.slice(i, i + q.length)}</span>{name.slice(i + q.length)}</>;
+}
+
+/** What sits behind the typing box: the same text, with every @Name (and the @ being typed) in blue. */
+function mirrorParts(text: string, pool: Staff[], at: { q: string; start: number } | null) {
+  const names = pool.map((s) => s.name).filter(Boolean).sort((a, b) => b.length - a.length);
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const marks: [number, number][] = [];
+  if (names.length) {
+    const re = new RegExp(`@(?:${names.map(esc).join("|")})`, "g");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text))) marks.push([m.index, m.index + m[0].length]);
+  }
+  if (at && !marks.some(([a]) => a === at.start)) marks.push([at.start, at.start + 1 + at.q.length]);
+  marks.sort((a, b) => a[0] - b[0]);
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  marks.forEach(([a, b], i) => {
+    if (a < last) return;
+    if (a > last) out.push(text.slice(last, a));
+    out.push(<span key={i} className="chat-at-live">{text.slice(a, b)}</span>);
+    last = b;
+  });
+  out.push(text.slice(last));
+  return out;
+}
+
+export function Composer({
   roomId, me, staff, members, aiReady, parent, placeholder, onTyping, onSent,
 }: {
   roomId: string; me: { id: string; name: string }; staff: Staff[]; members: string[] | null; aiReady: boolean; parent: number | null;
@@ -508,6 +553,7 @@ function Composer({
   const [busy, setBusy] = useState<null | "send" | "ai">(null);
   const [err, setErr] = useState<string | null>(null);
   const box = useRef<HTMLTextAreaElement>(null);
+  const mirror = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const lastTyping = useRef(0);
   const base = useRef("");
@@ -644,7 +690,11 @@ function Composer({
         <div className="chat-at-menu" role="listbox">
           {hits.map((s, i) => (
             <button key={s.id} type="button" role="option" aria-selected={i === pick} className={i === pick ? "on" : ""} onMouseDown={(e) => (e.preventDefault(), choose(s))}>
-              <span className="chat-av sm" style={{ background: tone(s.id) }}>{initials(s.name)}</span> {s.name}
+              <span className="chat-av sm" style={{ background: tone(s.id) }}>{initials(s.name)}</span>
+              <span className="col" style={{ gap: 1, minWidth: 0 }}>
+                <span><Hl name={s.name} q={at.q} /></span>
+                {roleText(s) ? <span className="tiny faint">{roleText(s)}</span> : null}
+              </span>
             </button>
           ))}
         </div>
@@ -653,10 +703,13 @@ function Composer({
       <div className={`chat-box${listen.listening ? " listening" : ""}`}>
         <button type="button" className="iconbtn" aria-label="Attach a photo or file" onClick={() => fileRef.current?.click()}><Paperclip size={18} /></button>
         <input ref={fileRef} type="file" multiple hidden onChange={(e) => (upload(e.target.files), (e.target.value = ""))} />
+        <div className="chat-input-wrap">
+        <div className="chat-mirror" aria-hidden ref={mirror}>{mirrorParts(text, pool, at)}{"\u200b"}</div>
         <textarea
           ref={box}
           rows={1}
           className="chat-input"
+          onScroll={(e) => mirror.current && (mirror.current.scrollTop = e.currentTarget.scrollTop)}
           value={text}
           placeholder={listen.listening ? "Listening… say what you want to send" : placeholder}
           onChange={(e) => onChange(e.target.value)}
@@ -680,6 +733,7 @@ function Composer({
             }
           }}
         />
+        </div>
         {micOk ? (
           <button
             type="button"

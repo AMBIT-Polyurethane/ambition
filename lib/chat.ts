@@ -16,7 +16,7 @@ export type ChatMsg = {
   body: string;
   mentions: string[];
   files: ChatFile[];
-  kind: "text" | "system" | "ai";
+  kind: "text" | "system" | "ai" | "handoff";
   reply_count: number;
   last_reply_at: string | null;
   pinned_at: string | null;
@@ -87,7 +87,7 @@ export async function withExtras(db: SupabaseClient, rows: Omit<ChatMsg, "by" | 
   return rows.map((r) => ({
     ...r,
     files: (Array.isArray(r.files) ? r.files : []).map((f) => ({ ...f, url: url.get(f.path) ?? null })),
-    by: r.kind === "system" ? "AMBIT" : r.kind === "ai" ? "AMBIT Intelligence" : (r.user_id && names.get(r.user_id)) || "Former employee",
+    by: r.kind === "system" ? "AMBIT" : r.kind === "ai" ? "AMBIT Intelligence" : r.kind === "handoff" ? (r.user_id && names.get(r.user_id)) || "AMBIT" : (r.user_id && names.get(r.user_id)) || "Former employee",
     reactions: by.get(r.id) ?? [],
   }));
 }

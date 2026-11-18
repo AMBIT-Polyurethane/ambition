@@ -742,7 +742,7 @@ export default async function OrderDetailPage({
             </div>
             {emp ? (
               <div className="o2-side">
-                <ChatCard db={supabase} orderId={order.id} me={profile.id} />
+                <ChatCard db={supabase} orderId={order.id} me={profile.id} meName={profile.full_name || profile.email} />
               </div>
             ) : null}
           </div>
