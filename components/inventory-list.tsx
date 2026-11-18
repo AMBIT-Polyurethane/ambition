@@ -386,7 +386,7 @@ export function InventoryList({
                     <p className="lot-note">
                       Counted by lot. Change quantities on the FOAM LOTS tab of the {sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener noreferrer">spreadsheet</a> : "spreadsheet"}; the app adds pickups to Shipped Out.
                       {readOnly ? null : <>{" "}<a href={`/inventory/holds?b=${branch}`}>Hold drums for a customer</a>.</>}
-                      {r.lots.some((l) => !l.exp && l.use_by) ? " * No Exp date: 12 months after Mfg." : ""}
+                      {r.lots.some((l) => !l.exp && l.use_by) ? " * No Exp date: HFO 6 months after Mfg, everything else 12." : ""}
                     </p>
                   </div>
                 ) : readOnly ? (

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { HUB_LOCKED_MSG, can, hubAllows } from "@/lib/access";
 import { claudeReady, friendlyClaudeError } from "@/lib/ai/claude";
-import { NO_PACKING, paperwork, readFiles, sameBol, stockItems, type BolMatch, type ReportFile } from "@/lib/incoming";
+import { paperwork, readFiles, sameBol, stockItems, type BolMatch, type ReportFile } from "@/lib/incoming";
 import { readBol, type BolRead } from "@/lib/inventory/bol";
 import { kickSync } from "@/lib/inventory/sync";
 import { emailAdminsReportWaiting, emailReceiverSentBack } from "@/lib/receiving-notify";
@@ -56,8 +56,6 @@ export type ReportInput = {
   lines: ReportLine[];
   /** The BOL # is already on another report here and the receiver confirmed this is a new load on it. */
   newLoad?: boolean;
-  /** No packing list came with the truck: why (the report is flagged for the admin). */
-  noPacking?: string;
   /** Sent-back reports for this same truck that this report redoes: they're closed once this one is sent. */
   replaces?: number[];
 };
@@ -88,12 +86,8 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
     : null;
   if (!prior?.transfer_id && (!prior || prior.status === "expected")) {
     const pw = paperwork([...readFiles(prior?.files), ...files]);
-    if (!pw.bol) return { ok: false, error: "Add the BOL first: take a photo of it or upload the PDF (step 1 at the top)." };
-    const why = String(input.noPacking ?? "").trim().slice(0, 200);
-    if (!pw.packing) {
-      if (why.length < 3) return { ok: false, error: 'Add the packing list (step 2 at the top). If none came with this truck, tick "No packing list came with this truck" and say why.' };
-      if (!note.includes(NO_PACKING)) note = [`${NO_PACKING}${why}`, note].filter(Boolean).join(" · ");
-    }
+    // Nov 18: the packing list is needed on every report from a vendor; the BOL only when the driver has one.
+    if (!pw.packing) return { ok: false, error: "Add the packing list first: take a photo of it or upload the PDF (step 1 at the top)." };
   }
   // Same BOL # as another report here. A report an admin sent back for this same truck is closed once this one is
   // sent (it never went into stock). Anything else: only as a new load on the same ticket, said out loud.

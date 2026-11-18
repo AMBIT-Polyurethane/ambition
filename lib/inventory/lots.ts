@@ -89,7 +89,8 @@ export function parseLotsSheet(g: Grid): LotsSheet | null {
       in: cellNum(get("in")) ?? 0,
       adj: cellNum(get("adj")) ?? 0,
       notes: cellText(get("notes")),
-      missing: FORMULA_COLS.filter((k) => c[k] !== undefined && !formulaAt(g, r, c[k]!)),
+      // Missing, or (Use By) still on the old 12-months-for-everything rule: the sync writes the formula again.
+      missing: FORMULA_COLS.filter((k) => c[k] !== undefined && (!formulaAt(g, r, c[k]!) || (k === "useby" && !String(g.formulas[r - g.top]?.[c[k]! - g.left] ?? "").includes("HFO")))),
     });
   }
   return { headerRow: h.row, cols: c, rows, last, dupes };
@@ -118,7 +119,11 @@ export function lotFormulas(cols: Partial<Record<LotCol, number>>, r: number, ra
   if (L("useby") && (E || F)) {
     const exp = F ? `$${F}${r}` : `""`;
     const mfg = E ? `$${E}${r}` : `""`;
-    out.useby = `=IF(${exp}<>"",TEXT(${exp},"m/d/yyyy"),IF(${mfg}<>"",TEXT(EDATE(${mfg},12),"m/d/yyyy"),""))`;
+    // Shelf life from the Mfg date: HFO closed cell 6 months, everything else (open cell, ISO) 12.
+    const B = L("label");
+    const hfo = [B ? `ISNUMBER(SEARCH("HFO",$${B}${r}))` : null, C ? `LEFT($${C}${r},8)="AMB-TITE"` : null].filter(Boolean).join(",");
+    const months = hfo ? `IF(OR(${hfo}),6,12)` : "12";
+    out.useby = `=IF(${exp}<>"",TEXT(${exp},"m/d/yyyy"),IF(${mfg}<>"",TEXT(EDATE(${mfg},${months}),"m/d/yyyy"),""))`;
   }
   return out;
 }
@@ -195,7 +200,7 @@ export function newLotsTab(place: string, lots: DbLot[], name: (l: DbLot) => str
   const values: unknown[][] = [
     [`${place}  ·  FOAM LOTS`, ...Array(WIDTH - 1).fill("")],
     ["Update the quantity on each lot daily. Starting Qty, Shipped In and Adj are yours; the app adds to Shipped Out when an order is picked up. New lot: add a row in its group with the SKU, Lot #, Mfg (and Exp) date and Starting Qty.", ...Array(WIDTH - 1).fill("")],
-    ["Orders take ISO from Covestro first, then whichever lot expires soonest (no Exp date = 12 months after Mfg, shown under Use By). Resins: the lot that expires soonest. Expired lots are never picked automatically.", ...Array(WIDTH - 1).fill("")],
+    ["Orders take ISO from Covestro first, then whichever lot expires soonest (no Exp date: HFO 6 months after Mfg, open cell and ISO 12, shown under Use By). Resins: the lot that expires soonest. Expired lots are never picked automatically.", ...Array(WIDTH - 1).fill("")],
     [...LOT_HEADERS],
   ];
   const looks: NewTab["looks"] = [

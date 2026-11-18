@@ -321,11 +321,11 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
               </div>
             </div>
           ))}
-          {vendorReport && d.status !== "cancelled" && (missingPacking || (pw.labeled && !pw.bol)) ? (
+          {vendorReport && d.status !== "cancelled" && missingPacking ? (
             <div className="alert err small" role="alert">
               <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />
               <span>
-                <b>No {missingPacking ? "packing list" : "BOL"} on this report.</b>
+                <b>No packing list on this report.</b>
                 {noPackWhy ? ` ${d.submitted_by_name ?? d.received_by_name ?? "The receiver"} said: “${noPackWhy}”.` : ""} Add it below when it comes in.
               </span>
             </div>

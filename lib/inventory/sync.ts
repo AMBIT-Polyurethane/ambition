@@ -829,6 +829,15 @@ async function syncLotsIn(
   }
   out.tab = tab;
   out.sheet = sheet;
+  // The how-to line above the table: HFO has a 6-month shelf life, everything else 12 (Nov 2026).
+  for (let r = lotsGrid.top; r < sheet.headerRow; r++) {
+    for (let c = lotsGrid.left; c < lotsGrid.left + 3; c++) {
+      const v = lotsGrid.values[r - lotsGrid.top]?.[c - lotsGrid.left];
+      if (typeof v === "string" && v.includes("no Exp date = 12 months after Mfg")) {
+        await wb.write(tab, r, c, [[v.replace("no Exp date = 12 months after Mfg", "no Exp date: HFO 6 months after Mfg, open cell and ISO 12")]]);
+      }
+    }
+  }
   const issues: string[] = sheet.dupes.map((d) => `${d} is on ${tab} twice (only the first row counts)`);
 
   // ---- the sheet's lots into the app

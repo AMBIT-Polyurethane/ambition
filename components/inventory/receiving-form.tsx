@@ -118,8 +118,6 @@ export function ReceivingForm({
   // Both the BOL and the packing list are required on a report from a vendor (not a transfer, and not when an
   // admin is changing a report while approving it).
   const needPapers = !transfer && delivery?.status !== "submitted";
-  const [noPack, setNoPack] = useState(false);
-  const [noPackWhy, setNoPackWhy] = useState("");
   // Sent-back reports for this same truck: closed when this one is sent (unless unticked).
   const [keepOld, setKeepOld] = useState<number[]>([]);
   const [lines, setLines] = useState<Line[]>(() =>
@@ -283,7 +281,6 @@ export function ReceivingForm({
     }
     if (!added.length) return setBusy(null);
     setFiles((fs) => [...fs, ...added]);
-    if (kind === "packing") setNoPack(false);
     if (!aiReady) return setBusy(null);
     setBusy("read");
     const r = await readBolAction({ branch, paths: added.map((a) => a.path), kind });
@@ -299,13 +296,10 @@ export function ReceivingForm({
   const receive = async () => {
     setError(null);
     const papers = () => document.getElementById("recv-papers")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (needPapers && !pw.bol) {
+    // The packing list is needed on every report from a vendor; the BOL only when the driver has one.
+    if (needPapers && !pw.packing) {
       papers();
-      return setError("Add the BOL first: take a photo of it or upload the PDF (step 1 at the top).");
-    }
-    if (needPapers && !pw.packing && !(noPack && noPackWhy.trim().length >= 3)) {
-      papers();
-      return setError(noPack ? "Say why there's no packing list (step 2 at the top)." : 'Add the packing list (step 2 at the top). If none came with this truck, tick "No packing list came with this truck" and say why.');
+      return setError("Add the packing list first: take a photo of it or upload the PDF (step 1 at the top).");
     }
     if (!transfer && !vendor.trim()) return setError("Who is it from? (the shipper on the BOL)");
     const out: ReportLine[] = [];
@@ -341,7 +335,6 @@ export function ReceivingForm({
       head: { vendor, bol_no: bol, po_no: po, carrier, received_on: day, note: [note.trim(), ...read].filter(Boolean).join(" · "), files, read_by_ai: ai.read, ai_cost_cents: ai.cost },
       lines: out,
       newLoad: dupes.length > 0 && newLoad,
-      noPacking: needPapers && !pw.packing && noPack ? noPackWhy.trim() : undefined,
       replaces: closing.map((m) => m.id),
     });
     setBusy(null);
@@ -357,27 +350,27 @@ export function ReceivingForm({
         <div className="row" style={{ gap: 8, alignItems: "flex-start" }}>
           <Sparkles size={18} style={{ flex: "none", marginTop: 2, color: "var(--red-text)" }} />
           <div className="col tight">
-            <b>{transfer ? "Attach the BOL (optional)" : "The BOL and the packing list"}</b>
+            <b>{transfer ? "Attach the BOL (optional)" : "The packing list (and the BOL, if there is one)"}</b>
             <span className="tiny faint">
               {transfer
                 ? "Snap the signed BOL to keep it with this transfer."
                 : aiReady
-                  ? "Both are needed on every Receiving Report. Snap or upload each one: the app fills in the report, then checks the lot numbers on the BOL (often written in by hand) against the packing list (the manufacturer's numbers)."
-                  : "Both are needed on every Receiving Report. Snap or upload each one to keep it with the report."}
+                  ? "The packing list is needed on every Receiving Report. Add the BOL too when the driver has one: the app fills in the report, then checks the lot numbers on the BOL against the packing list."
+                  : "The packing list is needed on every Receiving Report. Add the BOL too when the driver has one."}
             </span>
           </div>
         </div>
         <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void addFiles(e.target.files, pickKind.current); e.target.value = ""; }} />
         <input ref={pickRef} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { void addFiles(e.target.files, pickKind.current); e.target.value = ""; }} />
         <div className={transfer ? "col" : "recv-docs"}>
-          {(transfer ? (["bol"] as Kind[]) : (["bol", "packing"] as Kind[])).map((k, n) => {
+          {(transfer ? (["bol"] as Kind[]) : (["packing", "bol"] as Kind[])).map((k, n) => {
             const mine = all.filter((f) => (k === "bol" ? f.kind === "bol" || !f.kind : f.kind === k));
             const done = mine.length > 0;
             return (
-              <div key={k} className={`recv-doc${done ? " done" : noPack && k === "packing" ? " skip" : needPapers ? " need" : ""}`}>
+              <div key={k} className={`recv-doc${done ? " done" : needPapers && k === "packing" ? " need" : ""}`}>
                 <div className="row between" style={{ gap: 8, alignItems: "flex-start" }}>
                   <div className="col tight" style={{ minWidth: 0 }}>
-                    <b>{transfer ? "BOL" : `${n + 1}. ${k === "bol" ? "BOL (bill of lading)" : "Packing list"}`}</b>
+                    <b>{transfer ? "BOL" : `${n + 1}. ${k === "bol" ? "BOL (bill of lading), if there is one" : "Packing list"}`}</b>
                     <span className="tiny faint">
                       {k === "bol"
                         ? "The trucking paperwork the driver signs."
@@ -386,8 +379,10 @@ export function ReceivingForm({
                   </div>
                   {done ? (
                     <span className="pill ok" style={{ flex: "none" }}><CircleCheck size={12} /> Added</span>
-                  ) : needPapers && !(noPack && k === "packing") ? (
+                  ) : needPapers && k === "packing" ? (
                     <span className="pill warn" style={{ flex: "none" }}>Needed</span>
+                  ) : needPapers ? (
+                    <span className="pill grey" style={{ flex: "none" }}>Optional</span>
                   ) : null}
                 </div>
                 <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -404,25 +399,6 @@ export function ReceivingForm({
                     {mine.map((f) => (
                       <span key={f.path} className="pill grey"><FileText size={12} /> {f.name}{have.includes(f) ? " · on the report" : ""}</span>
                     ))}
-                  </div>
-                ) : null}
-                {k === "packing" && needPapers && !done ? (
-                  <div className="col" style={{ gap: 6 }}>
-                    <label className="check small">
-                      <input type="checkbox" checked={noPack} onChange={(e) => { setNoPack(e.target.checked); setError(null); }} />
-                      <span>No packing list came with this truck</span>
-                    </label>
-                    {noPack ? (
-                      <input
-                        className="input sm"
-                        value={noPackWhy}
-                        onChange={(e) => setNoPackWhy(e.target.value)}
-                        maxLength={200}
-                        placeholder="Why? (for example: the driver didn't have one, asked Covestro to email it)"
-                        aria-label="Why there's no packing list"
-                      />
-                    ) : null}
-                    {noPack ? <span className="tiny faint">The report is flagged for the admin, and the packing list can be added to it later.</span> : null}
                   </div>
                 ) : null}
               </div>
