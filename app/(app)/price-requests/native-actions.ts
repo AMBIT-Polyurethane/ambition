@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { can } from "@/lib/access";
 import { priceRules, prRef, tellApprovers, tellRep, type PrLine, type PrRow } from "@/lib/price-requests";
+import { scorePriceRequest, type Line, type PrScore, type Req } from "@/lib/prf-score";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NEEDS = "Price requests in the app need the 0066 database update first. Ask Jeremiah to run it.";
@@ -139,4 +140,16 @@ export async function saveFloors(items: { product_id: string; floor: string }[])
   if (error) return { ok: false, error: missing(error.message) ? NEEDS : error.message };
   revalidatePath("/price-requests/rules");
   return { ok: true, n: Number(data) };
+}
+
+/** Price approvers: the request's quality score (0088). Worked out and saved the first time it's opened; again on "Score again". */
+export async function scorePr(id: number): Promise<{ ok: true; score: PrScore } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s?.profile || !can(s.profile, "prf_approve")) return { ok: false, error: "Only price approvers see the score." };
+  const [{ data: r }, { data: ls }] = await Promise.all([
+    s.supabase.from("price_requests").select("*").eq("id", id).maybeSingle(),
+    s.supabase.from("price_request_lines").select("*").eq("request_id", id).order("id"),
+  ]);
+  if (!r) return { ok: false, error: "Price request not found." };
+  return scorePriceRequest(s.supabase, r as Req, (ls ?? []) as Line[]);
 }
