@@ -10,9 +10,10 @@ export async function pushHandoffs(db: SupabaseClient, orderId: string): Promise
   if (error || !data) return;
   for (const m of data as { id: number; channel_id: string; body: string; mentions: string[] }[]) {
     if (!m.mentions?.length) continue;
-    const [what] = m.body.split(" → ");
+    // 0093 notes are full sentences ("Delivery is scheduled for today. @Kim, could you ..."); older ones used " → ".
+    const what = m.body.includes(" → ") ? m.body.split(" → ")[0] : m.body.split(/(?<=[.!?])\s/)[0].replace(/[.!?]$/, "");
     await sendPush(m.mentions, {
-      title: `${what} · your turn`,
+      title: `Automated · ${what}`,
       body: m.body.slice(0, 180),
       url: `/chat/${m.channel_id}?m=${m.id}`,
       tag: `handoff-${m.channel_id}`,

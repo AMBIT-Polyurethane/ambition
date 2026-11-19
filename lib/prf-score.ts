@@ -165,8 +165,10 @@ const FORM = {
   } as Record<string, unknown>,
 };
 
-/** Score one request (the app's numbers, then the AI) and save it. Needs a price approver's session. */
-export async function scorePriceRequest(db: SupabaseClient, req: Req, lines: Line[]): Promise<{ ok: true; score: PrScore } | { ok: false; error: string }> {
+export type Computed = { score: number; grade: string; parts: ScoreParts; metrics: ScoreMetrics; ai: ScoreAi | null; model: string | null; cost: number };
+
+/** Work out one request's score (the app's numbers, then the AI). Saves nothing. */
+export async function computeScore(db: SupabaseClient, req: Req, lines: Line[]): Promise<Computed> {
   const { metrics, peers } = await scoreMetrics(db, req, lines);
   const parts = scoreParts(metrics, req.note);
   let ai: ScoreAi | null = null;
@@ -208,10 +210,15 @@ export async function scorePriceRequest(db: SupabaseClient, req: Req, lines: Lin
       ai = null; // the app's own score still shows
     }
   }
-  const grade = gradeOf(score);
-  const { error } = await db.rpc("price_request_score_save", { p_request: req.id, p_score: score, p_grade: grade, p_parts: parts, p_metrics: metrics, p_ai: ai, p_model: ai ? model : null, p_cost: cost });
+  return { score, grade: gradeOf(score), parts, metrics, ai, model: ai ? model : null, cost };
+}
+
+/** Score one request and save it. Needs a price approver's session. */
+export async function scorePriceRequest(db: SupabaseClient, req: Req, lines: Line[]): Promise<{ ok: true; score: PrScore } | { ok: false; error: string }> {
+  const { score, grade, parts, metrics, ai, model, cost } = await computeScore(db, req, lines);
+  const { error } = await db.rpc("price_request_score_save", { p_request: req.id, p_score: score, p_grade: grade, p_parts: parts, p_metrics: metrics, p_ai: ai, p_model: model, p_cost: cost });
   if (error) return { ok: false, error: /price_request_score_save|function|schema cache/i.test(error.message) && !/approvers|not found/i.test(error.message) ? "The quality score needs database update 0088 first (Supabase > SQL Editor)." : error.message };
-  return { ok: true, score: { score, grade, parts, metrics, ai, scored_at: new Date().toISOString(), scored_by_name: null, model: ai ? model : null } };
+  return { ok: true, score: { score, grade, parts, metrics, ai, scored_at: new Date().toISOString(), scored_by_name: null, model } };
 }
 
 /** The saved score, or null. */

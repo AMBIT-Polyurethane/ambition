@@ -34,6 +34,8 @@ export type DiagramPart = {
   /** Table rows: [x, y, w, h]. */
   box?: [number, number, number, number][];
   qty?: string;
+  /** Shown under the name: e.g. a piece that only comes in an assembly (its sku is the assembly's). */
+  note?: string;
 };
 
 export type Diagram = {
@@ -102,6 +104,9 @@ const ST1: Diagram = {
     { n: "43", sku: "336397", name: "QD coupler", group: "air", at: [[732, 152]] },
     { n: "44", sku: "336436", name: "Flush manifold assembly", group: "body", at: [[220, 720]] },
     { n: "45", sku: "336738", name: "Grease fitting", group: "air", at: [[205, 460]] },
+    { n: "50", sku: "336375", name: "Side seal cartridge housing", note: "Not sold by itself. It comes in the side seal cartridge assembly: A-side 336375, B-side 336376.", group: "seal", shapes: ["M608,484 L607,494 L609,496 L610,502 L614,505 L619,505 L620,507 L627,507 L628,506 L635,507 L638,510 L649,511 L654,504 L655,493 L652,490 L644,489 L641,486 L637,485 L634,481 L625,476 L619,476 Z"], box: [[580, 610, 182, 19]] },
+    { n: "56", sku: "336360", name: "Spring retainer, check valve", note: "Not sold by itself. It comes in the fluid check valve: A-side 336360, B-side 336361.", group: "check", shapes: ["M882.7,557.3 L885.0,555.3 L888.3,556.0 L893.3,554.0 L898.3,553.3 L902.7,556.0 L904.0,561.7 L903.3,568.3 L900.0,571.7 L893.3,570.7 L889.3,567.3 L888.3,562.7 L884.0,561.7 Z"], box: [[770, 660, 204, 10]] },
+    { n: "60", sku: "336360", name: "Check valve housing (A / B side)", note: "Not sold by itself. It comes in the fluid check valve: A-side 336360, B-side 336361.", group: "check", shapes: ["M791.7,527.3 L795.0,522.7 L803.3,521.7 L808.3,527.3 L823.3,532.7 L833.3,535.0 L836.7,538.3 L837.3,546.7 L834.0,550.7 L823.3,550.0 L810.0,546.7 L797.3,545.0 L792.3,541.7 L790.0,535.0 Z"], box: [[770, 706, 204, 11]] },
     { n: "52", sku: "336378", name: "Spring, side seal", group: "seal", at: [[695, 517]], box: [[580, 651, 182, 17]] },
     { n: "53", sku: "336414", name: "O-ring, side seal (10-pack)", group: "seal", at: [[712, 522]], box: [[580, 671, 182, 17]] },
     { n: "54", sku: "336379", name: "Side seal, poly (2-pack with o-rings)", group: "seal", at: [[730, 531]], box: [[580, 691, 182, 15]] },

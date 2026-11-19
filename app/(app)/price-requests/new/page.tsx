@@ -9,6 +9,8 @@ import { SmartPrf, type PrfCo, type PrfItem } from "@/components/prf/smart-prf";
 
 export const metadata = { title: "New price request" };
 export const dynamic = "force-dynamic";
+// Sending scores the request right after (the 85+ rule), which can take up to a minute.
+export const maxDuration = 60;
 
 /** The smart Price Request: existing or new customer, every detail, the product lines, then prices. */
 export default async function NewPriceRequestPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {

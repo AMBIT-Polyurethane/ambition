@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowDown, ArrowLeft, ArrowRight, Bell, BellOff, Check, ClipboardList, Copy, FileText, Hash, ListTodo, LoaderCircle, Lock, MessageSquareReply, Mic, MoreHorizontal,
+  ArrowDown, ArrowLeft, ArrowRight, Bell, Bot, BellOff, Check, ClipboardList, Copy, FileText, Hash, ListTodo, LoaderCircle, Lock, MessageSquareReply, Mic, MoreHorizontal,
   Paperclip, Pencil, Pin, PinOff, Send, Settings, SmilePlus, Sparkles, Square, Trash2, Users, X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -404,14 +404,18 @@ function Message({
   const [editing, setEditing] = useState<string | null>(null);
   const [sure, setSure] = useState(false);
   const mine = m.user_id === me.id;
-  if (m.kind === "system") return <div className="chat-sys tiny muted">{m.body} · {time(m.created_at)}</div>;
+  if (m.kind === "system") return <div className="chat-sys tiny muted"><span className="chat-auto"><Bot size={11} strokeWidth={2.4} aria-hidden /> Automated</span> {m.body} · {time(m.created_at)}</div>;
   if (m.kind === "handoff") {
     return (
       <div id={`m-${m.id}`} className={`chat-handoff${m.mentions.includes(me.id) ? " mentioned" : ""}${flash ? " flash" : ""}`}>
         <span className="chat-handoff-i" aria-hidden><ArrowRight size={15} strokeWidth={2.4} /></span>
-        <span className="col" style={{ gap: 2, minWidth: 0 }}>
+        <span className="col" style={{ gap: 3, minWidth: 0 }}>
+          <span className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="chat-auto" title="The app wrote this when the order moved to the next step"><Bot size={12} strokeWidth={2.4} aria-hidden /> Automated</span>
+            <span className="tiny faint">{time(m.created_at)}</span>
+          </span>
           <span><Body text={m.body} staff={staff} me={me.id} /></span>
-          <span className="tiny faint">Automatic{m.by && m.by !== "AMBIT" ? ` · ${m.by}` : ""} · {time(m.created_at)}</span>
+          {m.by && m.by !== "AMBIT" ? <span className="tiny faint">Sent when {m.by.split(" ")[0]} moved the order</span> : null}
         </span>
       </div>
     );

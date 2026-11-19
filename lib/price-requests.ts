@@ -17,8 +17,10 @@ export type PrLine = {
   id: number; request_id: number; product_id: string | null; sku: string; name: string; unit: string | null; list_price: number | null;
   requested_price: number; volume: string | null; approved_price: number | null; status: "pending" | "approved" | "denied"; auto: boolean; rule: string | null;
 };
-export type PriceRules = { enabled: boolean; max_pct: number; cat_pct: Record<string, number>; never: string[]; max_lines: number };
-export const DEFAULT_RULES: PriceRules = { enabled: false, max_pct: 5, cat_pct: {}, never: [], max_lines: 15 };
+/** score_auto (0094): a request whose quality score is `min` or better is approved when it's sent, in `approver`'s name. */
+export type ScoreAuto = { enabled: boolean; min: number; approver: string };
+export type PriceRules = { enabled: boolean; max_pct: number; cat_pct: Record<string, number>; never: string[]; max_lines: number; score_auto: ScoreAuto };
+export const DEFAULT_RULES: PriceRules = { enabled: false, max_pct: 5, cat_pct: {}, never: [], max_lines: 15, score_auto: { enabled: false, min: 85, approver: "" } };
 export const prRef = (id: number) => `PR-${1000 + id}`;
 export const PR_STATUS: Record<PrRow["status"], { label: string; pill: string }> = {
   pending: { label: "Waiting", pill: "pill warn" },
@@ -31,12 +33,18 @@ export const PR_STATUS: Record<PrRow["status"], { label: string; pill: string }>
 export async function priceRules(db: SupabaseClient): Promise<PriceRules> {
   const { data } = await db.from("app_settings").select("value").eq("key", "price_rules").maybeSingle();
   const v = (data?.value ?? {}) as Partial<PriceRules>;
+  const sa = (v.score_auto ?? {}) as Partial<ScoreAuto>;
   return {
     enabled: Boolean(v.enabled),
     max_pct: Number.isFinite(Number(v.max_pct)) ? Number(v.max_pct) : DEFAULT_RULES.max_pct,
     cat_pct: v.cat_pct && typeof v.cat_pct === "object" ? Object.fromEntries(Object.entries(v.cat_pct).map(([k, n]) => [k, Number(n)]).filter(([, n]) => Number.isFinite(n))) : {},
     never: Array.isArray(v.never) ? v.never.filter((x): x is string => typeof x === "string") : [],
     max_lines: Number(v.max_lines) > 0 ? Number(v.max_lines) : DEFAULT_RULES.max_lines,
+    score_auto: {
+      enabled: Boolean(sa.enabled),
+      min: Number(sa.min) > 0 && Number(sa.min) <= 100 ? Math.round(Number(sa.min)) : 85,
+      approver: typeof sa.approver === "string" ? sa.approver : "",
+    },
   };
 }
 

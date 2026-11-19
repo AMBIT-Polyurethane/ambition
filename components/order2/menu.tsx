@@ -17,6 +17,22 @@ export function MoreMenu({
   triggerClass?: string;
 }) {
   const box = useRef<HTMLDetailsElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  // Opens toward whichever side has room, so a picker on the left of a phone screen isn't cut off.
+  const place = () => {
+    const d = box.current, p = panel.current;
+    if (!d?.open || !p) return;
+    p.style.left = "";
+    p.style.right = "";
+    p.style.maxWidth = `${Math.max(220, window.innerWidth - 24)}px`;
+    const r = p.getBoundingClientRect();
+    if (r.left < 12) {
+      p.style.right = "auto";
+      p.style.left = "0px";
+      const r2 = p.getBoundingClientRect();
+      if (r2.right > window.innerWidth - 12) p.style.left = `${Math.min(0, window.innerWidth - 12 - r2.right)}px`;
+    }
+  };
   useEffect(() => {
     const close = (e: MouseEvent | TouchEvent) => {
       const d = box.current;
@@ -35,11 +51,12 @@ export function MoreMenu({
     };
   }, []);
   return (
-    <details ref={box} className="menu2">
+    <details ref={box} className="menu2" onToggle={place}>
       <summary className={triggerClass ?? "b2 quiet icon"} aria-label={label} title={label}>
         {trigger ?? <Ellipsis size={20} />}
       </summary>
       <div
+        ref={panel}
         className="menu2-p"
         role="menu"
         onClick={(e) => {

@@ -5,6 +5,7 @@ import { Empty } from "@/components/ui";
 import { monthDay, searchSafe } from "@/lib/format";
 import { JotformError, jotformReady, prfFields, prfPricing, prfSubmissions, toItems, type RepLink } from "@/lib/jotform";
 import { PrNativeList, lineCounts } from "@/components/pr-native-list";
+import { KPI_RANGES, PrfKpis } from "@/components/prf-kpis";
 import type { PrRow } from "@/lib/price-requests";
 import { OLD_DAYS, isCleared, jfMs, prfClearedBefore } from "@/lib/prf-cleared";
 import { Submit } from "@/components/forms";
@@ -27,6 +28,9 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
   const { supabase, profile } = await requirePerm("prf_approve");
   const tab = TABS.some(([k]) => k === sp.tab) ? (sp.tab as (typeof TABS)[number][0]) : "pending";
   const q = searchSafe(sp.q).toLowerCase();
+  const kd = KPI_RANGES.includes(Number(sp.kd) as (typeof KPI_RANGES)[number]) ? Number(sp.kd) : 30;
+  const kHref = (d: number) => `/price-requests/approvals?tab=${tab}&kd=${d}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+  const kpis = <PrfKpis supabase={supabase} days={kd} href={kHref} />;
   // In the app (0066): waiting first (oldest at the top), then the latest answered.
   let nq = supabase.from("price_requests").select("*").order("created_at", { ascending: tab === "pending" }).limit(150);
   if (tab === "pending") nq = nq.eq("status", "pending");
@@ -61,6 +65,7 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
           {tab === "pending" && oldestN >= 7 ? (
             <div className="pra-warn" role="status"><Clock size={18} aria-hidden="true" /><span><b>The oldest has waited {oldestN} days.</b> Reps can&apos;t quote until you answer.</span></div>
           ) : null}
+          {nativeRes.error ? null : kpis}
           <div className="stk-bar">
             <nav className="seg2" aria-label="Show">
               {TABS.map(([k, label]) => (
@@ -146,6 +151,7 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
         {oldest >= 7 ? (
           <div className="pra-warn" role="status"><Clock size={18} aria-hidden="true" /><span><b>The oldest has waited {oldest} days.</b> Reps can&apos;t quote until you answer.</span></div>
         ) : null}
+        {kpis}
         {isAdmin && oldN ? (
           <form action={clearOldPrf} className="pra-old">
             <span><b>{oldN} {oldN === 1 ? "has" : "have"} waited {OLD_DAYS}+ days.</b> Take {oldN === 1 ? "it" : "them"} off the list? {oldN === 1 ? "It stays" : "They stay"} in Jotform.</span>

@@ -7,6 +7,8 @@ import { PART_GROUPS, type Diagram, type DiagramPart, type PartGroup } from "@/l
 /** What the store knows about a part: its price (or none), and whether it can go on an order. */
 export type PartInfo = { id: string | null; price: number | null; sale: number | null; quote: boolean };
 
+/** One entry on the drawing: a part can be drawn under more than one item number (a housing that only comes in its assembly). */
+const pk = (p: DiagramPart) => `${p.sku}#${p.n}`;
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** The box around an SVG path ("M x y L x y ... Z"), in drawing pixels. */
@@ -39,8 +41,8 @@ export function PartsDiagram({
   canAddMissing: boolean;
   theme?: "light" | "dark";
 }) {
-  const [hot, setHot] = useState<{ sku: string; k: number } | null>(null);
-  const [pinned, setPinned] = useState<{ sku: string; k: number } | null>(null);
+  const [hot, setHot] = useState<{ key: string; k: number } | null>(null);
+  const [pinned, setPinned] = useState<{ key: string; k: number } | null>(null);
   const [only, setOnly] = useState<PartGroup | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [hint, setHint] = useState(true);
@@ -79,16 +81,16 @@ export function PartsDiagram({
   };
   // Mouse: a click adds it. Touch: the first tap shows it, a second tap (or Add) adds it.
   const choose = (p: DiagramPart, k: number) => {
-    if (touch.current && (pinned?.sku !== p.sku)) {
-      setPinned({ sku: p.sku, k });
+    if (touch.current && (pinned?.key !== pk(p))) {
+      setPinned({ key: pk(p), k });
       return;
     }
-    setPinned({ sku: p.sku, k });
+    setPinned({ key: pk(p), k });
     add(p);
   };
 
   // Where the tip goes: over the part copy being pointed at (or its table row).
-  const tipPart = focus ? diagram.parts.find((p) => p.sku === focus.sku) : null;
+  const tipPart = focus ? diagram.parts.find((p) => pk(p) === focus.key) : null;
   const tipBox = (() => {
     if (!tipPart || !focus) return null;
     const d = tipPart.shapes?.[focus.k] ?? tipPart.shapes?.[0];
@@ -104,9 +106,9 @@ export function PartsDiagram({
     role: "button" as const,
     tabIndex: 0,
     "aria-label": addable(p.sku) ? `Add ${label}` : label,
-    onMouseEnter: () => setHot({ sku: p.sku, k }),
+    onMouseEnter: () => setHot({ key: pk(p), k }),
     onMouseLeave: () => setHot(null),
-    onFocus: () => setHot({ sku: p.sku, k }),
+    onFocus: () => setHot({ key: pk(p), k }),
     onBlur: () => setHot(null),
     onPointerDown: (e: React.PointerEvent) => {
       touch.current = e.pointerType === "touch" || e.pointerType === "pen";
@@ -149,7 +151,7 @@ export function PartsDiagram({
               {diagram.parts.flatMap((p, i) => {
                 const color = PART_GROUPS[p.group].color;
                 const label = `${p.n ? `Item ${p.n}, ` : ""}${p.name}, part ${p.sku}, ${priceText(p.sku)}`;
-                const state = `${focus?.sku === p.sku ? " on" : ""}${only === p.group ? " tint" : ""}${addable(p.sku) ? "" : " off"}`;
+                const state = `${focus?.key === pk(p) ? " on" : ""}${only === p.group ? " tint" : ""}${addable(p.sku) ? "" : " off"}`;
                 const style = { ["--c" as string]: color } as React.CSSProperties;
                 const els: React.ReactNode[] = [];
                 // The part's own outline (every copy in the drawing).
@@ -171,7 +173,7 @@ export function PartsDiagram({
             </svg>
             {tipPart && tipBox ? (
               <div
-                className={`pd-tip${below ? " below" : ""}${pinned && touch.current && pinned.sku === tipPart.sku ? " live" : ""}`}
+                className={`pd-tip${below ? " below" : ""}${pinned && touch.current && pinned.key === pk(tipPart) ? " live" : ""}`}
                 style={{
                   left: `${Math.min(88, Math.max(12, (((tipBox[0] + tipBox[2]) / 2) / diagram.w) * 100))}%`,
                   top: `${((below ? tipBox[3] : tipBox[1]) / diagram.h) * 100}%`,
@@ -183,8 +185,9 @@ export function PartsDiagram({
                   {tipPart.n ? `#${tipPart.n} · ` : ""}Part {tipPart.sku}
                 </span>
                 <b>{tipPart.name}</b>
+                {tipPart.note ? <span className="pd-tip-note">{tipPart.note}</span> : null}
                 <span className="pd-tip-p">{priceText(tipPart.sku)}</span>
-                {pinned && touch.current && pinned.sku === tipPart.sku && addable(tipPart.sku) ? (
+                {pinned && touch.current && pinned.key === pk(tipPart) && addable(tipPart.sku) ? (
                   <button type="button" className="pd-tip-add" onClick={() => add(tipPart)}>
                     {added[tipPart.sku] ? <><Check size={15} strokeWidth={3} /> Added</> : <><ShoppingCart size={15} /> Add to cart</>}
                   </button>
@@ -205,8 +208,8 @@ export function PartsDiagram({
             {listed.map((p) => (
               <li
                 key={p.sku}
-                className={focus?.sku === p.sku ? "on" : undefined}
-                onMouseEnter={() => setHot({ sku: p.sku, k: 0 })}
+                className={focus && diagram.parts.find((x) => pk(x) === focus.key)?.sku === p.sku ? "on" : undefined}
+                onMouseEnter={() => setHot({ key: pk(p), k: 0 })}
                 onMouseLeave={() => setHot(null)}
               >
                 <span className="pd-n" style={{ background: PART_GROUPS[p.group].color }}>{p.n || "·"}</span>
@@ -219,7 +222,7 @@ export function PartsDiagram({
                   className="pd-add"
                   disabled={!addable(p.sku)}
                   onClick={() => {
-                    setPinned({ sku: p.sku, k: 0 });
+                    setPinned({ key: pk(p), k: 0 });
                     add(p);
                   }}
                   aria-label={addable(p.sku) ? `Add ${p.name} (${p.sku}) to the cart` : `${p.name} isn't in the catalog yet`}

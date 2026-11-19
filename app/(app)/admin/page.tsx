@@ -67,6 +67,7 @@ export default async function AdminPage() {
             { key: "promos", href: "/admin/promos", icon: "megaphone", title: "Home banner", sub: "Sale slides and news" },
             { key: "sale", href: "/admin/sale", icon: "tag", title: "Black Friday sale", sub: "Sale prices on the ADC store" },
             { key: "adc", href: "/adc", icon: "cart", title: "ADC web store", sub: "The public store, as guests see it" },
+            { key: "partners", href: "/store/cfs", icon: "store", title: "Distributor stores", sub: "Preview: Contractors Foam Supply's branded store" },
             { key: "web", href: "/orders/web", icon: "clipboard", title: "ADC web orders", sub: "Guest orders to confirm" },
           ]}
         />

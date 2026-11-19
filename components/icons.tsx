@@ -2,11 +2,12 @@ import {
   Award, BookOpen, Boxes, Building2, ClipboardList, Cylinder, FileText, GraduationCap, Hammer, Headset,
   Layers, Link as LinkIcon, MapPin, Megaphone, Newspaper, Package, Phone, Plane, CirclePlay, ShieldCheck,
   ShoppingCart, Tag, TriangleAlert, Users, Video, Wrench, Calendar, Mail, CreditCard, ClipboardCheck, Truck, Droplet, Receipt, Ruler, Sparkles,
-  Landmark, HandCoins, ClipboardPaste, MessageSquareWarning, CalendarClock, Blocks, Target, MessagesSquare, FileChartColumn, type LucideIcon,
+  Landmark, HandCoins, ClipboardPaste, Store, MessageSquareWarning, CalendarClock, Blocks, Target, MessagesSquare, FileChartColumn, type LucideIcon,
 } from "lucide-react";
 
 export const ICONS: Record<string, LucideIcon> = {
   tag: Tag,
+  store: Store,
   plane: Plane,
   alert: TriangleAlert,
   clipboard: ClipboardList,

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
@@ -8,6 +9,7 @@ import { can } from "@/lib/access";
 import { priceRules, prRef, tellApprovers, tellRep, type PrLine, type PrRow } from "@/lib/price-requests";
 import { scorePriceRequest, type Line, type PrScore, type Req } from "@/lib/prf-score";
 import { DETAIL_KEYS, type PrDetails } from "@/lib/pr-details";
+import { scoreAndDecide, scoreRuleOn } from "@/lib/prf-auto";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NEEDS = "Price requests in the app need the 0066 database update first. Ask Jeremiah to run it.";
@@ -19,6 +21,21 @@ async function load(db: SupabaseClient, id: number) {
     db.from("price_request_lines").select("*").eq("request_id", id).order("id"),
   ]);
   return { r: r as PrRow | null, lines: (lines ?? []) as PrLine[] };
+}
+
+/**
+ * A new request: lines still waiting go to the approvers, unless the score rule is on (0094). Then the app scores it first
+ * (a few seconds, after the rep's screen has moved on) and approves it when the score is high enough.
+ */
+async function notifyNew(db: SupabaseClient, res: { id: number; lines: number; auto: number }) {
+  if (res.auto < res.lines && (await scoreRuleOn().catch(() => false))) {
+    after(() => scoreAndDecide(res.id).catch(() => null));
+    return;
+  }
+  const { r, lines: saved } = await load(db, res.id);
+  if (!r) return;
+  if (res.auto < res.lines) await tellApprovers(db, r, saved).catch(() => null);
+  else await tellRep(db, r, saved).catch(() => null);
 }
 
 export type SmartPrfInput = {
@@ -46,11 +63,7 @@ export async function submitSmartPrf(input: SmartPrfInput): Promise<{ ok: false;
     return { ok: false, error: missing(error.message) && !/Fill in|Pick|Add/.test(error.message) ? "The smart price request needs the 0068 database update first." : error.message.replace(/^.*?ERROR:\s*/, "") };
   }
   const res = data as { id: number; lines: number; auto: number };
-  const { r, lines: saved } = await load(s.supabase, res.id);
-  if (r) {
-    if (res.auto < res.lines) await tellApprovers(s.supabase, r, saved).catch(() => null);
-    else await tellRep(s.supabase, r, saved).catch(() => null);
-  }
+  await notifyNew(s.supabase, res);
   revalidatePath("/price-requests", "layout");
   return { ok: true, id: res.id, auto: res.auto, lines: res.lines };
 }
@@ -81,11 +94,7 @@ export async function submitPriceRequest(input: PrInput): Promise<{ ok: false; e
   });
   if (error) return { ok: false, error: missing(error.message) ? NEEDS : error.message };
   const res = data as { id: number; lines: number; auto: number };
-  const { r, lines: saved } = await load(s.supabase, res.id);
-  if (r) {
-    if (res.auto < res.lines) await tellApprovers(s.supabase, r, saved).catch(() => null);
-    else await tellRep(s.supabase, r, saved).catch(() => null);
-  }
+  await notifyNew(s.supabase, res);
   revalidatePath("/price-requests", "layout");
   return { ok: true, id: res.id, auto: res.auto, lines: res.lines };
 }
@@ -162,7 +171,13 @@ export async function saveRules(form: FormData) {
     if (k.startsWith("cat:") && String(v).trim() !== "") cat_pct[k.slice(4)] = pct(v);
     if (k.startsWith("never:") && v === "on") never.push(k.slice(6));
   }
-  const value = { ...cur, enabled: form.get("enabled") === "on", max_pct: pct(form.get("max_pct")), cat_pct, never, max_lines: Math.max(1, Math.min(100, Number(form.get("max_lines")) || 15)) };
+  const scoreMin = Math.round(Number(String(form.get("score_min") ?? "").replace(/[^\d]/g, "")));
+  const score_auto = {
+    enabled: form.get("score_on") === "on",
+    min: scoreMin >= 1 && scoreMin <= 100 ? scoreMin : cur.score_auto.min,
+    approver: String(form.get("score_by") ?? cur.score_auto.approver).trim().slice(0, 120) || s.profile.full_name || s.profile.email,
+  };
+  const value = { ...cur, enabled: form.get("enabled") === "on", max_pct: pct(form.get("max_pct")), cat_pct, never, max_lines: Math.max(1, Math.min(100, Number(form.get("max_lines")) || 15)), score_auto };
   const { error } = await s.supabase.from("app_settings").upsert({ key: "price_rules", value, updated_at: new Date().toISOString(), updated_by_name: s.profile.full_name ?? s.profile.email });
   revalidatePath("/price-requests", "layout");
   redirect(`/price-requests/rules?${error ? `err=${encodeURIComponent(error.message)}` : "msg=Rules saved."}`);
