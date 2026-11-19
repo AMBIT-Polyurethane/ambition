@@ -96,9 +96,9 @@ export default async function PriceRequestPage({
           <a className="btn sm" href={`/price-requests/${id}/pdf`} target="_blank" rel="noopener noreferrer">
             <Download size={15} /> Download PDF
           </a>
-          {mine ? (
+          {mine || approver ? (
             <Link className="btn dark sm" href={`/price-requests/${id}/edit`}>
-              <PencilLine size={15} /> Edit &amp; resubmit
+              <PencilLine size={15} /> {mine ? <>Edit &amp; resubmit</> : "Edit form"}
             </Link>
           ) : null}
         </div>

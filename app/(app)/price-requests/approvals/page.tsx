@@ -1,11 +1,14 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Clock, Search, SlidersHorizontal } from "lucide-react";
+import { ArchiveRestore, ChevronLeft, ChevronRight, Clock, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { requirePerm } from "@/lib/session";
 import { Empty } from "@/components/ui";
 import { monthDay, searchSafe } from "@/lib/format";
 import { JotformError, jotformReady, prfFields, prfPricing, prfSubmissions, toItems, type RepLink } from "@/lib/jotform";
 import { PrNativeList, lineCounts } from "@/components/pr-native-list";
 import type { PrRow } from "@/lib/price-requests";
+import { OLD_DAYS, isCleared, jfMs, prfClearedBefore } from "@/lib/prf-cleared";
+import { Submit } from "@/components/forms";
+import { clearOldPrf, restoreOldPrf } from "../actions";
 
 export const metadata = { title: "Price approvals" };
 export const dynamic = "force-dynamic";
@@ -76,11 +79,12 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
     );
   }
 
-  const [{ data: staffRows }, linksRes, reviewsRes, nativeWaitRes] = await Promise.all([
+  const [{ data: staffRows }, linksRes, reviewsRes, nativeWaitRes, clearedBefore] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]).eq("demo", false),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
     supabase.from("prf_reviews").select("submission_id, approved_by_name, approved_at"),
     supabase.from("price_requests").select("created_at").eq("status", "pending").limit(500),
+    prfClearedBefore(supabase),
   ]);
   const nativeWaiting = ((nativeWaitRes.error ? [] : nativeWaitRes.data ?? []) as { created_at: string }[]).map((r) => r.created_at);
   const staff = (staffRows ?? []) as { id: string; full_name: string | null; email: string }[];
@@ -94,6 +98,13 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
   } catch (e) {
     error = e instanceof JotformError ? e.message : "Couldn't load price requests from Jotform.";
   }
+
+  // Old waiting ones the admin removed (they stay in Jotform).
+  const removedN = items.filter((i) => isCleared(i, clearedBefore)).length;
+  items = items.filter((i) => !isCleared(i, clearedBefore));
+  const oldCut = Date.now() - OLD_DAYS * 86400_000;
+  const oldN = items.filter((i) => i.status === "pending" && jfMs(i.created_at) <= oldCut).length;
+  const isAdmin = profile.role === "admin";
 
   const owners = new Map(staff.map((s) => [s.id, s.full_name || s.email]));
   const repOf = (i: (typeof items)[number]) => (i.ownerId && owners.get(i.ownerId)) || i.rep || "No rep picked";
@@ -109,7 +120,7 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
   if (tab === "pending") shown.reverse();
 
   // How long each one has waited (Jotform dates are "YYYY-MM-DD HH:MM:SS", Central time).
-  const daysSince = (v: string | null | undefined) => (v ? Math.max(0, Math.floor((Date.now() - new Date(v.includes("T") ? v : v.replace(" ", "T") + "-06:00").getTime()) / 86400_000)) : 0);
+  const daysSince = (v: string | null | undefined) => (v ? Math.max(0, Math.floor((Date.now() - jfMs(v)) / 86400_000)) : 0);
   const waitingAges = [
     ...nativeWaiting.map((v) => daysSince(v)),
     ...items.filter((i) => i.status === "pending").map((i) => daysSince(i.created_at)),
@@ -134,6 +145,12 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
         {error ? <div className="alert err">{error}</div> : null}
         {oldest >= 7 ? (
           <div className="pra-warn" role="status"><Clock size={18} aria-hidden="true" /><span><b>The oldest has waited {oldest} days.</b> Reps can&apos;t quote until you answer.</span></div>
+        ) : null}
+        {isAdmin && oldN ? (
+          <form action={clearOldPrf} className="pra-old">
+            <span><b>{oldN} {oldN === 1 ? "has" : "have"} waited {OLD_DAYS}+ days.</b> Take {oldN === 1 ? "it" : "them"} off the list? {oldN === 1 ? "It stays" : "They stay"} in Jotform.</span>
+            <Submit className="b2 sm" pendingText="Removing…"><Trash2 size={15} /> Remove {oldN === 1 ? "it" : `all ${oldN}`}</Submit>
+          </form>
         ) : null}
 
         <div className="stk-bar">
@@ -188,6 +205,12 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
               })}
             </div>
           </section>
+        ) : null}
+        {isAdmin && removedN ? (
+          <form action={restoreOldPrf} className="pra-removed">
+            <span>{removedN} old {removedN === 1 ? "request that" : "requests that"} waited {OLD_DAYS}+ days {removedN === 1 ? "was" : "were"} removed from this list.</span>
+            <Submit className="link2" pendingText="Bringing back…"><ArchiveRestore size={14} /> Bring them back</Submit>
+          </form>
         ) : null}
       </div>
     </main>

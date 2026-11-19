@@ -6,6 +6,7 @@ import { JotformError, answerText, looksLikeEmail, normName, prfFields, prfPrici
 import { sendEmail } from "@/lib/email";
 import { currentOrigin } from "@/lib/origin";
 import { buildPrfApprovedEmail } from "@/lib/prf-email";
+import { OLD_DAYS } from "@/lib/prf-cleared";
 
 /** Admin: "this name on the form is this person in the app". */
 export async function linkRepName(form: FormData) {
@@ -23,6 +24,20 @@ export async function unlinkRepName(form: FormData) {
   if (!repName) return;
   await supabase.from("rep_name_links").delete().eq("rep_name", repName);
   revalidatePath("/price-requests");
+}
+
+/** Admin: take Jotform requests that have waited OLD_DAYS+ days off the lists. They stay in Jotform; "Bring them back" undoes it. */
+export async function clearOldPrf() {
+  const { supabase, profile } = await requireAdmin();
+  const before = new Date(Date.now() - OLD_DAYS * 86400_000).toISOString();
+  await supabase.from("app_settings").upsert({ key: "prf_cleared", value: { before }, updated_at: new Date().toISOString(), updated_by_name: profile.full_name || profile.email });
+  revalidatePath("/price-requests", "layout");
+}
+
+export async function restoreOldPrf() {
+  const { supabase } = await requireAdmin();
+  await supabase.from("app_settings").delete().eq("key", "prf_cleared");
+  revalidatePath("/price-requests", "layout");
 }
 
 /** What the approval form shows after Approve: a fresh object each time so the page scrolls to it. */

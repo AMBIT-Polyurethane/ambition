@@ -8,6 +8,7 @@ import { can } from "@/lib/access";
 import { linkRepName, unlinkRepName } from "./actions";
 import { PrNativeList, lineCounts } from "@/components/pr-native-list";
 import type { PrRow } from "@/lib/price-requests";
+import { isCleared, prfClearedBefore } from "@/lib/prf-cleared";
 
 export const metadata = { title: "My price requests" };
 export const dynamic = "force-dynamic";
@@ -55,17 +56,19 @@ export default async function PriceRequestsPage() {
 
   let error = "";
   let items: ReturnType<typeof toItems> = [];
-  const [{ data: staffRows }, linksRes, reviewsRes] = await Promise.all([
+  const [{ data: staffRows }, linksRes, reviewsRes, clearedBefore] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, role, status").in("role", ["employee", "admin"]).eq("demo", false).order("full_name"),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
     supabase.from("prf_reviews").select("submission_id"),
+    prfClearedBefore(supabase),
   ]);
   const reviewed = new Set(((reviewsRes.error ? [] : reviewsRes.data ?? []) as { submission_id: string }[]).map((r) => r.submission_id));
   const staff = (staffRows ?? []) as { id: string; full_name: string | null; email: string; role: string; status: string }[];
   const links = (linksRes.error ? [] : linksRes.data ?? []) as RepLink[];
   try {
     const [fields, subs, pairs] = await Promise.all([prfFields(), prfSubmissions(), prfPricing().catch(() => null)]);
-    items = toItems(subs, fields, links, staff, pairs ? { pairs, reviewed } : undefined);
+    // Old waiting ones an admin removed from the lists (they stay in Jotform).
+    items = toItems(subs, fields, links, staff, pairs ? { pairs, reviewed } : undefined).filter((i) => !isCleared(i, clearedBefore));
     if (!fields.rep) error = "Couldn't find the SALES REP box on the Price Request Form, so requests can't be matched to reps.";
   } catch (e) {
     error = e instanceof JotformError ? e.message : "Couldn't load price requests from Jotform.";

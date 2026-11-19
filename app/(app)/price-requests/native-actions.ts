@@ -7,6 +7,7 @@ import { getSession } from "@/lib/session";
 import { can } from "@/lib/access";
 import { priceRules, prRef, tellApprovers, tellRep, type PrLine, type PrRow } from "@/lib/price-requests";
 import { scorePriceRequest, type Line, type PrScore, type Req } from "@/lib/prf-score";
+import { DETAIL_KEYS, type PrDetails } from "@/lib/pr-details";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NEEDS = "Price requests in the app need the 0066 database update first. Ask Jeremiah to run it.";
@@ -102,6 +103,42 @@ export async function decidePriceRequest(id: number, lines: { id: number; status
   if (r && r.status !== "pending") await tellRep(s.supabase, r, saved).catch(() => null);
   revalidatePath("/price-requests", "layout");
   return { ok: true, status: String(data) };
+}
+
+/**
+ * Price approvers: edit a request after it's answered (or while it waits).
+ * Details (customer, contact, good-through date, rep's note) save quietly; changed prices or a changed note
+ * for the rep go through the normal decision, so customer prices update and the rep is emailed.
+ */
+export async function editPriceRequest(
+  id: number,
+  details: PrDetails,
+  answer: { lines: { id: number; status: "approved" | "denied"; price: string }[]; note: string } | null,
+): Promise<{ ok: false; error: string } | { ok: true; emailed: boolean }> {
+  const s = await getSession();
+  if (!s?.profile || !can(s.profile, "prf_approve")) return { ok: false, error: "Only price approvers can do that." };
+  const p: Record<string, string> = {};
+  for (const k of DETAIL_KEYS) p[k] = String(details[k] ?? "").trim().slice(0, k === "note" ? 2000 : 200);
+  if (p.valid_until && !/^\d{4}-\d{2}-\d{2}$/.test(p.valid_until)) return { ok: false, error: "Pick a good-through date, or leave it empty." };
+  if (!p.legal_name) return { ok: false, error: "The customer needs a name." };
+  const { error } = await s.supabase.rpc("price_request_edit", { p_id: id, p });
+  if (error) return { ok: false, error: /price_request_edit|schema cache|does not exist/i.test(error.message) ? "Editing needs the 0092 database update first (Supabase > SQL Editor)." : error.message };
+  let emailed = false;
+  if (answer) {
+    const { error: e2 } = await s.supabase.rpc("price_request_decide", {
+      p_id: id,
+      p_lines: answer.lines.map((l) => ({ id: l.id, status: l.status, price: l.price.replace(/[^\d.]/g, "") })),
+      p_note: answer.note.trim() || null,
+    });
+    if (e2) return { ok: false, error: `The details were saved, but the prices weren't: ${e2.message}` };
+    const { r, lines: saved } = await load(s.supabase, id);
+    if (r && r.status !== "pending") {
+      await tellRep(s.supabase, r, saved).catch(() => null);
+      emailed = Boolean(r.created_by);
+    }
+  }
+  revalidatePath("/price-requests", "layout");
+  return { ok: true, emailed };
 }
 
 export async function withdrawPriceRequest(form: FormData) {

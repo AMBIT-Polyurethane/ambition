@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, CircleAlert, CircleCheck, Sparkles } from "lucide-react";
+import { ChevronLeft, CircleAlert, CircleCheck, PencilLine, Sparkles } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
 import { dateShort, dateTime, money, rate } from "@/lib/format";
@@ -84,12 +84,29 @@ export default async function PriceRequestPage({ params, searchParams }: { param
     </section>
   );
 
-  const prices =
-    approver && req.status === "pending" ? (
-      <PriceDecision
-        id={req.id}
-        lines={lines.map((l) => ({ id: l.id, name: l.name, sku: l.sku, unit: l.unit, list: l.list_price === null ? null : Number(l.list_price), requested: Number(l.requested_price), volume: l.volume, status: l.status, approved: l.approved_price === null ? null : Number(l.approved_price), auto: l.auto, rule: l.rule, floor: l.product_id && (l.basis ?? "unit") === "unit" ? floorOf.get(l.product_id) ?? null : null }))}
-      />
+  // Answered already: an approver can still change it (Edit).
+  const answered = req.status === "approved" || req.status === "partly" || req.status === "denied";
+  const editing = approver && answered && sp.edit === "1";
+  const [first, ...rest] = String(req.contact ?? "").trim().split(/\s+/);
+  const decisionLines = lines.map((l) => ({ id: l.id, name: l.name, sku: l.sku, unit: l.unit, list: l.list_price === null ? null : Number(l.list_price), requested: Number(l.requested_price), volume: l.volume, status: l.status, approved: l.approved_price === null ? null : Number(l.approved_price), auto: l.auto, rule: l.rule, floor: l.product_id && (l.basis ?? "unit") === "unit" ? floorOf.get(l.product_id) ?? null : null }));
+  const prices = editing ? (
+    <PriceDecision
+      id={req.id}
+      lines={decisionLines}
+      edit={{
+        note: req.decision_note ?? "",
+        details: {
+          legal_name: cu.legal_name || req.company_name || "",
+          contact_first: cu.contact_first ?? (cu.contact_last ? "" : first ?? ""),
+          contact_last: cu.contact_last ?? (cu.contact_first ? "" : rest.join(" ")),
+          email: cu.email ?? "", phone: cu.phone ?? "", street: cu.street ?? "", city: cu.city ?? "", state: cu.state ?? "", zip: cu.zip ?? "",
+          valid_until: req.valid_until ?? "",
+          note: req.note ?? "",
+        },
+      }}
+    />
+  ) : approver && req.status === "pending" ? (
+      <PriceDecision id={req.id} lines={decisionLines} />
     ) : (
       <section className="card2" aria-label="Prices">
         <div className="card2-h"><b>Prices</b><span className="up2-sub">{lines.length} line{lines.length === 1 ? "" : "s"}</span></div>
@@ -120,13 +137,16 @@ export default async function PriceRequestPage({ params, searchParams }: { param
               <span className="o2-sub">{req.company_name} · {req.rep_name ?? "AMBIT"} · {dateShort(req.created_at.slice(0, 10))}</span>
             </div>
           </div>
-          <div className="o2-head-r no-print"><PrintButton /></div>
+          <div className="o2-head-r no-print">
+            {approver && answered && !editing ? <Link href={`/price-requests/n/${req.id}?edit=1`} className="b2"><PencilLine size={16} /> Edit</Link> : null}
+            <PrintButton />
+          </div>
         </div>
         {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
         {sp.err ? <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div> : null}
         <div className="o2-cols side-first">
           <div className="o2-main">
-            {details}
+            {editing ? null : details}
             {prices}
             {req.status === "pending" && req.created_by === profile.id ? (
               <form action={withdrawPriceRequest} className="no-print">
