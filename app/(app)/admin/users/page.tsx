@@ -30,7 +30,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const { supabase, profile: me } = await requireAdmin();
 
   // The expense demo's made-up employees (migration 0051) aren't accounts anyone manages.
-  let query = supabase.from("profiles").select("*, company:companies!company_id(id, name, account_no, default_branch_id)").eq("demo", false).order("created_at", { ascending: false }).limit(300);
+  let query = supabase.from("profiles").select("*, company:companies!company_id(id, name, account_no, default_branch_id)").eq("demo", false).is("partner_id", null).order("created_at", { ascending: false }).limit(300);
   if (tab === "pending") query = query.eq("status", "pending");
   else if (tab === "disabled") query = query.eq("status", "disabled");
   else if (tab === "customer") query = query.eq("status", "active").eq("role", "customer");
@@ -42,7 +42,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
     query,
     supabase.from("companies").select("id, name, account_no").order("name"),
     supabase.from("branches").select("id, name, state").order("sort"),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "pending").eq("demo", false),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "pending").eq("demo", false).is("partner_id", null),
   ]);
   const list = tab === "invited" ? [] : ((users ?? []) as Profile[]);
   const cos = (companies ?? []) as Pick<Company, "id" | "name" | "account_no">[];

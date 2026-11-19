@@ -18,12 +18,17 @@ export const getSession = cache(async () => {
     .select("*, company:companies!company_id(id, name, account_no, default_branch_id, ops_enabled)")
     .eq("id", user.id)
     .maybeSingle<Profile>();
+  // A distributor's people (0096) are not AMBIT logins: every "is this an active AMBIT login?" check says no.
+  // (requireActive sends them back to their own store.)
+  if (profile?.partner_id) return { supabase, user, profile: { ...profile, status: "disabled" as Profile["status"], role: "customer" as Profile["role"], perms: [] } };
   return { supabase, user, profile };
 });
 
 export async function requireActive() {
   const s = await getSession();
   if (!s) redirect("/signin");
+  // A distributor's people (their store owner and their customers) never see AMBIT's side: back to their store.
+  if (s.profile?.partner_id) redirect(`/store/${s.profile.partner_id}${s.profile.partner_role === "owner" ? "/desk" : "/account"}`);
   if (!s.profile || s.profile.status !== "active") redirect("/pending");
   return { ...s, profile: s.profile as Profile };
 }

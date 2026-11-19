@@ -54,6 +54,9 @@ export type Profile = {
   ops_workspace?: string | null;
   /** Gets the "Credit check needed" emails (0043, Admin > Email alerts). */
   notify_credit?: boolean;
+  /** A distributor's store (0096): their owner or one of their customers. Walled off from AMBIT. */
+  partner_id?: string | null;
+  partner_role?: "owner" | "customer" | null;
   /** Approves expense reports and sees the expense dashboard (0050, Admin > Expense reports). */
   expense_approver?: boolean;
   /** The language they picked for Academy lessons (0056); null means English. */

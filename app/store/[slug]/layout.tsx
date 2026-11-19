@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
-import { adcCatalog, adcCategories } from "@/lib/adc";
-import { partnerBySlug } from "@/lib/partners";
-import { PartnerProvider, type PItem } from "@/components/partner/store";
-import { PartnerFrame } from "@/components/partner/ui";
+import { getPartner, partnerMe } from "@/lib/partner-store";
+import { adcLang } from "@/lib/adc-lang";
+import { PartnerProvider, type PWho } from "@/components/partner/ctx";
 
-// A partner's store: the ADC web store's catalog, branded for a distributor AMBIT works with. Preview only (see lib/partners).
+// A distributor's own store, built on AMBIT Intelligence but walled off from AMBIT (supabase/migrations/0096).
+// The shop pages are in (shop); the owner's desk is in desk.
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const p = partnerBySlug((await params).slug);
+  const p = await getPartner((await params).slug);
   return {
     title: { default: p?.name ?? "Store", template: `%s · ${p?.name ?? "Store"}` },
-    description: p?.tagline,
-    robots: { index: false, follow: false },
+    description: p?.tagline ?? undefined,
+    applicationName: p?.name,
     appleWebApp: { capable: false, title: p?.short ?? "Store" },
   };
 }
@@ -19,14 +19,27 @@ export const viewport: Viewport = { themeColor: "#2d694b" };
 export const dynamic = "force-dynamic";
 
 export default async function PartnerLayout({ params, children }: { params: Promise<{ slug: string }>; children: React.ReactNode }) {
-  const partner = partnerBySlug((await params).slug);
+  const { slug } = await params;
+  const [partner, me, lang] = await Promise.all([getPartner(slug), partnerMe(slug), adcLang()]);
   if (!partner) notFound();
-  const { items } = await adcCatalog();
-  const list: PItem[] = items.map((i) => ({ id: i.id, sku: i.sku, name: i.name, image: i.image, list: i.list_price, quote: i.quote, category: i.category, category_id: i.category_id, unit: i.unit }));
-  const cats = adcCategories(items).map((c) => ({ id: c.id, name: c.name }));
+  const first = (me.kind !== "guest" ? me.name : null)?.trim().split(/\s+/)[0] ?? null;
+  const who: PWho = {
+    kind: me.kind,
+    first,
+    company: me.kind === "customer" ? me.customer.company : null,
+    terms: me.kind === "customer" ? me.customer.terms : null,
+  };
+  const color = /^#[0-9a-f]{6}$/i.test(partner.color) ? partner.color : "#2d694b";
+  const color2 = /^#[0-9a-f]{6}$/i.test(partner.color2) ? partner.color2 : color;
   return (
-    <PartnerProvider partner={partner} items={list}>
-      <PartnerFrame cats={cats}>{children}</PartnerFrame>
+    <PartnerProvider
+      store={{ slug, name: partner.name, short: partner.short, phone: partner.phone ?? "", email: partner.email ?? "", logo: partner.logo_url, color, color2 }}
+      lang={lang}
+      who={who}
+    >
+      <div className="adc ptn" lang={lang} style={{ "--p-color": color, "--p-color2": color2 } as React.CSSProperties}>
+        {children}
+      </div>
     </PartnerProvider>
   );
 }
