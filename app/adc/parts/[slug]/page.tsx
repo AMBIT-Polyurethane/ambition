@@ -5,6 +5,8 @@ import { adcCatalog } from "@/lib/adc";
 import { diagramBySlug, diagramSkus } from "@/lib/diagrams";
 import { AdcDiagram } from "@/components/adc/diagram";
 import type { PartInfo } from "@/components/parts-diagram";
+import { dict } from "@/lib/adc-i18n";
+import { adcLang } from "@/lib/adc-lang";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -16,7 +18,8 @@ export default async function AdcParts({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const d = diagramBySlug(slug);
   if (!d) notFound();
-  const { items } = await adcCatalog();
+  const [{ items }, lang] = await Promise.all([adcCatalog(), adcLang()]);
+  const t = dict(lang);
   const bySku = new Map(items.map((x) => [x.sku.toLowerCase(), x]));
   const gun = bySku.get(d.forSku.toLowerCase());
   const info: Record<string, PartInfo> = {};
@@ -31,13 +34,13 @@ export default async function AdcParts({ params }: { params: Promise<{ slug: str
   return (
     <div className="adc-wrap adc-pad adc-stack">
       <nav className="adc-crumbs" aria-label="Breadcrumb">
-        <Link href="/adc">Home</Link><span aria-hidden="true">›</span>
+        <Link href="/adc">{t.homeCrumb}</Link><span aria-hidden="true">›</span>
         {gun ? <><Link href={`/adc/p/${encodeURIComponent(gun.sku)}`}>{gun.name}</Link><span aria-hidden="true">›</span></> : null}
-        <span>Parts diagram</span>
+        <span>{t.partsDiagram}</span>
       </nav>
       <div className="adc-sec-h">
         <h1 className="adc-h1">{d.title}</h1>
-        <span className="adc-muted">Hover any part to see its number and price. Click it to add it to your cart.</span>
+        <span className="adc-muted">{t.diagramHint}</span>
       </div>
       <AdcDiagram slug={d.slug} info={info} images={images} />
     </div>

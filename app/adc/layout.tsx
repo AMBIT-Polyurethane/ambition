@@ -5,36 +5,45 @@ import { adcCatalog, adcCategories } from "@/lib/adc";
 import { AdcCartProvider } from "@/components/adc/cart";
 import { AdcCartButton, AdcSaleBanner } from "@/components/adc/bits";
 import { AdcLogo } from "@/components/adc/logo";
+import { AdcLangProvider, AdcLangSwitch } from "@/components/adc/lang";
+import { catName, dict } from "@/lib/adc-i18n";
+import { adcLang } from "@/lib/adc-lang";
 
 // The ADC web store: AMBIT Distribution Centers. A store of its own: no sign-in, no links into AMBIT Intelligence.
-export const metadata: Metadata = {
-  title: { default: "ADC · AMBIT Distribution Centers", template: "%s · ADC" },
-  description: "Spray foam guns, parts and supplies, shipped from 5 AMBIT distribution centers.",
-  applicationName: "ADC",
-  appleWebApp: { capable: false, title: "ADC" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const es = (await adcLang()) === "es";
+  return {
+    title: { default: "ADC · AMBIT Distribution Centers", template: "%s · ADC" },
+    description: es ? "Pistolas, repuestos y suministros de espuma en spray, enviados desde 5 centros de distribución AMBIT." : "Spray foam guns, parts and supplies, shipped from 5 AMBIT distribution centers.",
+    applicationName: "ADC",
+    appleWebApp: { capable: false, title: "ADC" },
+  };
+}
 export const viewport: Viewport = { themeColor: "#0A0A0B" };
 export const dynamic = "force-dynamic";
 
 export default async function AdcLayout({ children }: { children: React.ReactNode }) {
-  const { items, sale } = await adcCatalog();
+  const [{ items, sale }, lang] = await Promise.all([adcCatalog(), adcLang()]);
   const cats = adcCategories(items);
+  const t = dict(lang);
   return (
+    <AdcLangProvider lang={lang}>
     <AdcCartProvider>
-      <div className="adc">
+      <div className="adc" lang={lang}>
         <header className="adc-head">
           <div className="adc-wrap adc-bar">
-            <Link href="/adc" className="adc-logo" aria-label="ADC home"><AdcLogo width={84} /></Link>
+            <Link href="/adc" className="adc-logo" aria-label={t.home}><AdcLogo width={84} /></Link>
             <form action="/adc" className="adc-search" role="search">
               <Search size={18} aria-hidden="true" />
-              <input type="search" name="q" placeholder="Search parts, guns and supplies by name or part number" aria-label="Search the store" />
+              <input type="search" name="q" placeholder={t.search} aria-label={t.searchLabel} />
             </form>
+            <AdcLangSwitch />
             <AdcCartButton />
           </div>
           {cats.length ? (
-            <nav className="adc-cats" aria-label="Shop">
+            <nav className="adc-cats" aria-label={t.shop}>
               <div className="adc-wrap">
-                {cats.map((c) => <Link key={c.id} href={`/adc?c=${encodeURIComponent(c.id)}`}>{c.name}</Link>)}
+                {cats.map((c) => <Link key={c.id} href={`/adc?c=${encodeURIComponent(c.id)}`}>{catName(c.name, lang)}</Link>)}
               </div>
             </nav>
           ) : null}
@@ -44,12 +53,13 @@ export default async function AdcLayout({ children }: { children: React.ReactNod
         <footer className="adc-foot">
           <div className="adc-wrap adc-foot-in">
             <AdcLogo width={64} />
-            <span><Truck size={16} aria-hidden="true" /> Ships from 5 AMBIT distribution centers: Oklahoma City, Arlington, San Marcos, Jacksonville and Mobile.</span>
-            <span>Questions? <a href="mailto:orders@ambitpu.com">orders@ambitpu.com</a></span>
-            <span className="adc-fine">ADC is a division of AMBIT Polyurethane.</span>
+            <span><Truck size={16} aria-hidden="true" /> {t.ships5}</span>
+            <span>{t.questions} <a href="mailto:orders@ambitpu.com">orders@ambitpu.com</a></span>
+            <span className="adc-fine">{t.division}</span>
           </div>
         </footer>
       </div>
     </AdcCartProvider>
+    </AdcLangProvider>
   );
 }

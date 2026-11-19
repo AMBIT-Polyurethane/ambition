@@ -3,12 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Eye, EyeOff, Minus, Plus, Search, ShoppingCart } from "lucide-react";
 import { PART_GROUPS, type Diagram, type DiagramPart, type PartGroup } from "@/lib/diagrams";
+import { groupName } from "@/lib/adc-i18n";
 
 /** What the store knows about a part: its price (or none), and whether it can go on an order. */
 export type PartInfo = { id: string | null; price: number | null; sale: number | null; quote: boolean };
 
 /** One entry on the drawing: a part can be drawn under more than one item number (a housing that only comes in its assembly). */
 const pk = (p: DiagramPart) => `${p.sku}#${p.n}`;
+const WORDS = {
+  en: { quote: "Request a quote", confirm: "Price to confirm", ask: "Ask AMBIT", every: "Every part", hide: "Hide part colors", show: "Show all parts", part: "Part", added: "Added", add: "Add to cart",
+    addedCart: "Added to your cart", click: "Click to add to cart", notYet: "Not in our catalog yet. Ask AMBIT.", find: "Part name, number or #", findLabel: "Find a part", none: "No part matches.",
+    src: (s: string) => `Drawing: ${s}. Point at any part to see it light up; click to add it to your cart.`, area: "Show one area of the gun", zoom: "Zoom the drawing", zin: "Zoom in", zout: "Zoom out" },
+  es: { quote: "Pida una cotización", confirm: "Precio por confirmar", ask: "Pregunte a AMBIT", every: "Todas las piezas", hide: "Ocultar colores", show: "Mostrar todas las piezas", part: "Parte", added: "Agregado", add: "Agregar al carrito",
+    addedCart: "Agregado al carrito", click: "Haga clic para agregarlo al carrito", notYet: "Aún no está en el catálogo. Pregunte a AMBIT.", find: "Nombre, número o # de la pieza", findLabel: "Buscar una pieza", none: "Ninguna pieza coincide.",
+    src: (s: string) => `Dibujo: ${s}. Señale cualquier pieza para resaltarla; haga clic para agregarla al carrito.`, area: "Mostrar un área de la pistola", zoom: "Acercar el dibujo", zin: "Acercar", zout: "Alejar" },
+};
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** The box around an SVG path ("M x y L x y ... Z"), in drawing pixels. */
@@ -33,6 +42,7 @@ export function PartsDiagram({
   onAdd,
   canAddMissing,
   theme = "light",
+  lang = "en",
 }: {
   diagram: Diagram;
   info: Record<string, PartInfo | undefined>;
@@ -40,7 +50,11 @@ export function PartsDiagram({
   /** ADC store: parts not in the catalog yet still go on the order, price to confirm. The app: ask AMBIT. */
   canAddMissing: boolean;
   theme?: "light" | "dark";
+  /** ADC store: the shopper's language (part names stay as printed). */
+  lang?: "en" | "es";
 }) {
+  const w = WORDS[lang];
+  const gname = (g: PartGroup) => (lang === "es" ? groupName(PART_GROUPS[g].label, "es") : PART_GROUPS[g].label);
   const [hot, setHot] = useState<{ key: string; k: number } | null>(null);
   const [pinned, setPinned] = useState<{ key: string; k: number } | null>(null);
   const [only, setOnly] = useState<PartGroup | null>(null);
@@ -68,8 +82,8 @@ export function PartsDiagram({
 
   const priceText = (sku: string) => {
     const i = info[sku];
-    if (!i) return canAddMissing ? "Price to confirm" : "Ask AMBIT";
-    if (i.quote || i.price === null) return "Request a quote";
+    if (!i) return canAddMissing ? w.confirm : w.ask;
+    if (i.quote || i.price === null) return w.quote;
     return usd(i.sale ?? i.price);
   };
   const addable = (sku: string) => Boolean(info[sku]) || canAddMissing;
@@ -125,21 +139,21 @@ export function PartsDiagram({
 
   return (
     <div className={`pd ${theme}`}>
-      <div className="pd-legend" role="group" aria-label="Show one area of the gun">
-        <button type="button" className={!only ? "on" : undefined} onClick={() => setOnly(null)}>Every part</button>
+      <div className="pd-legend" role="group" aria-label={w.area}>
+        <button type="button" className={!only ? "on" : undefined} onClick={() => setOnly(null)}>{w.every}</button>
         {groups.map((g) => (
           <button key={g} type="button" className={only === g ? "on" : undefined} onClick={() => setOnly(only === g ? null : g)}>
             <span className="pd-sw" style={{ background: PART_GROUPS[g].color }} aria-hidden="true" />
-            {PART_GROUPS[g].label}
+            {gname(g)}
           </button>
         ))}
         <button type="button" className={showAll ? "on" : undefined} onClick={() => setShowAll((v) => !v)} aria-pressed={showAll}>
-          {showAll ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />} {showAll ? "Hide part colors" : "Show all parts"}
+          {showAll ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />} {showAll ? w.hide : w.show}
         </button>
-        <span className="pd-zoom" role="group" aria-label="Zoom the drawing">
-          <button type="button" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label="Zoom out"><Minus size={16} /></button>
+        <span className="pd-zoom" role="group" aria-label={w.zoom}>
+          <button type="button" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label={w.zout}><Minus size={16} /></button>
           <span>{Math.round(zoom * 100)}%</span>
-          <button type="button" onClick={() => setZoom((z) => Math.min(2.5, z + 0.5))} disabled={zoom >= 2.5} aria-label="Zoom in"><Plus size={16} /></button>
+          <button type="button" onClick={() => setZoom((z) => Math.min(2.5, z + 0.5))} disabled={zoom >= 2.5} aria-label={w.zin}><Plus size={16} /></button>
         </span>
       </div>
 
@@ -182,17 +196,17 @@ export function PartsDiagram({
               >
                 <span className="pd-tip-h">
                   <span className="pd-sw" style={{ background: PART_GROUPS[tipPart.group].color }} aria-hidden="true" />
-                  {tipPart.n ? `#${tipPart.n} · ` : ""}Part {tipPart.sku}
+                  {tipPart.n ? `#${tipPart.n} · ` : ""}{w.part} {tipPart.sku}
                 </span>
                 <b>{tipPart.name}</b>
-                {tipPart.note ? <span className="pd-tip-note">{tipPart.note}</span> : null}
+                {tipPart.note ? <span className="pd-tip-note">{lang === "es" && tipPart.noteEs ? tipPart.noteEs : tipPart.note}</span> : null}
                 <span className="pd-tip-p">{priceText(tipPart.sku)}</span>
                 {pinned && touch.current && pinned.key === pk(tipPart) && addable(tipPart.sku) ? (
                   <button type="button" className="pd-tip-add" onClick={() => add(tipPart)}>
-                    {added[tipPart.sku] ? <><Check size={15} strokeWidth={3} /> Added</> : <><ShoppingCart size={15} /> Add to cart</>}
+                    {added[tipPart.sku] ? <><Check size={15} strokeWidth={3} /> {w.added}</> : <><ShoppingCart size={15} /> {w.add}</>}
                   </button>
                 ) : (
-                  <span className="pd-tip-a">{added[tipPart.sku] ? "Added to your cart" : addable(tipPart.sku) ? "Click to add to cart" : "Not in our catalog yet. Ask AMBIT."}</span>
+                  <span className="pd-tip-a">{added[tipPart.sku] ? w.addedCart : addable(tipPart.sku) ? w.click : w.notYet}</span>
                 )}
               </div>
             ) : null}
@@ -202,7 +216,7 @@ export function PartsDiagram({
         <div className="pd-side">
           <label className="pd-find">
             <Search size={16} aria-hidden="true" />
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Part name, number or #" aria-label="Find a part" />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={w.find} aria-label={w.findLabel} />
           </label>
           <ul className="pd-list">
             {listed.map((p) => (
@@ -231,11 +245,11 @@ export function PartsDiagram({
                 </button>
               </li>
             ))}
-            {!listed.length ? <li className="pd-none">No part matches.</li> : null}
+            {!listed.length ? <li className="pd-none">{w.none}</li> : null}
           </ul>
         </div>
       </div>
-      <p className="pd-src">Drawing: {diagram.source}. Point at any part to see it light up; click to add it to your cart.</p>
+      <p className="pd-src">{w.src(diagram.source)}</p>
     </div>
   );
 }

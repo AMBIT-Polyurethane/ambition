@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Camera, Tag } from "lucide-react";
 import type { AdcItem, AdcSale } from "@/lib/adc";
 import { AdcAddButton, AdcPrice } from "@/components/adc/bits";
+import { catName, dict, type Lang } from "@/lib/adc-i18n";
 
 const href = (sku: string) => `/adc/p/${encodeURIComponent(sku)}`;
 
@@ -14,28 +15,29 @@ export function AdcImg({ src, alt, className }: { src: string | null; alt: strin
   );
 }
 
-export function foamNote(i: Pick<AdcItem, "quote">, sale: AdcSale | null) {
-  return i.quote && sale?.foam_off_per_lb ? `${sale.name}: $${Number(sale.foam_off_per_lb).toFixed(2)} per lb off your price` : null;
+export function foamNote(i: Pick<AdcItem, "quote">, sale: AdcSale | null, lang: Lang = "en") {
+  return i.quote && sale?.foam_off_per_lb ? dict(lang).foamOff(sale.name, `$${Number(sale.foam_off_per_lb).toFixed(2)}`) : null;
 }
 
 /** A grid of product cards: big photo, part number, name, price, Add to cart. */
-export function AdcGrid({ items, sale }: { items: AdcItem[]; sale: AdcSale | null }) {
+export function AdcGrid({ items, sale, lang = "en" }: { items: AdcItem[]; sale: AdcSale | null; lang?: Lang }) {
+  const t = dict(lang);
   return (
     <div className="adc-grid">
       {items.map((i) => {
-        const note = foamNote(i, sale);
+        const note = foamNote(i, sale, lang);
         return (
           <div key={i.id} className="adc-card">
             <Link href={href(i.sku)} className="adc-card-ph" aria-label={i.name}>
               <AdcImg src={i.image} alt={i.name} />
-              {i.sale_price !== null ? <span className="adc-flag"><Tag size={13} aria-hidden="true" /> {sale?.name ?? "Sale"}</span> : null}
+              {i.sale_price !== null ? <span className="adc-flag"><Tag size={13} aria-hidden="true" /> {sale?.name ?? t.sale}</span> : null}
             </Link>
             <div className="adc-card-b">
-              <span className="adc-sku">{i.sku}{i.category ? ` · ${i.category.toUpperCase()}` : ""}</span>
+              <span className="adc-sku">{i.sku}{i.category ? ` · ${catName(i.category, lang).toUpperCase()}` : ""}</span>
               <Link href={href(i.sku)} className="adc-card-n">{i.name}</Link>
               <AdcPrice list={i.list_price} sale={i.sale_price} quote={i.quote} />
               {note ? <span className="adc-promo">{note}</span> : null}
-              <AdcAddButton id={i.id} sku={i.sku} name={i.name} image={i.image} label={i.quote ? "Add to quote request" : "Add to cart"} />
+              <AdcAddButton id={i.id} sku={i.sku} name={i.name} image={i.image} quote={i.quote} />
             </div>
           </div>
         );
