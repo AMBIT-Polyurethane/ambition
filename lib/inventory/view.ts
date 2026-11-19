@@ -22,6 +22,8 @@ export type StockRow = {
   name: string;
   category_id: string | null;
   unit: string;
+  /** The product's photo (Admin → Products & pricing → Product photos), or null. */
+  image_url: string | null;
   on_hand: number | null;
   pending: number;
   net: number | null;
@@ -63,7 +65,7 @@ export async function inventorySheets(supabase: SupabaseClient): Promise<SheetIn
   return (data ?? []) as SheetInfo[];
 }
 
-const INV_COLS = "product_id, sku, on_hand, reorder_point, max_qty, last_counted, counted_by, sheet_row, product:products(name, category_id, unit)";
+const INV_COLS = "product_id, sku, on_hand, reorder_point, max_qty, last_counted, counted_by, sheet_row, product:products(name, category_id, unit, image_url)";
 async function invRows(supabase: SupabaseClient, branch: string) {
   const q = (cols: string) => supabase.from("inventory").select(cols).eq("branch_id", branch).eq("on_sheet", true).order("sheet_row").range(0, 4999);
   const first = await q(`${INV_COLS}, rop_app, rop_set_by_name`);
@@ -119,7 +121,7 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
     last_counted: string | null;
     counted_by: string | null;
     sheet_row: number | null;
-    product: { name: string; category_id: string | null; unit: string } | null;
+    product: { name: string; category_id: string | null; unit: string; image_url: string | null } | null;
   };
   const ordered = ((rows ?? []) as unknown as Row[]).sort((a, z) => (lotOrder.get(a.product_id) ?? 2e9) - (lotOrder.get(z.product_id) ?? 2e9));
   return ordered.map((r) => {
@@ -130,6 +132,7 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
       name: r.product?.name ?? r.sku,
       category_id: r.product?.category_id ?? null,
       unit: r.product?.unit ?? "each",
+      image_url: r.product?.image_url ?? null,
       on_hand: n(r.on_hand),
       pending: n(l?.pending) ?? 0,
       net: n(l?.net),

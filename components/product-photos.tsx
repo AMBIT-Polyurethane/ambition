@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { Camera, Images, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { RASTER, runPool, toJpeg, uploadProductPhoto } from "@/lib/images";
+import { ProductPhoto } from "@/components/product-photo";
 import { setProductImages, type ImportResult } from "@/app/(app)/admin/actions";
 
 // One product's photo (inside the product's edit panel).
-export function ProductPhotoField({ sku, url }: { sku: string; url: string | null }) {
+export function ProductPhotoField({ sku, url, name }: { sku: string; url: string | null; name?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<ImportResult | null>(null);
@@ -18,7 +19,7 @@ export function ProductPhotoField({ sku, url }: { sku: string; url: string | nul
     setBusy(true);
     setMsg(null);
     try {
-      const jpeg = await toJpeg(file);
+      const jpeg = await toJpeg(file, 1600, 0.9);
       const publicUrl = await uploadProductPhoto(createClient(), sku, jpeg);
       setMsg(await setProductImages([{ sku, url: publicUrl }]));
       router.refresh();
@@ -37,11 +38,11 @@ export function ProductPhotoField({ sku, url }: { sku: string; url: string | nul
   };
 
   return (
-    <div className="row wrap" style={{ gap: 12 }}>
-      {url ? <img className="thumb lg" src={url} alt="" /> : <div className="thumb lg empty"><Camera size={22} /></div>}
+    <div className="row wrap prd-photo-field" style={{ gap: 14, alignItems: "flex-end" }}>
+      <ProductPhoto src={url} alt={name ?? sku} size={220} className="prd-big" />
       <div className="col tight">
-        <label className="btn sm dark" style={{ alignSelf: "flex-start" }}>
-          <Camera size={14} /> {busy ? "Saving…" : url ? "Replace photo" : "Add photo"}
+        <label className="b2 sm" style={{ alignSelf: "flex-start" }}>
+          <Camera size={16} /> {busy ? "Saving…" : url ? "Replace photo" : "Add photo"}
           <input type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
         </label>
         {url ? (
@@ -87,7 +88,7 @@ export function BulkPhotoUpload({ skus }: { skus: string[] }) {
       const failed: string[] = [];
       await runPool(matched, 4, async ({ sku, file }) => {
         try {
-          saved.push({ sku, url: await uploadProductPhoto(supabase, sku, await toJpeg(file)) });
+          saved.push({ sku, url: await uploadProductPhoto(supabase, sku, await toJpeg(file, 1600, 0.9)) });
         } catch {
           failed.push(sku);
         }

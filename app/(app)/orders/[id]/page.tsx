@@ -56,6 +56,7 @@ import type { Branch, Company, Order, OrderItem, OrderStage } from "@/lib/types"
 import { companyTax } from "@/lib/tax-server";
 import { TAX_STATE, taxLine } from "@/lib/tax";
 import { CatIcon, lookFor } from "@/components/cat-icon";
+import { ProductPhoto } from "@/components/product-photo";
 import { Help } from "@/components/help";
 import { Steps } from "@/components/order2/steps";
 import { FileChips, ScheduleForm, UpNow } from "@/components/order2/up-now";
@@ -507,7 +508,11 @@ export default async function OrderDetailPage({
         const noneRecorded = emp && order.status === "completed" && !ps?.length && isoOrFoam(l);
         return (
           <div key={l.id} className="item2">
-            <CatIcon look={lookFor(l.product?.category_id, l.sku, l.name)} size={44} />
+            {l.product?.image_url ? (
+              <ProductPhoto src={l.product.image_url} alt={l.name} size={72} className="item2-ph" />
+            ) : (
+              <CatIcon look={lookFor(l.product?.category_id, l.sku, l.name)} size={44} />
+            )}
             <div className="item2-b">
               <span className="item2-n">{l.name}</span>
               {ps?.length || noneRecorded ? (

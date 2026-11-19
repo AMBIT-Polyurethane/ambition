@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { CatIcon, lookFor } from "@/components/cat-icon";
+import { ProductPhoto } from "@/components/product-photo";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, readLots, writeLots, NO_LOTS, type Cart, type LotPicks } from "@/lib/cart";
 import { money, plural } from "@/lib/format";
 import { customerDetails, customerFavorites, customerRep, placeOrder, type Favorite } from "@/app/(app)/order/actions";
@@ -565,13 +566,16 @@ export function OrderBuilder(props: Props) {
     });
   };
 
+  // Every product shows its photo big and clear next to it (tap for full size). No photo yet: its category icon, same size.
   const thumb = (p: CatalogProduct, size?: "sm") =>
     p.image_url ? (
-      <button type="button" className="thumb-btn" onClick={() => setZoom(p)} aria-label={`Bigger photo of ${p.name}`}>
-        <img className={`thumb${size ? " " + size : ""}`} src={p.image_url} alt="" loading="lazy" />
+      <button type="button" className={`thumb-btn${size ? "" : " ob-ph"}`} onClick={() => setZoom(p)} aria-label={`Bigger photo of ${p.name}`}>
+        <ProductPhoto src={p.image_url} alt="" size={size ? 48 : 104} zoom={false} />
       </button>
     ) : size ? null : (
-      <CatIcon look={lookFor(p.category_id, p.sku, p.name)} size={44} />
+      <span className="ob-ph ob-noph" aria-hidden="true">
+        <CatIcon look={lookFor(p.category_id, p.sku, p.name)} size={44} />
+      </span>
     );
 
   const lightbox = zoom ? (
@@ -1237,9 +1241,10 @@ export function OrderBuilder(props: Props) {
             {catsHere.map((c) => {
               const inCat = here.filter((p) => p.category_id === c.id);
               const picked = inCat.reduce((n, p) => n + ((cart[p.id] ?? 0) > 0 ? 1 : 0), 0);
+              const hero = inCat.find((p) => p.image_url)?.image_url ?? null;
               return (
-                <button key={c.id} type="button" className="tile2" onClick={() => { setCat(c.id); window.scrollTo(0, 0); }}>
-                  <CatIcon look={lookFor(c.id, null, c.name)} size={48} />
+                <button key={c.id} type="button" className={`tile2${hero ? " has-ph" : ""}`} onClick={() => { setCat(c.id); window.scrollTo(0, 0); }}>
+                  {hero ? <img className="tile2-ph" src={hero} alt="" loading="lazy" /> : <CatIcon look={lookFor(c.id, null, c.name)} size={48} />}
                   <span className="tile2-n">{c.name}</span>
                   <span className="tile2-s">{inCat.length} {inCat.length === 1 ? "item" : "items"}</span>
                   {picked ? <span className="tile2-b" aria-label={`${picked} in this order`}>{picked}</span> : null}
