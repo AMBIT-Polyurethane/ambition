@@ -4722,14 +4722,19 @@ a.pra-row:hover { background: var(--s2); color: var(--text); }
 .pd-stage { background: #fff; border: 1px solid var(--pd-line); border-radius: 18px; overflow: auto; max-height: 80vh; }
 .pd-canvas { position: relative; min-width: 100%; }
 .pd-canvas > img { width: 100%; height: auto; display: block; user-select: none; }
-.pd-dot { position: absolute; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 11px; border: 2px solid #fff; background: var(--c); color: #fff; font: 800 10.5px/1 var(--font-archivo), system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28); transition: transform 0.12s, opacity 0.12s; z-index: 2; }
-.pd-dot.missing { border-style: dashed; }
-.pd-dot:hover, .pd-dot.on { transform: translate(-50%, -50%) scale(1.45); z-index: 4; box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 30%, transparent), 0 2px 8px rgba(0, 0, 0, 0.35); }
-.pd-dot.on { animation: pd-pulse 1.2s ease-in-out infinite; }
-@keyframes pd-pulse { 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--c) 18%, transparent), 0 2px 8px rgba(0, 0, 0, 0.35); } }
-.pd-dot.dim, .pd-box.dim { opacity: 0.12; pointer-events: none; }
-.pd-box { position: absolute; border: 0; border-radius: 3px; background: transparent; padding: 0; cursor: pointer; z-index: 1; }
-.pd-box:hover, .pd-box.on { background: color-mix(in srgb, var(--c) 22%, transparent); outline: 2px solid var(--c); }
+.pd-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* Each part: invisible until you point at it, then the part itself lights up in its color. */
+.pd-part { fill: transparent; stroke: transparent; stroke-width: 2; stroke-linejoin: round; cursor: pointer; transition: fill 0.12s, stroke 0.12s; outline: none; }
+.pd-part.row { stroke-width: 1.5; }
+.pd-part.off { cursor: help; }
+.pd-part:hover, .pd-part:focus-visible, .pd-part.on { fill: color-mix(in srgb, var(--c) 34%, transparent); stroke: var(--c); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c) 70%, transparent)); }
+.pd-part.spot:hover, .pd-part.spot.on { fill: color-mix(in srgb, var(--c) 45%, transparent); }
+.pd-canvas.all .pd-part:not(.row) { fill: color-mix(in srgb, var(--c) 14%, transparent); stroke: color-mix(in srgb, var(--c) 55%, transparent); stroke-width: 1; }
+.pd-canvas .pd-part.tint { fill: color-mix(in srgb, var(--c) 24%, transparent); stroke: var(--c); stroke-width: 1.2; }
+.pd-canvas.hint .pd-part:not(.row) { animation: pd-hint 1.3s ease-in-out 2; }
+@keyframes pd-hint { 0%, 100% { fill: transparent; stroke: transparent; } 50% { fill: color-mix(in srgb, var(--c) 22%, transparent); stroke: color-mix(in srgb, var(--c) 60%, transparent); } }
+.pd-tip-add { margin-top: 4px; height: 34px; border: 0; border-radius: 9px; background: #cf2e20; color: #fff; font: inherit; font-size: 13.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+.pd-tip.live { pointer-events: auto; }
 .pd-tip { position: absolute; z-index: 6; transform: translate(-50%, calc(-100% - 18px)); width: 240px; padding: 10px 12px; border-radius: 12px; background: #0a0a0b; color: #f5f5f7; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; gap: 3px; pointer-events: none; font-size: 13px; }
 .pd-tip.below { transform: translate(-50%, 22px); }
 .pd-tip-h { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #b4b4bc; }
@@ -4755,8 +4760,9 @@ a.pra-row:hover { background: var(--s2); color: var(--text); }
   .pd-body { grid-template-columns: minmax(0, 1fr); }
   .pd-list { max-height: 420px; }
   .pd-zoom { margin-left: 0; }
-  .pd-dot { width: 18px; height: 18px; font-size: 9px; }
-  .pd-tip { width: 200px; }
+  .pd-tip { width: 190px; padding: 8px 10px; }
+  .pd-tip b { font-size: 13px; }
+  .pd-tip-p { font-size: 14px; }
 }
 
 /* =====================================================================================

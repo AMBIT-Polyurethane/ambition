@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, Minus, Plus, Search, ShoppingCart } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Eye, EyeOff, Minus, Plus, Search, ShoppingCart } from "lucide-react";
 import { PART_GROUPS, type Diagram, type DiagramPart, type PartGroup } from "@/lib/diagrams";
 
 /** What the store knows about a part: its price (or none), and whether it can go on an order. */
@@ -9,9 +9,21 @@ export type PartInfo = { id: string | null; price: number | null; sale: number |
 
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
+/** The box around an SVG path ("M x y L x y ... Z"), in drawing pixels. */
+function boxOf(d: string): [number, number, number, number] {
+  const n = d.match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i + 1 < n.length; i += 2) {
+    x0 = Math.min(x0, n[i]); x1 = Math.max(x1, n[i]);
+    y0 = Math.min(y0, n[i + 1]); y1 = Math.max(y1, n[i + 1]);
+  }
+  return [x0, y0, x1, y1];
+}
+
 /**
- * The exploded view: a colored dot on every part, a box on every table row. Hover (or tap) one to see the part number and
- * price; click to add it to the cart. The list beside it does the same, and the colors filter by area of the gun.
+ * The exploded view. Nothing covers the drawing: move over a part and the part itself lights up in its color, with its
+ * number and price. Click it to add it to the cart (on a phone: tap to see it, tap Add). The rows in the drawing's own
+ * tables work the same way. The colored buttons tint one area of the gun; "Show all parts" tints every part you can buy.
  */
 export function PartsDiagram({
   diagram,
@@ -23,19 +35,27 @@ export function PartsDiagram({
   diagram: Diagram;
   info: Record<string, PartInfo | undefined>;
   onAdd: (part: DiagramPart, info: PartInfo | undefined) => void;
-  /** ADC store: parts not in the catalog still go on the order, price to confirm. The app: ask AMBIT. */
+  /** ADC store: parts not in the catalog yet still go on the order, price to confirm. The app: ask AMBIT. */
   canAddMissing: boolean;
   theme?: "light" | "dark";
 }) {
-  const [hot, setHot] = useState<string | null>(null);
-  const [pinned, setPinned] = useState<string | null>(null);
+  const [hot, setHot] = useState<{ sku: string; k: number } | null>(null);
+  const [pinned, setPinned] = useState<{ sku: string; k: number } | null>(null);
   const [only, setOnly] = useState<PartGroup | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [hint, setHint] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [q, setQ] = useState("");
   const [added, setAdded] = useState<Record<string, number>>({});
+  const touch = useRef(false);
   const focus = hot ?? pinned;
 
-  // One row per part number (some show in the drawing more than once).
+  // A soft flash of every part when the drawing first shows, so people see the parts are live.
+  useEffect(() => {
+    const t = setTimeout(() => setHint(false), 2600);
+    return () => clearTimeout(t);
+  }, []);
+
   const rows = useMemo(() => {
     const seen = new Set<string>();
     return diagram.parts.filter((p) => (seen.has(p.sku) ? false : (seen.add(p.sku), true)));
@@ -57,8 +77,49 @@ export function PartsDiagram({
     setAdded((m) => ({ ...m, [p.sku]: (m[p.sku] ?? 0) + 1 }));
     setTimeout(() => setAdded((m) => ({ ...m, [p.sku]: Math.max(0, (m[p.sku] ?? 1) - 1) })), 1600);
   };
-  const tipFor = focus ? diagram.parts.find((p) => p.sku === focus) : null;
-  const tipAt = tipFor?.at?.[0] ?? (tipFor?.box?.[0] ? [tipFor.box[0][0] + tipFor.box[0][2] / 2, tipFor.box[0][1]] : null);
+  // Mouse: a click adds it. Touch: the first tap shows it, a second tap (or Add) adds it.
+  const choose = (p: DiagramPart, k: number) => {
+    if (touch.current && (pinned?.sku !== p.sku)) {
+      setPinned({ sku: p.sku, k });
+      return;
+    }
+    setPinned({ sku: p.sku, k });
+    add(p);
+  };
+
+  // Where the tip goes: over the part copy being pointed at (or its table row).
+  const tipPart = focus ? diagram.parts.find((p) => p.sku === focus.sku) : null;
+  const tipBox = (() => {
+    if (!tipPart || !focus) return null;
+    const d = tipPart.shapes?.[focus.k] ?? tipPart.shapes?.[0];
+    if (d) return boxOf(d);
+    const b = tipPart.box?.[0];
+    if (b) return [b[0], b[1], b[0] + b[2], b[1] + b[3]] as [number, number, number, number];
+    const a = tipPart.at?.[focus.k] ?? tipPart.at?.[0];
+    return a ? ([a[0] - 10, a[1] - 10, a[0] + 10, a[1] + 10] as [number, number, number, number]) : null;
+  })();
+  const below = tipBox ? tipBox[1] / diagram.h < 0.26 : false;
+
+  const partProps = (p: DiagramPart, k: number, label: string) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    "aria-label": addable(p.sku) ? `Add ${label}` : label,
+    onMouseEnter: () => setHot({ sku: p.sku, k }),
+    onMouseLeave: () => setHot(null),
+    onFocus: () => setHot({ sku: p.sku, k }),
+    onBlur: () => setHot(null),
+    onPointerDown: (e: React.PointerEvent) => {
+      touch.current = e.pointerType === "touch" || e.pointerType === "pen";
+    },
+    onClick: () => choose(p, k),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        touch.current = false;
+        choose(p, k);
+      }
+    },
+  });
 
   return (
     <div className={`pd ${theme}`}>
@@ -70,6 +131,9 @@ export function PartsDiagram({
             {PART_GROUPS[g].label}
           </button>
         ))}
+        <button type="button" className={showAll ? "on" : undefined} onClick={() => setShowAll((v) => !v)} aria-pressed={showAll}>
+          {showAll ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />} {showAll ? "Hide part colors" : "Show all parts"}
+        </button>
         <span className="pd-zoom" role="group" aria-label="Zoom the drawing">
           <button type="button" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label="Zoom out"><Minus size={16} /></button>
           <span>{Math.round(zoom * 100)}%</span>
@@ -79,59 +143,54 @@ export function PartsDiagram({
 
       <div className="pd-body">
         <div className="pd-stage" onMouseLeave={() => setHot(null)}>
-          <div className="pd-canvas" style={{ width: `${zoom * 100}%` }}>
+          <div className={`pd-canvas${hint ? " hint" : ""}${showAll ? " all" : ""}${only ? " group" : ""}`} style={{ width: `${zoom * 100}%` }}>
             <img src={diagram.image} alt={diagram.source} width={diagram.w} height={diagram.h} draggable={false} />
-            {diagram.parts.flatMap((p, i) => {
-              const dim = only && p.group !== only;
-              const on = focus === p.sku;
-              const color = PART_GROUPS[p.group].color;
-              const label = `${p.n ? `Item ${p.n}, ` : ""}${p.name}, part ${p.sku}, ${priceText(p.sku)}`;
-              const common = {
-                onMouseEnter: () => setHot(p.sku),
-                onFocus: () => setHot(p.sku),
-                onBlur: () => setHot(null),
-                onClick: () => {
-                  setPinned(p.sku);
-                  add(p);
-                },
-                "aria-label": addable(p.sku) ? `Add ${label}` : label,
-              };
-              return [
-                ...(p.at ?? []).map(([x, y], k) => (
-                  <button
-                    key={`d${i}-${k}`}
-                    type="button"
-                    className={`pd-dot${on ? " on" : ""}${dim ? " dim" : ""}${info[p.sku] ? "" : " missing"}`}
-                    style={{ left: `${(x / diagram.w) * 100}%`, top: `${(y / diagram.h) * 100}%`, ["--c" as string]: color }}
-                    {...common}
-                  >
-                    {added[p.sku] ? <Check size={11} strokeWidth={3} /> : p.n || "+"}
-                  </button>
-                )),
-                ...(p.box ?? []).map(([x, y, w, h], k) => (
-                  <button
-                    key={`b${i}-${k}`}
-                    type="button"
-                    className={`pd-box${on ? " on" : ""}${dim ? " dim" : ""}`}
-                    style={{ left: `${(x / diagram.w) * 100}%`, top: `${(y / diagram.h) * 100}%`, width: `${(w / diagram.w) * 100}%`, height: `${(h / diagram.h) * 100}%`, ["--c" as string]: color }}
-                    {...common}
-                  />
-                )),
-              ];
-            })}
-            {tipFor && tipAt ? (
+            <svg className="pd-svg" viewBox={`0 0 ${diagram.w} ${diagram.h}`} preserveAspectRatio="none" aria-label="Parts on the drawing">
+              {diagram.parts.flatMap((p, i) => {
+                const color = PART_GROUPS[p.group].color;
+                const label = `${p.n ? `Item ${p.n}, ` : ""}${p.name}, part ${p.sku}, ${priceText(p.sku)}`;
+                const state = `${focus?.sku === p.sku ? " on" : ""}${only === p.group ? " tint" : ""}${addable(p.sku) ? "" : " off"}`;
+                const style = { ["--c" as string]: color } as React.CSSProperties;
+                const els: React.ReactNode[] = [];
+                // The part's own outline (every copy in the drawing).
+                (p.shapes ?? []).forEach((d, k) => {
+                  els.push(<path key={`s${i}-${k}`} d={d} className={`pd-part${state}`} style={style} {...partProps(p, k, label)} />);
+                });
+                // No outline traced: an invisible spot where it's drawn.
+                if (!p.shapes?.length) {
+                  (p.at ?? []).forEach(([x, y], k) => {
+                    els.push(<circle key={`c${i}-${k}`} cx={x} cy={y} r={11} className={`pd-part spot${state}`} style={style} {...partProps(p, k, label)} />);
+                  });
+                }
+                // Rows in the drawing's own tables.
+                (p.box ?? []).forEach(([x, y, w, h], k) => {
+                  els.push(<rect key={`b${i}-${k}`} x={x} y={y} width={w} height={h} rx={2} className={`pd-part row${state}`} style={style} {...partProps(p, 100 + k, label)} />);
+                });
+                return els;
+              })}
+            </svg>
+            {tipPart && tipBox ? (
               <div
-                className={`pd-tip${tipAt[1] / diagram.h < 0.25 ? " below" : ""}`}
-                style={{ left: `${Math.min(88, Math.max(12, (tipAt[0] / diagram.w) * 100))}%`, top: `${(tipAt[1] / diagram.h) * 100}%` }}
+                className={`pd-tip${below ? " below" : ""}${pinned && touch.current && pinned.sku === tipPart.sku ? " live" : ""}`}
+                style={{
+                  left: `${Math.min(88, Math.max(12, (((tipBox[0] + tipBox[2]) / 2) / diagram.w) * 100))}%`,
+                  top: `${((below ? tipBox[3] : tipBox[1]) / diagram.h) * 100}%`,
+                }}
                 role="status"
               >
                 <span className="pd-tip-h">
-                  <span className="pd-sw" style={{ background: PART_GROUPS[tipFor.group].color }} aria-hidden="true" />
-                  {tipFor.n ? `#${tipFor.n} · ` : ""}Part {tipFor.sku}
+                  <span className="pd-sw" style={{ background: PART_GROUPS[tipPart.group].color }} aria-hidden="true" />
+                  {tipPart.n ? `#${tipPart.n} · ` : ""}Part {tipPart.sku}
                 </span>
-                <b>{tipFor.name}</b>
-                <span className="pd-tip-p">{priceText(tipFor.sku)}</span>
-                <span className="pd-tip-a">{added[tipFor.sku] ? "Added to your cart" : addable(tipFor.sku) ? "Click to add to cart" : "Not in our catalog yet. Ask AMBIT."}</span>
+                <b>{tipPart.name}</b>
+                <span className="pd-tip-p">{priceText(tipPart.sku)}</span>
+                {pinned && touch.current && pinned.sku === tipPart.sku && addable(tipPart.sku) ? (
+                  <button type="button" className="pd-tip-add" onClick={() => add(tipPart)}>
+                    {added[tipPart.sku] ? <><Check size={15} strokeWidth={3} /> Added</> : <><ShoppingCart size={15} /> Add to cart</>}
+                  </button>
+                ) : (
+                  <span className="pd-tip-a">{added[tipPart.sku] ? "Added to your cart" : addable(tipPart.sku) ? "Click to add to cart" : "Not in our catalog yet. Ask AMBIT."}</span>
+                )}
               </div>
             ) : null}
           </div>
@@ -146,8 +205,8 @@ export function PartsDiagram({
             {listed.map((p) => (
               <li
                 key={p.sku}
-                className={focus === p.sku ? "on" : undefined}
-                onMouseEnter={() => setHot(p.sku)}
+                className={focus?.sku === p.sku ? "on" : undefined}
+                onMouseEnter={() => setHot({ sku: p.sku, k: 0 })}
                 onMouseLeave={() => setHot(null)}
               >
                 <span className="pd-n" style={{ background: PART_GROUPS[p.group].color }}>{p.n || "·"}</span>
@@ -160,7 +219,7 @@ export function PartsDiagram({
                   className="pd-add"
                   disabled={!addable(p.sku)}
                   onClick={() => {
-                    setPinned(p.sku);
+                    setPinned({ sku: p.sku, k: 0 });
                     add(p);
                   }}
                   aria-label={addable(p.sku) ? `Add ${p.name} (${p.sku}) to the cart` : `${p.name} isn't in the catalog yet`}
@@ -173,7 +232,7 @@ export function PartsDiagram({
           </ul>
         </div>
       </div>
-      <p className="pd-src">Drawing: {diagram.source}. Dots with a dashed ring aren&apos;t in the catalog yet{canAddMissing ? "; they go on your order and we confirm the price" : ""}.</p>
+      <p className="pd-src">Drawing: {diagram.source}. Point at any part to see it light up; click to add it to your cart.</p>
     </div>
   );
 }

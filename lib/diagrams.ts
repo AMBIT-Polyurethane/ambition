@@ -7,6 +7,8 @@
  * they go on the order with "price to confirm"; in the app they say to ask AMBIT.
  */
 
+import { ST1_SHAPES } from "@/lib/diagram-shapes-st1";
+
 export type PartGroup = "body" | "a" | "b" | "air" | "seal" | "mix" | "check";
 
 export const PART_GROUPS: Record<PartGroup, { label: string; color: string }> = {
@@ -25,8 +27,10 @@ export type DiagramPart = {
   sku: string;
   name: string;
   group: PartGroup;
-  /** Dots: [x, y] in drawing pixels. */
+  /** Where the part is drawn: [x, y] in drawing pixels (one per copy; places the tip). */
   at?: [number, number][];
+  /** The part's own outline in the drawing (SVG paths, drawing pixels): hover lights up the part itself. */
+  shapes?: string[];
   /** Table rows: [x, y, w, h]. */
   box?: [number, number, number, number][];
   qty?: string;
@@ -146,6 +150,12 @@ for (const p of ST1.parts) {
   if (ST1.parts.find((x) => x.n === p.n) !== p) continue;
   const y = ST1_ROWS[k - 1];
   p.box = [...(p.box ?? []), [985, Math.round(y - 6.5), 197, 13]];
+}
+
+// Each part's outline, traced from the drawing (lib/diagram-shapes-st1.ts). A part listed twice gets them once.
+for (const p of ST1.parts) {
+  if (ST1.parts.find((x) => x.sku === p.sku) !== p) continue;
+  if (ST1_SHAPES[p.sku]) p.shapes = ST1_SHAPES[p.sku];
 }
 
 export const DIAGRAMS: Diagram[] = [ST1];
