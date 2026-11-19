@@ -5125,7 +5125,9 @@ body:has(.adc) { background: #f4f4f2; }
 .ptn .now.ptn-now { color: var(--p-color); }
 .ptn .off.ptn-off { background: color-mix(in srgb, var(--p-color) 14%, #fff); color: var(--p-color); }
 .ptn-foot { background: #101412; }
-.ptn-foot-logo { height: 30px; width: auto; }
+.ptn .ptn-foot-logo { height: 30px; width: auto; max-width: 220px; object-fit: contain; align-self: flex-start; flex: none; }
+.ptn .ptn-foot a { color: #8fd1ad; }
+.ptn .ptn-foot a:hover { color: #c3ebd4; }
 /* cart */
 .ptn-cart { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .ptn-lines, .ptn-check { background: var(--a-card); border: 1px solid var(--a-line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
