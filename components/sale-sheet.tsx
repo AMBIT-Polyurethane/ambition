@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CircleAlert, CircleCheck, FileSpreadsheet, Flame, Plus, Search, Trash2, Wand2, X } from "lucide-react";
 import { addSaleItems, loadCosts, removeSaleItems, saveSalePrices, saveSaleSettings, type SaleResult } from "@/app/(app)/admin/sale/actions";
 
-export type SaleRow = { id: string; sku: string; name: string; category: string; image: string | null; cost: number | null; price: number | null; foam: boolean; sale: number | null };
+export type SaleRow = { id: string; sku: string; name: string; category: string; image: string | null; cost: number | null; price: number | null; foam: boolean; perCustomer?: boolean; sale: number | null };
 type Sale = { id: number; name: string; starts_on: string; ends_on: string; foam_off_per_lb: number | null };
 
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -109,7 +109,8 @@ export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows:
       setMsg({ ok: false, message: "Couldn't read that file. Pick the Item Master workbook (.xlsx)." });
     }
   };
-  const addable = others.filter((r) => !r.foam && r.price !== null);
+  // Anything but spray foam with a price or our cost (fiberglass and blow hoses have no list price, but we know the cost).
+  const addable = others.filter((r) => !r.foam && (r.price !== null || r.cost !== null));
   const addWords = addQ.toLowerCase().split(/\s+/).filter(Boolean);
   const addShown = addWords.length ? addable.filter((r) => addWords.every((w) => `${r.sku} ${r.name}`.toLowerCase().includes(w))).slice(0, 12) : [];
 
@@ -224,7 +225,7 @@ export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows:
                   <td className="sku">{r.sku}</td>
                   <td className="nm"><b>{r.name}</b><span>{r.category}</span></td>
                   <td className="n">{r.cost === null ? <span className="faint">-</span> : usd(r.cost)}</td>
-                  <td className="n">{r.price === null ? <span className="faint">-</span> : usd(r.price)}</td>
+                  <td className="n">{r.price === null ? <span className="faint">{r.perCustomer ? "Per customer" : "-"}</span> : usd(r.price)}</td>
                   <td className="n">{m0 === null ? <span className="faint">-</span> : pct(m0)}</td>
                   <td className="n bf">
                     <span className="ss-in">

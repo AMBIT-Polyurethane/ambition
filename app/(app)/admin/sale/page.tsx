@@ -6,7 +6,7 @@ import { SaleSheet, type SaleRow } from "@/components/sale-sheet";
 export const metadata = { title: "Black Friday sale" };
 export const dynamic = "force-dynamic";
 
-type P = { id: string; sku: string; name: string; list_price: number | null; image_url: string | null; adc_image_url: string | null; customer_priced: boolean | null; active: boolean; admin_only: boolean | null; category: { name: string; customer_priced: boolean; admin_only: boolean | null } | null };
+type P = { id: string; sku: string; name: string; category_id: string | null; list_price: number | null; image_url: string | null; adc_image_url: string | null; customer_priced: boolean | null; active: boolean; admin_only: boolean | null; category: { name: string; customer_priced: boolean; admin_only: boolean | null } | null };
 
 /** The sale sheet: every item on the ADC sale with our cost, today's price and markup, and the sale price to type in. */
 export default async function SalePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -25,7 +25,7 @@ export default async function SalePage({ searchParams }: { searchParams: Promise
   if (!sale) return <main className="shell"><div className="alert warn">No sale set up yet.</div></main>;
   const [{ data: items }, { data: prods }, { data: costs }] = await Promise.all([
     supabase.from("web_sale_items").select("product_id, price").eq("sale_id", sale.id).limit(5000),
-    supabase.from("products").select("id, sku, name, list_price, image_url, adc_image_url, customer_priced, active, admin_only, category:categories(name, customer_priced, admin_only)").eq("active", true).order("sku").limit(5000),
+    supabase.from("products").select("id, sku, name, category_id, list_price, image_url, adc_image_url, customer_priced, active, admin_only, category:categories(name, customer_priced, admin_only)").eq("active", true).order("sku").limit(5000),
     supabase.from("product_costs").select("product_id, cost").limit(5000),
   ]);
   const cost = new Map(((costs ?? []) as { product_id: string; cost: number }[]).map((c) => [c.product_id, Number(c.cost)]));
@@ -39,7 +39,9 @@ export default async function SalePage({ searchParams }: { searchParams: Promise
     image: p.adc_image_url ?? p.image_url,
     cost: cost.get(p.id) ?? null,
     price: p.list_price === null ? null : Number(p.list_price),
-    foam: Boolean(p.customer_priced ?? p.category?.customer_priced),
+    // Spray foam is discounted $/lb off each customer's price instead (the foam setting above the sheet).
+    foam: p.category_id === "ambit-foam",
+    perCustomer: p.list_price === null || Boolean(p.customer_priced ?? p.category?.customer_priced),
     sale: onSale.get(p.id) ?? null,
   });
   const rows = all.filter((p) => onSale.has(p.id)).map(row);

@@ -12,6 +12,15 @@ const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", curren
 /** Price line: the sale price with the old one crossed out, the list price, or "Request a quote". */
 export function AdcPrice({ list, sale, quote, big = false }: { list: number | null; sale: number | null; quote: boolean; big?: boolean }) {
   const { t } = useAdc();
+  // On sale with no everyday list price (fiberglass, blow hoses): the sale price is the price.
+  if (!quote && list === null && sale !== null) {
+    return (
+      <span className={`adc-price${big ? " big" : ""}`}>
+        <b className="now">{usd(sale)}</b>
+        <span className="off">{t.salePrice}</span>
+      </span>
+    );
+  }
   if (quote || list === null) return <span className={`adc-price quote${big ? " big" : ""}`}>{t.quote}</span>;
   if (sale !== null && sale < list) {
     return (

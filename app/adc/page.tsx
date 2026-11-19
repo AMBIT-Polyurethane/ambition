@@ -28,7 +28,7 @@ export default async function AdcHome({ searchParams }: { searchParams: Promise<
     const shown = items.filter(
       (i) =>
         (!cat || i.category_id === cat.id) &&
-        (sp.sale !== "1" || i.sale_price !== null || (sale?.foam_off_per_lb && i.quote)) &&
+        (sp.sale !== "1" || i.sale_price !== null || (sale?.foam_off_per_lb && i.quote && i.category_id === "ambit-foam")) &&
         words.every((w) => `${i.sku} ${i.name} ${i.description ?? ""} ${i.category ?? ""}`.toLowerCase().includes(w)),
     );
     const title = q ? t.resultsFor(q) : cat ? catName(cat.name, lang) : t.deals(sale?.name ?? t.sale);

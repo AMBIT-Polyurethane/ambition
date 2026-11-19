@@ -9,7 +9,7 @@ import { placeAdcOrder } from "@/app/adc/actions";
 import { useAdc } from "@/components/adc/lang";
 import { errText } from "@/lib/adc-i18n";
 
-export type CatInfo = { sku: string; name: string; unit: string | null; list_price: number | null; sale_price: number | null; quote: boolean; image: string | null };
+export type CatInfo = { sku: string; name: string; unit: string | null; list_price: number | null; sale_price: number | null; quote: boolean; image: string | null; foam?: boolean };
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** The cart and a guest checkout on one page. No payment: the order goes to AMBIT, who confirm price, shipping and payment. */
@@ -28,7 +28,7 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
   });
   const live = rows.filter((r) => !r.gone);
   const subtotal = live.reduce((s, r) => s + (r.price ?? 0) * r.qty, 0);
-  const saved = live.reduce((s, r) => s + (r.c && r.c.sale_price !== null && r.c.list_price !== null && !r.c.quote ? (r.c.list_price - r.c.sale_price) * r.qty : 0), 0);
+  const saved = live.reduce((s, r) => s + (r.c && r.c.sale_price !== null && r.c.list_price !== null && !r.c.quote ? Math.max(0, r.c.list_price - r.c.sale_price) * r.qty : 0), 0);
   const toConfirm = live.some((r) => r.price === null);
 
   if (!ready) return <div className="adc-empty"><LoaderCircle className="spin" size={26} /></div>;
@@ -78,7 +78,7 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
               <b>{r.c?.name ?? r.name}</b>
               <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}</span>
               {r.c && r.c.sale_price !== null && !r.c.quote ? <span className="adc-line-sale">{t.salePrice}</span> : null}
-              {r.c?.quote && foamNote ? <span className="adc-line-sale">{foamNote}</span> : null}
+              {r.c?.quote && r.c.foam && foamNote ? <span className="adc-line-sale">{foamNote}</span> : null}
             </span>
             <span className="adc-qty sm" role="group" aria-label={`${t.qty}: ${r.name}`}>
               <button type="button" onClick={() => setQty(r.key, r.qty - 1)} aria-label={t.less}><Minus size={16} /></button>

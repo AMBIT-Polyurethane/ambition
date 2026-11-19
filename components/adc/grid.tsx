@@ -15,8 +15,8 @@ export function AdcImg({ src, alt, className }: { src: string | null; alt: strin
   );
 }
 
-export function foamNote(i: Pick<AdcItem, "quote">, sale: AdcSale | null, lang: Lang = "en") {
-  return i.quote && sale?.foam_off_per_lb ? dict(lang).foamOff(sale.name, `$${Number(sale.foam_off_per_lb).toFixed(2)}`) : null;
+export function foamNote(i: Pick<AdcItem, "quote" | "category_id">, sale: AdcSale | null, lang: Lang = "en") {
+  return i.quote && i.category_id === "ambit-foam" && sale?.foam_off_per_lb ? dict(lang).foamOff(sale.name, `$${Number(sale.foam_off_per_lb).toFixed(2)}`) : null;
 }
 
 /** A grid of product cards: big photo, part number, name, price, Add to cart. */
