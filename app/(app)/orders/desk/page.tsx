@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { orderBoardCounts } from "@/lib/chat";
 import { OrderChatButton } from "@/components/chat/order-button";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, Clock, List, OctagonAlert } from "lucide-react";
 import { redirect } from "next/navigation";
-import { List } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { can } from "@/lib/access";
-import { dateShort, money, orderNo } from "@/lib/format";
-import { STAGES, deskAccess } from "@/lib/order-desk";
-import { Empty, TopBar } from "@/components/ui";
+import { monthDay, orderNo } from "@/lib/format";
+import { STAGES, deskAccess, waitingSince } from "@/lib/order-desk";
+import { todayCentral } from "@/lib/sale";
+import { duration } from "@/lib/desk-stats";
+import { Help } from "@/components/help";
+import { MoreMenu } from "@/components/order2/menu";
 import { DeskDashboard } from "@/components/desk-dashboard";
 import { RANGES, type DeskStats, type RangeKey } from "@/lib/desk-stats";
 import type { Branch, Order, OrderStage } from "@/lib/types";
@@ -29,6 +31,18 @@ const TABS: Tab[] = [
   { stage: "customer", who: "desk" },
   { stage: "completed", who: "both" },
 ];
+
+// The board: one column per step, left to right, and whose job it is.
+const BOARD: { stage: OrderStage; who: string }[] = [
+  { stage: "customer", who: "Sales rep follows up" },
+  { stage: "needs_po", who: "Order desk" },
+  { stage: "invoice_update", who: "Order desk" },
+  { stage: "credit", who: "Accounting" },
+  { stage: "hold", who: "Desk + sales rep" },
+  { stage: "schedule", who: "Order desk" },
+  { stage: "scheduled", who: "Warehouse" },
+];
+const PER_COL = 8;
 
 export default async function OrderDeskPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
@@ -57,125 +71,130 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
     return (mine ? (scoped as unknown as { or: (f: string) => unknown }).or(`placed_by.eq.${profile.id},sales_rep_id.eq.${profile.id}`) : scoped) as T;
   };
 
-  const counts = await Promise.all(
-    tabs.map((t) => {
-      let q = where(supabase.from("orders").select("id", { count: "exact", head: true }).eq("stage", t.stage));
-      if (t.stage === "completed") q = q.gte("completed_at", since);
-      return Promise.resolve(q).then((r) => (r.error ? -1 : r.count ?? 0));
-    }),
+  // Every open order (one query), sorted into its step. Oldest waiting first; scheduled ones by date.
+  const { data: openData, error: openError } = await where(
+    supabase.from("orders").select("*").not("stage", "in", "(completed,cancelled)").order("created_at", { ascending: true }).limit(600),
   );
-  const setupMissing = counts.some((c) => c === -1);
-  const first = tabs.find((t, i) => counts[i] > 0 && t.stage !== "completed" && t.stage !== "scheduled") ?? tabs[0];
-  const tab = tabs.find((t) => t.stage === sp.tab) ?? first;
-
-  let rows: Order[] = [];
-  if (!setupMissing) {
-    let q = where(supabase.from("orders").select("*").eq("stage", tab.stage)).limit(200);
-    if (tab.stage === "completed") q = q.gte("completed_at", since).order("completed_at", { ascending: false });
-    else if (tab.stage === "scheduled") q = q.order("scheduled_for", { ascending: true });
-    else q = q.order("created_at", { ascending: true }); // oldest waiting first
-    rows = ((await q).data ?? []) as Order[];
-  }
+  const setupMissing = Boolean(openError);
+  const openOrders = (openData ?? []) as Order[];
+  const today = todayCentral();
   const branches = new Map(branchList.map((b) => [b.id, b]));
-  const chatCounts = await orderBoardCounts(supabase, rows.map((o) => o.id));
-  const keep = (t: string) => {
-    const q = new URLSearchParams();
-    if (range !== "30") q.set("r", range);
-    if (branchId) q.set("b", branchId);
-    q.set("tab", t);
-    return `/orders/desk?${q.toString()}`;
+  const chatCounts = await orderBoardCounts(supabase, openOrders.map((o) => o.id));
+  const shortB = (id: string | null) => (id ? (branches.get(id)?.name ?? "").replace(/,\s*[A-Z]{2}$/, "") : "");
+  const whereTo = (o: Order) => {
+    const d = o.scheduled_for ? ` ${monthDay(o.scheduled_for)}` : "";
+    if (o.delivery_method === "dropship") return `Drop ship${d}`;
+    return `${o.delivery_method === "pickup" ? "Pickup" : "Delivery"}${d}${shortB(o.branch_id) ? ` · ${shortB(o.branch_id)}` : ""}`;
   };
-  const rangeLabel = range === "year" ? "this year" : `last ${range} days`;
+  const cols = BOARD.map((c) => {
+    let rows = openOrders.filter((o) => o.stage === c.stage);
+    if (c.stage === "scheduled") rows = [...rows].sort((x, y) => (x.scheduled_for ?? "").localeCompare(y.scheduled_for ?? ""));
+    return { ...c, rows };
+  });
+  const keep = (p: { r?: string; b?: string | null }) => {
+    const q = new URLSearchParams();
+    const r = p.r ?? range;
+    const b = p.b === undefined ? branchId : p.b;
+    if (r !== "30") q.set("r", r);
+    if (b) q.set("b", b);
+    const x = q.toString();
+    return `/orders/desk${x ? `?${x}` : ""}`;
+  };
+  const listHref = (stage: OrderStage) => {
+    const q = new URLSearchParams();
+    q.set("stage", stage);
+    if (branchId) q.set("b", branchId);
+    if (mine) q.set("status", "mine");
+    q.set("from_desk", "1");
+    return `/orders?${q.toString()}`;
+  };
+  const locLabel = branchId === "dropship" ? "Drop ship" : branchId ? shortB(branchId) : "All";
+  const rangeLabel = RANGES.find((r) => r.key === range)!.label;
+  void tabs;
 
   return (
     <main className="shell wide">
-      <TopBar
-        title="Order desk"
-        back="/"
-        howTo="order-desk"
-        right={
-          <Link href={mine ? "/orders?status=mine" : "/orders"} className="btn sm">
-            <List size={16} /> View orders
-          </Link>
-        }
-      />
-      <p className="small muted" style={{ margin: 0 }}>
-        {mine
-          ? "The orders you placed and your customers' orders, and where each one is: customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date → picked up or shipped out."
-          : "Order placed → customer approves → CRM adds the Sales Order # → accounting checks credit → CRM sets the date and the customer is emailed."}
-      </p>
+      <div className="o2 desk2">
+        <div className="o2-head">
+          <div className="o2-head-l">
+            <Link href={mine ? "/orders?status=mine" : "/orders"} className="o2-back" aria-label="Back to orders"><ChevronLeft size={22} /></Link>
+            <div className="o2-title">
+              <div className="row" style={{ gap: 10 }}>
+                <h1>Order desk</h1>
+                <Help label="How an order moves from step to step">
+                  {mine
+                    ? "The orders you placed and your customers' orders. Customer approves, then CRM adds the Sales Order #, accounting checks credit, CRM sets the date, and it's picked up or shipped out."
+                    : "Order placed, then the customer approves, CRM adds the Sales Order #, accounting checks credit, and CRM sets the date (the customer is emailed). The warehouse loads it and the customer signs."}
+                </Help>
+              </div>
+              <span className="o2-sub">Every open order, in the step it&apos;s on</span>
+            </div>
+          </div>
+          <div className="o2-head-r">
+            <MoreMenu label="Pick a location" triggerClass="stk-select ord-loc" trigger={<><span>Location</span><b>{locLabel}</b><ChevronDown size={16} aria-hidden="true" /></>}>
+              <Link className="menu2-i" href={keep({ b: null })}>All locations</Link>
+              {branchList.map((b) => <Link key={b.id} className="menu2-i" href={keep({ b: b.id })}>{b.name}</Link>)}
+              <Link className="menu2-i" href={keep({ b: "dropship" })}>Drop ship</Link>
+            </MoreMenu>
+            <MoreMenu label="Pick the time range for the numbers" triggerClass="stk-select ord-loc" trigger={<><span>Numbers for</span><b>{rangeLabel}</b><ChevronDown size={16} aria-hidden="true" /></>}>
+              {RANGES.map((r) => <Link key={r.key} className="menu2-i" href={keep({ r: r.key })}>{r.label}</Link>)}
+            </MoreMenu>
+            <Link href={mine ? "/orders?status=mine" : "/orders"} className="b2 quiet sm"><List size={16} /> All orders</Link>
+          </div>
+        </div>
 
-      {stats ? (
-        <DeskDashboard
-          stats={stats}
-          range={range}
-          branch={branchId}
-          tab={sp.tab ?? null}
-          branches={branchList.map((b) => ({ id: b.id, name: b.name }))}
-          mine={mine}
-        />
-      ) : !setupMissing ? (
-        <div className="alert warn small">The dashboard needs database update 0024. Ask an admin to run it in Supabase; the order lists below still work.</div>
-      ) : null}
-
-      {setupMissing ? (
-        <div className="alert warn">The order desk needs the database update for roles and the order desk (0011). Ask an admin to run it in Supabase.</div>
-      ) : (
-        <>
-          <div className="chips" style={{ flexWrap: "wrap" }}>
-            {tabs.map((t, i) => (
-              <Link key={t.stage} href={keep(t.stage)} scroll={false} className={`chip${tab.stage === t.stage ? " on" : ""}`}>
-                {STAGES[t.stage].short}
-                {counts[i] > 0 ? ` · ${counts[i]}` : ""}
-              </Link>
+        {setupMissing ? (
+          <div className="alert warn">The order desk needs the database update for roles and the order desk (0011). Ask an admin to run it in Supabase.</div>
+        ) : (
+          <div className="desk-board" role="list" aria-label="Open orders by step" style={{ gridTemplateColumns: cols.map((c) => (c.rows.length ? "minmax(210px, 2fr)" : "minmax(118px, 1fr)")).join(" ") }}>
+            {cols.map((c) => (
+              <section key={c.stage} className={`desk-col${c.rows.length ? "" : " is-empty"}`} role="listitem" aria-label={`${STAGES[c.stage].short}: ${c.rows.length}`}>
+                <Link href={listHref(c.stage)} className="desk-col-h">
+                  <span className="row between" style={{ gap: 8 }}><b>{STAGES[c.stage].short}</b><span className="stk-n">{c.rows.length}</span></span>
+                  <span className="desk-who">{c.who}</span>
+                </Link>
+                {c.rows.length === 0 ? <div className="desk-none">None</div> : null}
+                {c.rows.slice(0, PER_COL).map((o) => {
+                  const w = waitingSince({ ...o, stage: c.stage }, today);
+                  const hours = w ? (Date.now() - new Date(w).getTime()) / 3600_000 : 0;
+                  const chats = chatCounts.get(o.id) ?? 0;
+                  const kind = (o as { kind?: string }).kind;
+                  return (
+                    <Link key={o.id} href={`/orders/${o.id}`} className="desk-card">
+                      <span className="row between" style={{ gap: 8 }}>
+                        <b>{orderNo(o.order_no)}</b>
+                        {chats ? <span className="desk-chat" aria-label={`${chats} chat message${chats === 1 ? "" : "s"}`}>{chats}</span> : null}
+                      </span>
+                      <span className="desk-co">{o.company_name}</span>
+                      <span className="desk-where">{whereTo(o)}</span>
+                      {c.stage !== "scheduled" && hours >= 24 ? (
+                        <span className={`ord-wait ${hours >= 72 ? "crit" : "warn"}`}>{hours >= 72 ? <OctagonAlert size={12} aria-hidden="true" /> : <Clock size={12} aria-hidden="true" />}Waiting {duration(hours)}</span>
+                      ) : null}
+                      {kind === "return" || kind === "exchange" || o.pay_prepaid || o.pay_cod || o.pay_no_checks || (o.pay_waiting_at && o.credit_status !== "approved") ? (
+                        <span className="desk-tags">
+                          {kind === "return" ? <span className="pill2 sm">Return</span> : kind === "exchange" ? <span className="pill2 sm">Exchange</span> : null}
+                          {o.pay_prepaid ? <span className="pill2 ok sm">Paid</span> : null}
+                          {o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill2 warn sm">Waiting on payment</span> : null}
+                          {o.pay_cod ? <span className="pill2 err sm">COD only</span> : null}
+                          {o.pay_no_checks ? <span className="pill2 err sm">No checks</span> : null}
+                        </span>
+                      ) : null}
+                      {c.stage === "hold" && o.credit_note ? <span className="desk-note">Hold: {o.credit_note}</span> : null}
+                    </Link>
+                  );
+                })}
+                {c.rows.length > PER_COL ? <Link href={listHref(c.stage)} className="desk-more">+ {c.rows.length - PER_COL} more</Link> : null}
+              </section>
             ))}
           </div>
-          <div className="eyebrow" id="queue">
-            {STAGES[tab.stage].label}
-            {tab.stage === "completed" ? ` · ${rangeLabel}` : ""}
-            {branchId ? ` · ${branchId === "dropship" ? "Drop ship" : branches.get(branchId)?.name ?? branchId}` : ""}
-          </div>
+        )}
 
-          {rows.length === 0 ? (
-            <Empty icon="clipboard" title="Nothing here right now" />
-          ) : (
-            <div className="list">
-              {rows.map((o) => {
-                const b = o.branch_id ? branches.get(o.branch_id) : null;
-                const where = o.delivery_method === "pickup" ? `Pickup ${b ? b.name : ""}` : o.delivery_method === "jobsite" ? `Deliver to contractor${b ? ` from ${b.name}` : ""}` : "Drop ship";
-                return (
-                  <Link key={o.id} href={`/orders/${o.id}`} className="item">
-                    <div className="grow" style={{ minWidth: 0 }}>
-                      <div className="row between" style={{ gap: 8 }}>
-                        <span className="t">{orderNo(o.order_no)} · <span style={{ fontWeight: 600 }}>{o.company_name}</span></span>
-                        <span className="row" style={{ gap: 6, flex: "none" }}>
-                          <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} />
-                          {o.pay_prepaid ? <span className="pill ok">Paid</span> : null}
-                          {(o as { kind?: string }).kind === "return" || (o as { kind?: string }).kind === "exchange" ? <span className="pill kind-pill">{(o as { kind?: string }).kind === "return" ? "Return" : "Exchange"}</span> : null}
-                          {o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill warn">Waiting on payment</span> : null}
-                          {o.pay_cod ? <span className="pill red">COD only</span> : null}
-                          {o.pay_no_checks ? <span className="pill red">No checks</span> : null}
-                          {o.scheduled_for && (tab.stage === "scheduled" || tab.stage === "completed") ? <span className="pill ok">{dateShort(o.scheduled_for)}</span> : null}
-                        </span>
-                      </div>
-                      <div className="s ellipsis">
-                        {[where, o.ambit_po ? `Sales Order # ${o.ambit_po}` : null, o.invoice_no ? `Invoice # ${o.invoice_no}` : null, o.po_number ? `Cust. PO ${o.po_number}` : null].filter(Boolean).join(" · ")}
-                      </div>
-                      {tab.stage === "hold" && o.credit_note ? <div className="tiny red ellipsis">Hold: {o.credit_note}</div> : null}
-                      <div className="tiny faint">
-                        Placed {dateShort(o.created_at)} by {o.placed_by_name ?? o.placed_by_email}
-                        {o.needed_by ? ` · needed by ${dateShort(o.needed_by)}` : ""}
-                        {Number(o.est_subtotal) > 0 ? ` · ${money(o.est_subtotal)}${o.has_customer_pricing ? " +" : ""}` : ""}
-                      </div>
-                    </div>
-                    <ChevronRight size={18} className="chev" />
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
+        {stats ? (
+          <DeskDashboard stats={stats} range={range} branch={branchId} tab={sp.tab ?? null} branches={branchList.map((b) => ({ id: b.id, name: b.name }))} mine={mine} hideFilters />
+        ) : !setupMissing ? (
+          <div className="alert warn small">The numbers need database update 0024. Ask an admin to run it in Supabase; the board above still works.</div>
+        ) : null}
+      </div>
     </main>
   );
 }

@@ -1,27 +1,30 @@
 import Link from "next/link";
 import { orderBoardCounts } from "@/lib/chat";
 import { OrderChatButton } from "@/components/chat/order-button";
-import { ChevronRight, Clock, OctagonAlert, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, ClipboardList, OctagonAlert, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can, seesOrders } from "@/lib/access";
 import { STAGES, addDays, centralStart, deskAccess, stageOf, waitingSince } from "@/lib/order-desk";
-import { dateShort, money, orderNo, searchSafe } from "@/lib/format";
+import { monthDay, money, orderNo, searchSafe } from "@/lib/format";
 import { todayCentral } from "@/lib/sale";
 import { duration } from "@/lib/desk-stats";
-import { ApprovalPill, Empty, StatusPill, TopBar } from "@/components/ui";
+import { ApprovalPill, Empty, StatusPill } from "@/components/ui";
+import { MoreMenu } from "@/components/order2/menu";
 import type { Branch, Order, OrderStage } from "@/lib/types";
 
 export const metadata = { title: "Orders" };
 
 const FILTERS = [
   ["all", "All"],
-  ["new", "New"],
+  ["open", "Open"],
   ["approval", "Needs approval"],
-  ["processing", "Processing"],
-  ["completed", "Completed"],
   ["mine", "Mine"],
+  ["completed", "Completed"],
 ] as const;
+
+// The stage pills in the new style.
+const PILL2: Record<string, string> = { "pill warn": "pill2 warn sm", "pill ok": "pill2 ok sm", pill: "pill2 sm", "pill grey": "pill2 sm" };
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const ALL_STAGES = Object.keys(STAGES) as OrderStage[];
@@ -51,7 +54,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const week = sp.week && DAY.test(sp.week) ? sp.week : null;
   const from = day ?? week ?? (sp.from && DAY.test(sp.from) ? sp.from : null);
   const to = day ?? (week ? addDays(week, 6) : sp.to && DAY.test(sp.to) ? sp.to : null);
-  const { data: branchRows } = emp ? await supabase.from("branches").select("id, name").order("sort") : { data: [] };
+  const { data: branchRows } = await supabase.from("branches").select("id, name").order("sort");
   const branchList = (branchRows ?? []) as Pick<Branch, "id" | "name">[];
   const branch = sp.b === "dropship" || branchList.some((b) => b.id === sp.b) ? sp.b! : null;
   const filtered = Boolean(stages.length || open || stuck || done || from || to || branch);
@@ -65,6 +68,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // "Mine": orders you placed, and your customers' orders (you're their sales rep).
   if (filter === "mine") query = query.or(`placed_by.eq.${profile.id},sales_rep_id.eq.${profile.id}`);
   if (filter === "approval") query = query.in("approval_status", ["pending", "changes_requested"]).neq("status", "cancelled");
+  if (filter === "open") query = query.not("stage", "in", "(completed,cancelled)");
   if (stages.length) query = query.in("stage", stages);
   if (open || stuck) query = query.not("stage", "in", "(completed,cancelled)");
   if (branch === "dropship") query = query.is("branch_id", null);
@@ -94,7 +98,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   }
 
   // ---- what the filter says, in words
-  const branchName = branch === "dropship" ? "Drop ship" : branchList.find((b) => b.id === branch)?.name ?? null;
   const when = day
     ? `${done ? "Done" : "Placed"} ${md(day)}`
     : week
@@ -111,16 +114,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         : done && !when
           ? "Picked up or shipped out"
           : null;
-  const summary = [what, when, branchName].filter(Boolean).join(" · ");
   const keepDesk = sp.from_desk === "1";
   const clearHref = `/orders${filter !== "all" && access !== "mine" ? `?status=${filter}` : ""}`;
   const chatCounts = emp ? await orderBoardCounts(supabase, orders.map((o) => o.id)) : new Map<string, number>();
-  const chipHref = (id: string) => {
-    const u = new URLSearchParams();
-    u.set("status", id);
-    if (q) u.set("q", q);
-    return `/orders?${u.toString()}`;
-  };
   const deskBack = emp && access ? "/orders/desk" : "/";
   // Jeremiah (the order keepers) sees the deleted orders log, with how many are waiting there.
   const keeper = emp ? Boolean((await supabase.rpc("is_order_keeper")).data) : false;
@@ -128,100 +124,167 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     ? ((await supabase.from("orders_deleted").select("id", { count: "exact", head: true }).is("restored_at", null)).count ?? 0)
     : 0;
 
-  return (
-    <main className="shell">
-      <TopBar
-        title={emp ? (access === "mine" ? "My orders" : "Orders") : "My orders"}
-        back={keepDesk || emp ? deskBack : "/"}
-        right={
-          emp && (access || keeper) ? (
-            <span className="row" style={{ gap: 8, marginLeft: "auto" }}>
-              {keeper ? <Link href="/orders/deleted" className="btn sm">Deleted orders{deletedCount ? ` (${deletedCount})` : ""}</Link> : null}
-              {access ? <Link href="/orders/desk" className="btn sm dark">Order desk</Link> : null}
-              {access && (can(profile, "ordering") || can(profile, "order_desk")) ? <Link href="/orders/return" className="btn sm dark">Return / exchange</Link> : null}
-            </span>
-          ) : null
-        }
-      />
-      {sp.msg ? <div className="alert ok small" role="status">{sp.msg}</div> : null}
-      {emp ? (
-        <>
-          <form className="search" action="/orders">
-            <input type="hidden" name="status" value={filter} />
-            <input className="input" name="q" defaultValue={q} placeholder="Search customer, order #, PO, Sales Order # or Invoice #" aria-label="Search orders" style={{ paddingLeft: 16 }} />
-          </form>
-          {access !== "mine" ? (
-            <div className="chips">
-              {FILTERS.map(([id, label]) => (
-                <Link key={id} href={chipHref(id)} className={`chip${filter === id && !filtered ? " on" : ""}`}>{label}</Link>
-              ))}
-            </div>
-          ) : null}
-        </>
-      ) : null}
+  // The header line: how many are open, and how many were placed in the last 30 days.
+  const headCount = (open: boolean) => {
+    let c = supabase.from("orders").select("id", { count: "exact", head: true });
+    if (emp && access === "mine") c = c.or(`placed_by.eq.${profile.id},sales_rep_id.eq.${profile.id}`);
+    return open ? c.not("stage", "in", "(completed,cancelled)") : c.gte("created_at", centralStart(addDays(today, -30)));
+  };
+  const [{ count: openN }, { count: monthN }] = await Promise.all([headCount(true), headCount(false)]);
 
-      {filtered ? (
-        <div className="filter-bar" role="status">
-          <span className="grow">
-            <b>{summary || "Filtered"}</b>
-            <span className="faint"> · {orders.length === 200 ? "first 200" : `${orders.length} ${orders.length === 1 ? "order" : "orders"}`}</span>
+  const href = (o: { status?: string; b?: string | null }) => {
+    const u = new URLSearchParams();
+    const st = o.status ?? (filter !== "all" && access !== "mine" ? filter : "");
+    if (st && st !== "all") u.set("status", st);
+    const bb = o.b === undefined ? branch : o.b;
+    if (bb) u.set("b", bb);
+    if (q) u.set("q", q);
+    const x = u.toString();
+    return `/orders${x ? `?${x}` : ""}`;
+  };
+  const shortB = (id: string | null) => (id ? (branchList.find((b) => b.id === id)?.name ?? "").replace(/,\s*[A-Z]{2}$/, "") : "");
+  const where = (o: Order) => {
+    const d = o.scheduled_for ? ` ${monthDay(o.scheduled_for)}` : "";
+    if (o.delivery_method === "dropship") return `Drop ship${d}`;
+    const place = shortB(o.branch_id);
+    return `${o.delivery_method === "pickup" ? "Pickup" : "Delivery"}${d}${place ? ` · ${place}` : ""}`;
+  };
+  const grouped = filter === "all" && !filtered && !q && access !== "mine";
+  const isDone = (o: Order) => ["completed", "cancelled"].includes(stageOf(o) ?? o.status);
+  const groups = grouped
+    ? [
+        { key: "open", title: "Open", rows: orders.filter((o) => !isDone(o)) },
+        { key: "done", title: "Completed", rows: orders.filter(isDone) },
+      ].filter((g) => g.rows.length)
+    : [{ key: "all", title: "", rows: orders }];
+
+  const row = (o: Order) => {
+    const st = stageOf(o);
+    const w = since.get(o.id) ?? (st && !isDone(o) ? waitingSince({ ...o, stage: st }, today) : null);
+    const hours = w ? (Date.now() - new Date(w).getTime()) / 3600_000 : 0;
+    const late = st === "scheduled" && Boolean(since.get(o.id));
+    const kind = (o as { kind?: string }).kind;
+    const total = Number(o.est_subtotal) > 0 ? `${money(o.est_subtotal)}${o.has_customer_pricing ? " +" : ""}` : o.has_customer_pricing ? "Customer pricing" : "";
+    return (
+      <Link key={o.id} href={`/orders/${o.id}`} className={`ord-row${isDone(o) ? " done" : ""}`}>
+        <span className="ord-no">
+          <b>{orderNo(o.order_no)}</b>
+          <span>{monthDay(o.created_at)}</span>
+        </span>
+        <span className="ord-cust">
+          <b>{emp ? o.company_name : o.placed_by_name}</b>
+          <span>
+            {[emp ? o.account_no : null, kind === "return" ? "Return" : kind === "exchange" ? "Exchange" : null, o.po_number ? `PO ${o.po_number}` : null].filter(Boolean).join(" · ")}
           </span>
-          <Link href={clearHref} className="linkbtn small" aria-label="Clear the filter">
-            <X size={15} /> Clear
-          </Link>
-        </div>
-      ) : null}
+        </span>
+        <span className="ord-st">
+          {emp && st ? (
+            isDone(o) ? (
+              <span className="ord-done">{st === "completed" ? <span className="dot" aria-hidden="true" /> : null}{st === "completed" && o.completed_at ? `${o.delivery_method === "pickup" ? "Picked up" : "Done"} ${monthDay(o.completed_at)}` : STAGES[st].short}</span>
+            ) : (
+              <span className={PILL2[STAGES[st].pill] ?? "pill2 sm"}>{STAGES[st].short}</span>
+            )
+          ) : (
+            <span className="row" style={{ gap: 6 }}><ApprovalPill order={o} /><StatusPill status={o.status} /></span>
+          )}
+          {emp && o.pay_waiting_at && o.credit_status !== "approved" ? <span className="ord-wait warn">Waiting on payment</span> : null}
+          {emp && w && (hours >= 24 || late) ? (
+            <span className={`ord-wait ${late || hours >= 72 ? "crit" : "warn"}`}>
+              {late || hours >= 72 ? <OctagonAlert size={13} aria-hidden="true" /> : <Clock size={13} aria-hidden="true" />}
+              {late ? `Past its ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date` : `Waiting ${duration(hours)}`}
+            </span>
+          ) : null}
+        </span>
+        <span className="ord-where">{where(o)}</span>
+        <span className="ord-total">{total ? (total === "Customer pricing" ? <span className="faint">{total}</span> : <b>{total}</b>) : <span className="faint">-</span>}</span>
+        <span className="ord-chat">{emp ? <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} /> : <ChevronRight size={18} className="chev" />}</span>
+      </Link>
+    );
+  };
 
-      {orders.length === 0 ? (
-        <Empty icon="cart" title={filtered ? "No orders match" : "No orders yet"}>
-          {filtered ? <Link href={clearHref}>See all orders</Link> : emp ? "Orders placed in AMBIT Intelligence show up here." : <Link href="/order">Place your first order</Link>}
-        </Empty>
-      ) : (
-        <div className="list">
-          {orders.map((o) => {
-            const w = since.get(o.id);
-            const hours = w ? (Date.now() - new Date(w).getTime()) / 3600_000 : 0;
-            const late = stageOf(o) === "scheduled";
-            return (
-              <Link key={o.id} href={`/orders/${o.id}`} className="item">
-                <div className="grow">
-                  <div className="row between" style={{ gap: 8 }}>
-                    <span className="t">{orderNo(o.order_no)}</span>
-                    <span className="row" style={{ gap: 6 }}>
-                      {emp ? <OrderChatButton orderId={o.id} count={chatCounts.get(o.id) ?? 0} /> : null}
-                      {(o as { kind?: string }).kind === "return" || (o as { kind?: string }).kind === "exchange" ? <span className="pill kind-pill">{(o as { kind?: string }).kind === "return" ? "Return" : "Exchange"}</span> : null}
-                      {emp && o.pay_waiting_at && o.credit_status !== "approved" ? <span className="pill warn">Waiting on payment</span> : null}
-                      {emp && stageOf(o) ? (
-                        <span className={STAGES[stageOf(o)!].pill}>{STAGES[stageOf(o)!].short}</span>
-                      ) : (
-                        <>
-                          <ApprovalPill order={o} />
-                          <StatusPill status={o.status} />
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <div className="s ellipsis">
-                    {emp ? `${o.company_name}${o.account_no ? ` · ${o.account_no}` : ""}` : o.placed_by_name}
-                    {o.po_number ? ` · PO ${o.po_number}` : ""}
-                  </div>
-                  <div className="tiny faint">
-                    {done && o.completed_at ? `Done ${dateShort(o.completed_at)} · placed ${dateShort(o.created_at)}` : dateShort(o.created_at)}
-                    {Number(o.est_subtotal) > 0 ? ` · ${money(o.est_subtotal)}${o.has_customer_pricing ? " + customer-priced items" : ""}` : o.has_customer_pricing ? " · Customer pricing" : ""}
-                  </div>
-                  {w ? (
-                    <div className={`wait-tag ${late || hours >= 72 ? "crit" : "warn"}`}>
-                      {late || hours >= 72 ? <OctagonAlert size={13} aria-hidden="true" /> : <Clock size={13} aria-hidden="true" />}
-                      {late ? `Past its ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date (${dateShort(o.scheduled_for)})` : `Waiting ${duration(hours)}`}
-                    </div>
-                  ) : null}
-                </div>
-                <ChevronRight size={18} className="chev" />
-              </Link>
-            );
-          })}
+  return (
+    <main className="shell wide">
+      <div className="o2 ord">
+        <div className="o2-head">
+          <div className="o2-head-l">
+            <Link href={keepDesk || emp ? deskBack : "/"} className="o2-back" aria-label="Back"><ChevronLeft size={22} /></Link>
+            <div className="o2-title">
+              <h1>{emp && access !== "mine" ? "Orders" : "My orders"}</h1>
+              <span className="o2-sub">{openN ?? 0} open · {monthN ?? 0} placed in the last 30 days</span>
+            </div>
+          </div>
+          <div className="o2-head-r">
+            {!emp || can(profile, "ordering") ? <Link href="/order" className="b2 sm"><Plus size={17} /> New order</Link> : null}
+            {emp && (access || keeper) ? (
+              <MoreMenu label="More: order desk, return or exchange, deleted orders">
+                {access ? <Link className="menu2-i" href="/orders/desk"><ClipboardList size={18} /> Order desk</Link> : null}
+                {access && (can(profile, "ordering") || can(profile, "order_desk")) ? <Link className="menu2-i" href="/orders/return"><RotateCcw size={18} /> Return or exchange</Link> : null}
+                {keeper ? <Link className="menu2-i" href="/orders/deleted"><Trash2 size={18} /> Deleted orders{deletedCount ? ` · ${deletedCount}` : ""}</Link> : null}
+              </MoreMenu>
+            ) : null}
+          </div>
         </div>
-      )}
+
+        {sp.msg ? <div className="alert ok small" role="status">{sp.msg}</div> : null}
+
+        {emp ? (
+          <div className="stk-bar">
+            <form className="stk-search" action="/orders" role="search">
+              <Search size={18} aria-hidden="true" />
+              {filter !== "all" && access !== "mine" ? <input type="hidden" name="status" value={filter} /> : null}
+              {branch ? <input type="hidden" name="b" value={branch} /> : null}
+              <input type="search" name="q" defaultValue={q} placeholder="Customer, ORD #, PO, Sales Order # or invoice #" aria-label="Search orders" />
+            </form>
+            {access !== "mine" ? (
+              <nav className="seg2" aria-label="Show">
+                {FILTERS.map(([id, label]) => (
+                  <Link key={id} href={href({ status: id })} className={filter === id && !filtered ? "on" : undefined} aria-current={filter === id && !filtered ? "page" : undefined}>{label}</Link>
+                ))}
+              </nav>
+            ) : null}
+            {branchList.length > 1 ? (
+              <MoreMenu
+                label="Pick a location"
+                triggerClass="stk-select ord-loc"
+                trigger={<><span>Location</span><b>{branch === "dropship" ? "Drop ship" : shortB(branch) || "All"}</b><ChevronDown size={16} aria-hidden="true" /></>}
+              >
+                <Link className="menu2-i" href={href({ b: null })}>All locations</Link>
+                {branchList.map((b) => <Link key={b.id} className="menu2-i" href={href({ b: b.id })}>{b.name}</Link>)}
+                <Link className="menu2-i" href={href({ b: "dropship" })}>Drop ship</Link>
+              </MoreMenu>
+            ) : null}
+          </div>
+        ) : null}
+
+        {filtered && (what || when) ? (
+          <div className="ord-filter" role="status">
+            <span className="grow">
+              <b>{[what, when].filter(Boolean).join(" · ")}</b>
+              <span className="faint"> · {orders.length === 200 ? "first 200" : `${orders.length} ${orders.length === 1 ? "order" : "orders"}`}</span>
+            </span>
+            <Link href={clearHref} className="b2 quiet sm" aria-label="Clear the filter"><X size={15} /> Clear</Link>
+          </div>
+        ) : null}
+
+        {orders.length === 0 ? (
+          <Empty icon="cart" title={filtered || q ? "No orders match" : "No orders yet"}>
+            {filtered || q ? <Link href={clearHref}>See all orders</Link> : emp ? "Orders placed in AMBIT Intelligence show up here." : <Link href="/order">Place your first order</Link>}
+          </Empty>
+        ) : (
+          <div className="card2 ord-list">
+            <div className="ord-row ord-cols" aria-hidden="true">
+              <span>Order</span><span>Customer</span><span>Where it is</span><span>Pickup or delivery</span><span className="ord-total">Total</span><span className="ord-chat">{emp ? "Chat" : ""}</span>
+            </div>
+            {groups.map((g) => (
+              <div key={g.key}>
+                {g.title ? <div className="ord-grp">{g.title} · {g.rows.length}</div> : null}
+                {g.rows.map(row)}
+              </div>
+            ))}
+            {orders.length >= 200 ? <div className="ord-more">Showing the newest 200. Search to find an older order.</div> : null}
+          </div>
+        )}
+      </div>
     </main>
   );
 }

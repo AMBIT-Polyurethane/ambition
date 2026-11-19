@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Search, SlidersHorizontal } from "lucide-react";
 import { requirePerm } from "@/lib/session";
-import { Empty, TopBar } from "@/components/ui";
-import { Icon } from "@/components/icons";
-import { dateShort, jfDate, searchSafe } from "@/lib/format";
+import { Empty } from "@/components/ui";
+import { monthDay, searchSafe } from "@/lib/format";
 import { JotformError, jotformReady, prfFields, prfPricing, prfSubmissions, toItems, type RepLink } from "@/lib/jotform";
 import { PrNativeList, lineCounts } from "@/components/pr-native-list";
 import type { PrRow } from "@/lib/price-requests";
@@ -32,29 +31,58 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
   const nativeRes = await nq;
   const native = ((nativeRes.error ? [] : nativeRes.data ?? []) as PrRow[]).filter((r) => !q || `${r.company_name} ${r.rep_name ?? ""} ${r.contact ?? ""}`.toLowerCase().includes(q));
   const ncounts = await lineCounts(supabase, native.map((r) => r.id));
-  const rulesBtn = profile.role === "admin" && !nativeRes.error ? <Link href="/price-requests/rules" className="btn sm dark">Rules</Link> : null;
+  const rulesBtn = profile.role === "admin" && !nativeRes.error ? <Link href="/price-requests/rules" className="b2 quiet sm"><SlidersHorizontal size={16} /> Auto-approve rules</Link> : null;
   const nativeBlock = native.length ? (
-    <section className="section">
-      <div className="eyebrow">In the app · {native.length}</div>
-      <PrNativeList rows={native} counts={ncounts} showRep />
+    <section className="tg-sec">
+      <b className="tg-h">In the app · {native.length}</b>
+      <PrNativeList rows={native} counts={ncounts} showRep table />
     </section>
   ) : null;
 
   if (!jotformReady()) {
+    const waitingN = native.filter((r) => r.status === "pending").length;
+    const oldestN = waitingN ? Math.max(...native.filter((r) => r.status === "pending").map((r) => Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400_000))) : 0;
     return (
-      <main className="shell">
-        <TopBar title="Price approvals" back="/" right={rulesBtn} />
-        {nativeBlock}
-        <div className="alert warn">The app needs a Jotform key first. Add JOTFORM_API_KEY in Vercel, then redeploy.</div>
+      <main className="shell wide">
+        <div className="o2 pra">
+          <div className="o2-head">
+            <div className="o2-head-l">
+              <Link href="/" className="o2-back" aria-label="Back to home"><ChevronLeft size={22} /></Link>
+              <div className="o2-title">
+                <h1>Price approvals</h1>
+                <span className="o2-sub">{tab === "pending" ? `${waitingN} waiting${waitingN ? " · oldest first" : ""}` : `${native.length} shown`}</span>
+              </div>
+            </div>
+            <div className="o2-head-r">{rulesBtn}</div>
+          </div>
+          {tab === "pending" && oldestN >= 7 ? (
+            <div className="pra-warn" role="status"><Clock size={18} aria-hidden="true" /><span><b>The oldest has waited {oldestN} days.</b> Reps can&apos;t quote until you answer.</span></div>
+          ) : null}
+          <div className="stk-bar">
+            <nav className="seg2" aria-label="Show">
+              {TABS.map(([k, label]) => (
+                <Link key={k} href={`/price-requests/approvals?tab=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={tab === k ? "on" : undefined} aria-current={tab === k ? "page" : undefined}>{label}</Link>
+              ))}
+            </nav>
+            <form className="stk-search" action="/price-requests/approvals" role="search">
+              <Search size={18} aria-hidden="true" />
+              <input type="hidden" name="tab" value={tab} />
+              <input type="search" name="q" defaultValue={q} placeholder="Customer, contact or rep" aria-label="Search price requests" />
+            </form>
+          </div>
+          {nativeBlock ?? <Empty icon="tag" title={tab === "pending" ? "Nothing waiting for approval" : "No price requests match"} />}
+        </div>
       </main>
     );
   }
 
-  const [{ data: staffRows }, linksRes, reviewsRes] = await Promise.all([
+  const [{ data: staffRows }, linksRes, reviewsRes, nativeWaitRes] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email").in("role", ["employee", "admin"]).eq("demo", false),
     supabase.from("rep_name_links").select("rep_name, profile_id"),
     supabase.from("prf_reviews").select("submission_id, approved_by_name, approved_at"),
+    supabase.from("price_requests").select("created_at").eq("status", "pending").limit(500),
   ]);
+  const nativeWaiting = ((nativeWaitRes.error ? [] : nativeWaitRes.data ?? []) as { created_at: string }[]).map((r) => r.created_at);
   const staff = (staffRows ?? []) as { id: string; full_name: string | null; email: string }[];
   const reviews = new Map(((reviewsRes.error ? [] : reviewsRes.data ?? []) as Review[]).map((r) => [r.submission_id, r]));
 
@@ -80,53 +108,88 @@ export default async function PriceApprovalsPage({ searchParams }: { searchParam
   // Waiting: oldest first, so nothing sits at the bottom forever.
   if (tab === "pending") shown.reverse();
 
+  // How long each one has waited (Jotform dates are "YYYY-MM-DD HH:MM:SS", Central time).
+  const daysSince = (v: string | null | undefined) => (v ? Math.max(0, Math.floor((Date.now() - new Date(v.includes("T") ? v : v.replace(" ", "T") + "-06:00").getTime()) / 86400_000)) : 0);
+  const waitingAges = [
+    ...nativeWaiting.map((v) => daysSince(v)),
+    ...items.filter((i) => i.status === "pending").map((i) => daysSince(i.created_at)),
+  ];
+  const waitingN = waitingAges.length;
+  const oldest = waitingN ? Math.max(...waitingAges) : 0;
+  const href = (k: string) => `/price-requests/approvals?tab=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+
   return (
-    <main className="shell">
-      <TopBar title="Price approvals" back="/" right={rulesBtn} />
-      {error ? <div className="alert err">{error}</div> : null}
-
-      <div className="chips">
-        {TABS.map(([k, label]) => (
-          <Link key={k} href={`/price-requests/approvals?tab=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={`chip${tab === k ? " on" : ""}`}>
-            {label} · {counts[k]}
-          </Link>
-        ))}
-      </div>
-      <form className="search" action="/price-requests/approvals">
-        <Search size={18} />
-        <input type="hidden" name="tab" value={tab} />
-        <input className="input" name="q" defaultValue={q} placeholder="Search customer, contact or rep" aria-label="Search price requests" />
-      </form>
-
-      {nativeBlock}
-      {nativeBlock ? <div className="eyebrow">From Jotform</div> : null}
-      {shown.length === 0 ? (
-        <Empty icon="tag" title={tab === "pending" ? "Nothing waiting for approval" : "No price requests match"} />
-      ) : (
-        <div className="list">
-          {shown.map((i) => {
-            const r = reviews.get(i.id);
-            return (
-              <Link key={i.id} className="item" href={`/price-requests/${i.id}`} prefetch={false}>
-                <div className="ic"><Icon name="tag" /></div>
-                <div className="grow" style={{ minWidth: 0 }}>
-                  <div className="row between" style={{ gap: 8 }}>
-                    <span className="t ellipsis">{i.customer || i.contact || "Price request"}</span>
-                    {i.status === "approved" ? <span className="pill ok">Approved</span> : i.status === "pending" ? <span className="pill warn">Waiting</span> : <span className="pill grey">No prices</span>}
-                  </div>
-                  <div className="s ellipsis">{[i.customer && i.contact ? i.contact : null, repOf(i)].filter(Boolean).join(" · ")}</div>
-                  <div className="tiny faint">
-                    Sent {jfDate(i.created_at)}
-                    {i.priced ? ` · ${i.priced} product${i.priced === 1 ? "" : "s"}` : ""}
-                    {r ? ` · approved ${dateShort(r.approved_at)} by ${r.approved_by_name ?? ""}` : ""}
-                  </div>
-                </div>
-                <ChevronRight size={18} className="chev" />
-              </Link>
-            );
-          })}
+    <main className="shell wide">
+      <div className="o2 pra">
+        <div className="o2-head">
+          <div className="o2-head-l">
+            <Link href="/" className="o2-back" aria-label="Back to home"><ChevronLeft size={22} /></Link>
+            <div className="o2-title">
+              <h1>Price approvals</h1>
+              <span className="o2-sub">{waitingN} waiting{waitingN ? " · oldest first" : ""}</span>
+            </div>
+          </div>
+          <div className="o2-head-r">{rulesBtn}</div>
         </div>
-      )}
+        {error ? <div className="alert err">{error}</div> : null}
+        {oldest >= 7 ? (
+          <div className="pra-warn" role="status"><Clock size={18} aria-hidden="true" /><span><b>The oldest has waited {oldest} days.</b> Reps can&apos;t quote until you answer.</span></div>
+        ) : null}
+
+        <div className="stk-bar">
+          <nav className="seg2" aria-label="Show">
+            {TABS.map(([k, label]) => (
+              <Link key={k} href={href(k)} className={tab === k ? "on" : undefined} aria-current={tab === k ? "page" : undefined}>
+                {label} <span className="stk-n">{counts[k] + (k === "pending" ? nativeWaiting.length : 0)}</span>
+              </Link>
+            ))}
+          </nav>
+          <form className="stk-search" action="/price-requests/approvals" role="search">
+            <Search size={18} aria-hidden="true" />
+            <input type="hidden" name="tab" value={tab} />
+            <input type="search" name="q" defaultValue={q} placeholder="Customer, contact or rep" aria-label="Search price requests" />
+          </form>
+        </div>
+
+        {nativeBlock}
+        {shown.length === 0 && !nativeBlock ? (
+          <Empty icon="tag" title={tab === "pending" ? "Nothing waiting for approval" : "No price requests match"} />
+        ) : shown.length ? (
+          <section className="tg-sec">
+            {nativeBlock ? <b className="tg-h">From Jotform · {shown.length}</b> : null}
+            <div className="card2 pra-list">
+              <div className="pra-row pra-cols" aria-hidden="true">
+                <span>Customer</span><span>Sales rep</span><span className="num">Products</span><span>Sent</span><span>Waiting</span><span />
+              </div>
+              {shown.map((i) => {
+                const r = reviews.get(i.id);
+                const d = daysSince(i.created_at);
+                return (
+                  <Link key={i.id} className="pra-row" href={`/price-requests/${i.id}`} prefetch={false}>
+                    <span className="pra-cust">
+                      <b>{i.customer || i.contact || "Price request"}</b>
+                      <span>{i.customer && i.contact ? i.contact : ""}</span>
+                    </span>
+                    <span className="pra-rep">{repOf(i)}</span>
+                    <span className="num">{i.priced || "-"}</span>
+                    <span className="pra-sent">{monthDay(i.created_at.slice(0, 10))}</span>
+                    <span className="pra-wait">
+                      {i.status === "pending" ? (
+                        <span className={`pill2 sm ${d >= 14 ? "err" : d >= 3 ? "warn" : ""}`}>{d === 0 ? "Today" : `${d} ${d === 1 ? "day" : "days"}`}</span>
+                      ) : i.status === "approved" ? (
+                        <span className="pill2 ok sm">{r ? `Approved ${monthDay(r.approved_at)}` : "Approved"}</span>
+                      ) : (
+                        <span className="pill2 sm">No prices</span>
+                      )}
+                    </span>
+                    <ChevronRight size={18} className="chev" aria-hidden="true" />
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }

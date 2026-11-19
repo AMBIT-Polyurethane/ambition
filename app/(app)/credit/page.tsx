@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CircleAlert, CircleCheck, FileUp, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, FileUp, Search, Zap } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { canCredit, canSetCredit, creditOverview, FLAGS, health, STATUS, type CreditRow } from "@/lib/credit";
-import { dateShort, money } from "@/lib/format";
+import { dateShort, monthDay, money } from "@/lib/format";
+import { Help } from "@/components/help";
+import { MoreMenu } from "@/components/order2/menu";
 import { TopBar, Empty } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { setAutoRelease } from "./actions";
 import { AgingBar } from "@/components/credit/aging-bar";
-import { BarList, ColumnChart } from "@/components/inventory/charts";
+import { ColumnChart } from "@/components/inventory/charts";
 
 export const metadata = { title: "Credit & collections" };
 export const dynamic = "force-dynamic";
@@ -101,100 +103,140 @@ export default async function CreditPage({ searchParams }: { searchParams: Promi
   };
   const reps = [...new Set(all.map((r) => r.rep_id).filter(Boolean) as string[])];
 
+  const short = (v: number) => (Math.abs(v) >= 1_000_000 ? `$${(v / 1_000_000).toFixed(2)}M` : Math.abs(v) >= 10_000 ? `$${Math.round(v / 1000)}k` : money(v));
+  const branchList = (branches ?? []) as { id: string; name: string }[];
+  const callFirst = [...rows].filter((r) => r.past_due > 0).sort((x, y) => y.past_due - x.past_due).slice(0, 6);
+  const overdueFollow = promises.filter((p) => p.follow_up_on < today).length;
+
   return (
     <main className="shell wide">
-      <TopBar
-        title="Credit & collections"
-        back="/"
-        right={canSetCredit(profile) ? <Link href="/credit/import" className="btn sm dark"><FileUp size={15} /> Import balances</Link> : null}
-      />
-      {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
-      {sp.err ? <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div> : null}
-      <section className={`auto-card${autoOn ? " on" : ""}`}>
-        <div className="col tight grow" style={{ minWidth: 0 }}>
-          <b>Automatic credit release · {autoOn ? "On" : "Off"}</b>
-          <span className="tiny muted">When the CRM enters the Sales Order #, the order releases itself if the customer <b>Has Line Of Credit</b>, <b>nothing is past due</b> (any amount, any location on a shared line) and the line covers the balance <b>plus every open order including this one</b>. Everything else goes to Accounting with the reason on the order.</span>
-        </div>
-        {profile.role === "admin" ? (
-          <form action={setAutoRelease}><input type="hidden" name="on" value={autoOn ? "0" : "1"} /><Submit className={`btn sm${autoOn ? " dark" : ""}`} pendingText="…">{autoOn ? "Turn off" : "Turn on"}</Submit></form>
-        ) : null}
-      </section>
-      {!all.length ? (
-        <div className="alert warn"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>No balances yet. {canSetCredit(profile) ? <>Tap <Link href="/credit/import">Import balances</Link> and upload the QuickBooks A/R Aging Summary (and credit limits).</> : "Accounting imports them from QuickBooks."}</span></div>
-      ) : (
-        <p className="tiny faint" style={{ margin: 0 }}>
-          Balances from QuickBooks as of {asOf ? dateShort(asOf) : "the import"}, plus orders shipped since, minus payments entered here since. Payments come off the oldest past due first.
-        </p>
-      )}
-
-      <div className="cr-kpis">
-        <div className="cr-kpi"><span className="tiny">Total owed (A/R)</span><b>{money(ar)}</b><span className="tiny">{rows.filter((r) => r.balance > 0).length} accounts with a balance</span></div>
-        <Link href={qs({ v: "attention" })} className={`cr-kpi${pastDue ? " warn" : " good"}`}><span className="tiny">Past due</span><b>{money(pastDue)}</b><span className="tiny">{ar ? `${Math.round((pastDue / ar) * 100)}% of A/R` : "–"} · {rows.filter((r) => r.past_due > 0).length} accounts</span></Link>
-        <Link href={qs({ v: "attention" })} className={`cr-kpi${over90 ? " bad" : " good"}`}><span className="tiny">90+ days</span><b>{money(over90)}</b><span className="tiny">{rows.filter((r) => r.over_90 > 0).length} accounts</span></Link>
-        <Link href={qs({ v: "limit" })} className={`cr-kpi${overLimit.length ? " bad" : " good"}`}><span className="tiny">Over their credit line</span><b>{overLimit.length}</b><span className="tiny">{limits ? `${Math.round((ar / limits) * 100)}% of all credit lines used` : "No credit lines yet"}</span></Link>
-        <div className="cr-kpi good"><span className="tiny">Paid, last 30 days</span><b>{money(paid30)}</b><span className="tiny">entered in the app</span></div>
-        <div className="cr-kpi"><span className="tiny">Days to collect (DSO)</span><b>{dso ?? "–"}</b><span className="tiny">A/R ÷ average daily sales (90 days)</span></div>
-        <Link href={qs({ v: "follow" })} className={`cr-kpi${promises.some((p) => p.follow_up_on < today) ? " warn" : ""}`}><span className="tiny">Follow-ups this week</span><b>{promises.length}</b><span className="tiny">{promises.filter((p) => p.follow_up_on < today).length} overdue</span></Link>
-      </div>
-
-      <section className="card col" style={{ gap: 10 }}>
-        <div className="row between"><b>Aging</b><span className="tiny faint">{rows.length} accounts</span></div>
-        <AgingBar a={{ current_due: sum((r) => r.current_due), d1_30: sum((r) => r.d1_30), d31_60: sum((r) => r.d31_60), d61_90: sum((r) => r.d61_90), over_90: over90 }} />
-      </section>
-
-      <div className="grid2 cr-charts">
-        <section className="card col" style={{ gap: 8 }}>
-          <b>Payments by week</b>
-          <span className="tiny faint">What the CRMs entered, last 12 weeks</span>
-          <ColumnChart rows={weeks} series={[{ key: "paid", label: "Paid" }]} caption="Payments entered per week" />
-        </section>
-        <section className="card col" style={{ gap: 8 }}>
-          <b>Largest past due</b>
-          <span className="tiny faint">Who owes the most that&apos;s late</span>
-          {rows.some((r) => r.past_due > 0) ? (
-            <BarList rows={[...rows].sort((a, b) => b.past_due - a.past_due).filter((r) => r.past_due > 0).slice(0, 8).map((r) => ({ label: r.name, value: Math.round(r.past_due), note: r.over_90 ? `${money(r.over_90)} is 90+ days` : undefined }))} caption="Largest past-due balances" />
-          ) : <span className="small muted">Nobody is past due.</span>}
-        </section>
-      </div>
-
-      {promises.length ? (
-        <section className="card col" style={{ gap: 8 }}>
-          <b>Follow-ups and promises to pay (next 7 days)</b>
-          <div className="list">
-            {promises.slice(0, 12).map((p, i) => (
-              <Link key={i} href={`/customers/${p.company_id}?tab=notes&from=credit`} className="item" style={{ padding: "9px 12px" }}>
-                <div className="grow" style={{ minWidth: 0 }}>
-                  <div className="t ellipsis" style={{ fontSize: 14 }}>{nameOf.get(p.company_id) ?? "Customer"}</div>
-                  <div className="s ellipsis">{p.kind === "promise" ? `Promised ${p.promise_amount ? money(Number(p.promise_amount)) : ""}: ` : ""}{p.body}</div>
-                </div>
-                <span className={`pill ${p.follow_up_on < today ? "red" : p.follow_up_on === today ? "warn" : ""}`}>{p.follow_up_on < today ? "Overdue · " : ""}{dateShort(p.follow_up_on)}</span>
-              </Link>
-            ))}
+      <div className="o2 crd">
+        <div className="o2-head">
+          <div className="o2-head-l">
+            <Link href="/customers" className="o2-back" aria-label="Back to customers"><ChevronLeft size={22} /></Link>
+            <div className="o2-title">
+              <h1>Credit &amp; collections</h1>
+              <span className="o2-sub row" style={{ gap: 8 }}>
+                {all.length ? `QuickBooks balances from ${asOf ? monthDay(asOf) : "the import"}, kept current since` : "No balances imported yet"}
+                <Help label="How balances are kept current">
+                  Balances from QuickBooks as of {asOf ? dateShort(asOf) : "the import"}, plus orders shipped since, minus payments entered here since. Payments come off the oldest past due first.
+                </Help>
+              </span>
+            </div>
           </div>
-        </section>
-      ) : null}
+          <div className="o2-head-r">
+            {canSetCredit(profile) ? <Link href="/credit/import" className="b2 sm"><FileUp size={16} /> Import balances</Link> : null}
+          </div>
+        </div>
+        {sp.msg ? <div className="alert ok" role="status"><CircleCheck size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.msg}</span></div> : null}
+        {sp.err ? <div className="alert err" role="alert"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>{sp.err}</span></div> : null}
 
-      <section className="col" style={{ gap: 8 }}>
-        <div className="chips">
-          {VIEWS.map((v) => <Link key={v.key} href={qs({ v: v.key })} className={`chip${view === v.key ? " on" : ""}`}>{v.label}</Link>)}
+        <section className={`card2 crd-auto${autoOn ? " on" : ""}`}>
+          <span className="ihub-ic info" aria-hidden="true"><Zap size={20} /></span>
+          <span className="grow row" style={{ gap: 8 }}>
+            <b>Release good-standing orders automatically</b>
+            <Help label="Which orders release on their own">
+              When the CRM enters the Sales Order #, the order releases itself if the customer Has Line Of Credit, nothing is past due (any amount, any location on a shared line) and the line covers the balance plus every open order including this one. Everything else goes to Accounting with the reason on the order.
+            </Help>
+          </span>
+          {profile.role === "admin" ? (
+            <form action={setAutoRelease}>
+              <input type="hidden" name="on" value={autoOn ? "0" : "1"} />
+              <Submit className={`crd-switch${autoOn ? " on" : ""}`} pendingText="...">
+                <span className="knob" aria-hidden="true" />
+                <span className="sr-only">{autoOn ? "Turn off" : "Turn on"}</span>
+              </Submit>
+            </form>
+          ) : null}
+          <b className={`crd-state${autoOn ? " on" : ""}`}>{autoOn ? "On" : "Off"}</b>
+        </section>
+
+        {!all.length ? (
+          <div className="alert warn"><CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} /><span>No balances yet. {canSetCredit(profile) ? <>Tap <Link href="/credit/import">Import balances</Link> and upload the QuickBooks A/R Aging Summary (and credit limits).</> : "Accounting imports them from QuickBooks."}</span></div>
+        ) : null}
+
+        <div className="ihub-kpis">
+          <Link href={qs({ v: "all" })} className="ihub-kpi"><span className="l">Owed to AMBIT</span><b>{short(ar)}</b><span className="s">{rows.filter((r) => r.balance > 0).length} accounts</span></Link>
+          <Link href={qs({ v: "attention" })} className={`ihub-kpi${pastDue ? " warn" : ""}`}><span className="l">Past due</span><b>{short(pastDue)}</b><span className="s">{rows.filter((r) => r.past_due > 0).length} accounts{ar ? ` · ${Math.round((pastDue / ar) * 100)}% of it` : ""}</span></Link>
+          <Link href={qs({ v: "attention" })} className={`ihub-kpi${over90 ? " err" : ""}`}><span className="l">90+ days late</span><b>{short(over90)}</b><span className="s">{rows.filter((r) => r.over_90 > 0).length} accounts</span></Link>
+          <div className="ihub-kpi"><span className="l">Paid, last 30 days</span><b>{short(paid30)}</b><span className="s">Entered in the app{dso !== null ? ` · ${dso} days to collect` : ""}</span></div>
         </div>
-        <div className="chips wrap">
-          <Link href={qs({ s: "" })} className={`chip sm${!sf ? " on2" : ""}`}>Every status</Link>
-          {(Object.keys(STATUS) as (keyof typeof STATUS)[]).map((k) => <Link key={k} href={qs({ s: k })} className={`chip sm${sf === k ? " on2" : ""}`}>{STATUS[k].label} · {rolled.filter((r) => r.status === k).length}</Link>)}
+
+        <section className="card2 ihub-card">
+          <div className="ihub-card-h"><b>How late is it?</b><span>{rows.length} accounts</span></div>
+          <AgingBar a={{ current_due: sum((r) => r.current_due), d1_30: sum((r) => r.d1_30), d31_60: sum((r) => r.d31_60), d61_90: sum((r) => r.d61_90), over_90: over90 }} />
+        </section>
+
+        <div className="ihub-grid">
+          <section className="card2 ihub-card">
+            <div className="ihub-card-h">
+              <b>Call these first</b>
+              {promises.length ? <Link href={qs({ v: "follow" })}>{overdueFollow ? `${overdueFollow} follow-up${overdueFollow === 1 ? "" : "s"} overdue` : `${promises.length} follow-up${promises.length === 1 ? "" : "s"} this week`}</Link> : null}
+            </div>
+            {callFirst.length ? (
+              <div className="crd-call">
+                {callFirst.map((r) => (
+                  <Link key={r.company_id} href={`/customers/${r.company_id}?from=credit`} className="crd-call-r">
+                    <span className="grow ellipsis">{r.name}</span>
+                    <b className={r.over_90 ? "red" : ""}>{short(r.past_due)} late</b>
+                    <ChevronRight size={16} className="chev" aria-hidden="true" />
+                  </Link>
+                ))}
+                <Link href={qs({ v: "attention" })} className="crd-all">All {rows.filter((r) => r.past_due > 0).length} past due</Link>
+              </div>
+            ) : <span className="small muted">Nobody is past due.</span>}
+          </section>
+          <section className="card2 ihub-card">
+            <div className="ihub-card-h"><b>Payments each week</b><span>Last 12 weeks</span></div>
+            <ColumnChart rows={weeks} series={[{ key: "paid", label: "Paid" }]} caption="Payments entered per week" />
+          </section>
         </div>
-        <form className="row wrap" style={{ gap: 8 }} action="/credit">
-          <input type="hidden" name="v" value={view} />
-          <div className="search grow" style={{ minWidth: 200 }}><Search size={18} /><input className="input" name="q" defaultValue={sp.q ?? ""} placeholder="Customer or account #" aria-label="Search customers" /></div>
-          <select className="select sm" name="b" defaultValue={sp.b ?? ""} style={{ width: "auto" }} aria-label="Location">
-            <option value="">Every location</option>
-            {((branches ?? []) as { id: string; name: string }[]).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-          <select className="select sm" name="rep" defaultValue={sp.rep ?? ""} style={{ width: "auto" }} aria-label="Sales rep">
-            <option value="">Every rep</option>
-            {reps.map((id) => <option key={id} value={id}>{repName.get(id) ?? "Rep"}</option>)}
-          </select>
-          <button type="submit" className="btn sm dark">Show</button>
-        </form>
+
+        {promises.length ? (
+          <section className="card2 ihub-card">
+            <div className="ihub-card-h"><b>Follow-ups and promises to pay</b><span>Next 7 days</span></div>
+            <div className="crd-call">
+              {promises.slice(0, 12).map((p, i) => (
+                <Link key={i} href={`/customers/${p.company_id}?tab=notes&from=credit`} className="crd-call-r">
+                  <span className="grow" style={{ minWidth: 0 }}>
+                    <span className="ellipsis" style={{ display: "block", fontWeight: 700 }}>{nameOf.get(p.company_id) ?? "Customer"}</span>
+                    <span className="tiny faint ellipsis" style={{ display: "block" }}>{p.kind === "promise" ? `Promised ${p.promise_amount ? money(Number(p.promise_amount)) : ""}: ` : ""}{p.body}</span>
+                  </span>
+                  <span className={`pill2 sm ${p.follow_up_on < today ? "err" : p.follow_up_on === today ? "warn" : ""}`}>{p.follow_up_on < today ? "Overdue · " : ""}{monthDay(p.follow_up_on)}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+      <section className="col" style={{ gap: 10 }}>
+        <div className="stk-bar">
+          <nav className="seg2" aria-label="Show">
+            {VIEWS.map((v) => <Link key={v.key} href={qs({ v: v.key })} className={view === v.key ? "on" : undefined} aria-current={view === v.key ? "page" : undefined}>{v.label}</Link>)}
+          </nav>
+          <form className="stk-search" action="/credit" role="search">
+            <Search size={18} aria-hidden="true" />
+            <input type="hidden" name="v" value={view} />
+            {sf ? <input type="hidden" name="s" value={sf} /> : null}
+            {sp.b ? <input type="hidden" name="b" value={sp.b} /> : null}
+            {sp.rep ? <input type="hidden" name="rep" value={sp.rep} /> : null}
+            <input type="search" name="q" defaultValue={sp.q ?? ""} placeholder="Customer or account #" aria-label="Search customers" />
+          </form>
+        </div>
+        <div className="stk-bar">
+          <MoreMenu label="Credit status" triggerClass="stk-select ord-loc" trigger={<><span>Credit</span><b>{sf ? STATUS[sf as keyof typeof STATUS].short : "Every status"}</b><ChevronDown size={16} aria-hidden="true" /></>}>
+            <Link className="menu2-i" href={qs({ s: "" })}>Every status</Link>
+            {(Object.keys(STATUS) as (keyof typeof STATUS)[]).map((k) => <Link key={k} className="menu2-i" href={qs({ s: k })}>{STATUS[k].label} <span className="faint">· {rolled.filter((r) => r.status === k).length}</span></Link>)}
+          </MoreMenu>
+          <MoreMenu label="Location" triggerClass="stk-select ord-loc" trigger={<><span>Location</span><b>{sp.b ? branchList.find((x) => x.id === sp.b)?.name ?? "One" : "Every location"}</b><ChevronDown size={16} aria-hidden="true" /></>}>
+            <Link className="menu2-i" href={qs({ b: "" })}>Every location</Link>
+            {branchList.map((x) => <Link key={x.id} className="menu2-i" href={qs({ b: x.id })}>{x.name}</Link>)}
+          </MoreMenu>
+          <MoreMenu label="Sales rep" triggerClass="stk-select ord-loc" trigger={<><span>Rep</span><b>{sp.rep ? repName.get(sp.rep) ?? "Rep" : "Every rep"}</b><ChevronDown size={16} aria-hidden="true" /></>}>
+            <Link className="menu2-i" href={qs({ rep: "" })}>Every rep</Link>
+            {reps.map((id) => <Link key={id} className="menu2-i" href={qs({ rep: id })}>{repName.get(id) ?? "Rep"}</Link>)}
+          </MoreMenu>
+        </div>
         {list.length === 0 ? (
           <div className="card small muted center">{view === "attention" ? "Nothing past due or over a limit. Nice." : "Nothing matches."}</div>
         ) : (
@@ -228,6 +270,7 @@ export default async function CreditPage({ searchParams }: { searchParams: Promi
           </div>
         )}
       </section>
+      </div>
     </main>
   );
 }

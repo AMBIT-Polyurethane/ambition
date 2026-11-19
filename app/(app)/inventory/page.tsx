@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ArrowLeftRight, ChevronRight, ClipboardCheck, FileDown, Hourglass, PackageOpen, ScanLine, Send, Tags, Truck } from "lucide-react";
+import { ArrowLeftRight, ChevronLeft, CircleCheck, ClipboardCheck, Hourglass, PackageOpen, ScanLine, Send, Tags, TrendingDown, TriangleAlert } from "lucide-react";
 import { requireActive } from "@/lib/session";
 import { can, hubLock, seesInventory } from "@/lib/access";
-import { dateShort, plural } from "@/lib/format";
+import { dateShort } from "@/lib/format";
 import { inventoryBranches } from "@/lib/widgets";
-import { AGING_DAYS, EXPIRING_DAYS, agingBuckets, loadHub } from "@/lib/inventory/hub";
+import { AGING_DAYS, EXPIRING_DAYS, loadHub } from "@/lib/inventory/hub";
 import { Empty, TopBar } from "@/components/ui";
+import { Help } from "@/components/help";
 import { HubNav, hubHome } from "@/components/inventory/hub-nav";
 import { BarList, ColumnChart } from "@/components/inventory/charts";
 
@@ -68,34 +69,28 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
   const restWaiting = restRes.error ? 0 : (restRes.count ?? 0);
   const reorderOpen = rrRes.error ? 0 : (rrRes.count ?? 0);
 
-  // Charts
+  // Charts: two, side by side.
   const weeks = hub.weeks.map((w) => ({ label: w.label, values: [Math.round(w.shipped), Math.round(w.received)] }));
-  const cats = hub.categories.slice(0, 7).map((c) => ({ label: c.name, value: Math.round(c.value), note: `${c.items} ${c.items === 1 ? "item" : "items"}` }));
-  const rest = hub.categories.slice(7);
-  if (rest.length) cats.push({ label: "Everything else", value: Math.round(rest.reduce((s, c) => s + c.value, 0)), note: `${rest.length} more groups` });
-  const ages = agingBuckets(hub.items).map((b) => ({ label: b.label, value: Math.round(b.value), note: `${b.items} ${b.items === 1 ? "item" : "items"} in stock` }));
-
-  // Top sellers (ISO brands sell as one item: show it once)
-  const seen = new Set<string>();
-  const top = hub.items
-    .filter((i) => i.soldValue30 > 0)
-    .sort((a, z) => z.soldValue30 - a.soldValue30 || z.sold30 - a.sold30)
-    .filter((i) => {
-      const key = `${i.branch}|${i.parent}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 8);
-  const expiring = hub.lots.filter((l) => l.days !== null && l.days <= EXPIRING_DAYS).slice(0, 6);
-  const toSell = hub.items
-    .filter((i) => i.on_hand > 0 && i.idle >= AGING_DAYS)
-    .sort((a, z) => z.value - a.value || z.idle - a.idle)
-    .slice(0, 6);
+  const cats = hub.categories.slice(0, 6).map((c) => ({ label: c.name, value: Math.round(c.value), note: `${c.items} ${c.items === 1 ? "item" : "items"}` }));
+  const rest = hub.categories.slice(6);
+  if (rest.length) cats.push({ label: "Everything else", value: Math.round(rest.reduce((t, c) => t + c.value, 0)), note: `${rest.length} more groups` });
   const starts = [...new Set(hub.scope.map((b) => hub.trackingStart[b]))].sort();
+  const stockHref = `/inventory/stock?b=${hereBranch}`;
+  const short = (v: number) => (v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1)}M` : v >= 10_000 ? `$${Math.round(v / 1000)}k` : usd(v));
 
-  const tile = (href: string, label: string, value: string, sub: React.ReactNode, tone?: "warn" | "err" | "ok") => (
-    <Link href={href} className={`hub-kpi${tone ? ` ${tone}` : ""}`}>
+  // Needs you: the to-do list, each with its one button.
+  type Todo = { icon: React.ReactNode; tone: "warn" | "err" | "info"; title: string; sub: string; href: string; go: string };
+  const todos: Todo[] = [];
+  if (k.expiredLots) todos.push({ icon: <TriangleAlert size={20} />, tone: "err", title: `${k.expiredLots} ${k.expiredLots === 1 ? "lot is" : "lots are"} past the use-by date`, sub: "Sell, use or write off first", href: `/inventory/reports?r=expiring&${q}`, go: "See them" });
+  if (k.reorder) todos.push({ icon: <TrendingDown size={20} />, tone: "warn", title: `${whole(k.reorder)} ${k.reorder === 1 ? "item is" : "items are"} running low`, sub: `At or under the reorder point, out of ${whole(k.withRop)}`, href: can(profile, "inventory") ? `${stockHref}&f=reorder` : `/inventory/reports?r=reorder&${q}`, go: can(profile, "inventory") ? "Reorder" : "See them" });
+  if (k.expiringLots) todos.push({ icon: <Hourglass size={20} />, tone: "warn", title: `${k.expiringLots} ${k.expiringLots === 1 ? "lot expires" : "lots expire"} in the next ${EXPIRING_DAYS} days`, sub: `${usd(k.expiringValue)} of stock to use first`, href: `/inventory/reports?r=expiring&${q}`, go: "See them" });
+  if (restWaiting && (can(profile, "receiving") || can(profile, "inventory"))) todos.push({ icon: <PackageOpen size={20} />, tone: "info", title: `${restWaiting} ${restWaiting === 1 ? "delivery is" : "deliveries are"} still missing items`, sub: "Partial orders waiting on the rest", href: `/inventory/incoming?b=${hereBranch}`, go: "Receiving" });
+  if (reorderOpen && can(profile, "inventory")) todos.push({ icon: <Send size={20} />, tone: "info", title: `${reorderOpen} reorder ${reorderOpen === 1 ? "request is" : "requests are"} waiting on purchasing`, sub: "Asked, not ordered yet", href: `/inventory/reorders${pick === "all" ? "" : `?b=${pick}`}`, go: "See them" });
+  if (k.noPrice && profile.role === "admin") todos.push({ icon: <Tags size={20} />, tone: "info", title: `${k.noPrice} ${k.noPrice === 1 ? "item has" : "items have"} no value yet`, sub: "Stock value leaves them out until they have one", href: "/inventory/values", go: "Add values" });
+  if (k.agingItems) todos.push({ icon: <Hourglass size={20} />, tone: "info", title: `${whole(k.agingItems)} ${k.agingItems === 1 ? "item hasn't" : "items haven't"} sold in ${AGING_DAYS}+ days`, sub: `${usd(k.agingValue)} sitting · worth putting on sale`, href: `/inventory/reports?r=aging&${q}`, go: "See them" });
+
+  const kpi = (href: string, label: React.ReactNode, value: string, sub: React.ReactNode, tone?: "warn") => (
+    <Link href={href} className={`ihub-kpi${tone ? ` ${tone}` : ""}`}>
       <span className="l">{label}</span>
       <b>{value}</b>
       <span className="s">{sub}</span>
@@ -104,192 +99,103 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
 
   return (
     <main className="shell wide">
-      <TopBar title="Inventory Hub" back="/" howTo="see-stock" />
-      <HubNav profile={profile} active="dashboard" branch={pick} />
-
-      {live.length > 1 ? (
-        <div className="chips" role="tablist" aria-label="Location">
-          <Link href="/inventory?b=all" className={`chip${pick === "all" ? " on" : ""}`}>All locations</Link>
-          {live.map((b) => (
-            <Link key={b.id} href={`/inventory?b=${b.id}`} className={`chip${b.id === pick ? " on" : ""}`}>{b.name}{b.id === own ? " (yours)" : ""}</Link>
-          ))}
+      <div className="o2 ihub">
+        <div className="o2-head">
+          <div className="o2-head-l">
+            <Link href="/" className="o2-back" aria-label="Back to home"><ChevronLeft size={22} /></Link>
+            <div className="o2-title">
+              <h1>Inventory</h1>
+              {lookOnly && own ? (
+                <span className="o2-sub">Look only · your tools stay on {live.find((b) => b.id === own)?.name ?? "your location"} · <Link href={`/inventory?b=${own}`}>Back to yours</Link></span>
+              ) : null}
+            </div>
+          </div>
+          {live.length > 1 ? (
+            <nav className="seg2" aria-label="Location">
+              <Link href="/inventory?b=all" className={pick === "all" ? "on" : undefined} aria-current={pick === "all" ? "page" : undefined}>All</Link>
+              {live.map((b) => (
+                <Link key={b.id} href={`/inventory?b=${b.id}`} className={b.id === pick ? "on" : undefined} aria-current={b.id === pick ? "page" : undefined}>
+                  {b.name.replace(/,\s*[A-Z]{2}$/, "")}{b.id === own ? " (yours)" : ""}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
         </div>
-      ) : null}
-      {lookOnly && own ? (
-        <p className="tiny faint" style={{ margin: 0 }}>
-          Look only. Your receiving, transfers, counts and holds stay on {live.find((b) => b.id === own)?.name ?? "your location"}. <Link href={`/inventory?b=${own}`}>Back to yours</Link>
-        </p>
-      ) : null}
 
-      <section className="hub-kpis" aria-label="Key numbers">
-        {tile(`/inventory/reports?r=value&${q}`, "Stock value (estimate)", usd(k.value), k.noPrice ? `${k.noPrice} ${k.noPrice === 1 ? "item has" : "items have"} no value yet` : `${k.pricedItems} items in stock`, k.noPrice ? "warn" : undefined)}
-        {tile(
-          `/inventory/reports?r=reorder&${q}`,
-          "At reorder point",
-          whole(k.reorder),
-          k.withRop ? `of ${k.withRop} items with a reorder point` : "No reorder points set yet",
-          k.reorder ? "warn" : undefined,
-        )}
-        {tile(
-          `/inventory/reports?r=expiring&${q}`,
-          `Expiring in ${EXPIRING_DAYS} days`,
-          `${k.expiringLots} ${k.expiringLots === 1 ? "lot" : "lots"}`,
-          k.expiredLots ? <span className="err-t"><AlertTriangle size={12} /> {k.expiredLots} {k.expiredLots === 1 ? "lot" : "lots"} already expired</span> : usd(k.expiringValue),
-          k.expiredLots ? "err" : k.expiringLots ? "warn" : undefined,
-        )}
-        {tile(`/inventory/reports?r=aging&${q}`, `No sale in ${AGING_DAYS}+ days`, usd(k.agingValue), `${k.agingItems} ${k.agingItems === 1 ? "item" : "items"} to put on sale`, k.agingItems ? "warn" : undefined)}
-        {tile(`/inventory/reports?r=movement&${q}`, "Shipped, last 30 days", usd(k.shipped30), "Completed orders")}
-        {tile(`/inventory/incoming?b=${hereBranch}`, "Received, last 30 days", usd(k.received30), `${k.expected} ${k.expected === 1 ? "delivery" : "deliveries"} on the way`)}
-        {tile(
-          `/inventory/reports?r=counts&${q}`,
-          "Count accuracy",
-          k.accuracy === null ? "—" : `${k.accuracy}%`,
-          k.countLines ? `${whole(k.countLines)} ${k.countLines === 1 ? "line" : "lines"} counted in 90 days` : "No counts in the last 90 days",
-          k.accuracy !== null && k.accuracy < 95 ? "warn" : undefined,
-        )}
-        {tile(`/inventory/transfers?b=${hereBranch}`, "Transfers in transit", whole(k.inTransitOut + k.inTransitIn), `${k.inTransitOut} going out · ${k.inTransitIn} coming in`)}
-      </section>
+        <HubNav profile={profile} active="dashboard" branch={pick} />
 
-      <div className="hub-grid">
-        {many ? (
-          <section className="card col hub-card wide">
-            <div className="row between"><b>Estimated stock value by location</b><Link className="tiny" href={`/inventory/reports?r=value&${q}`}>Report</Link></div>
-            <BarList
-              rows={hub.byBranch.map((x) => ({
-                label: name(x.branch),
-                value: Math.round(x.value),
-                note: `${whole(x.items)} ${x.items === 1 ? "item" : "items"} in stock${x.noPrice ? ` · ${x.noPrice} with no value yet` : ""}`,
-              }))}
-              caption="Estimated sell value of the stock at each location"
+        <section className="card2 ihub-todo" aria-label="Needs you">
+          <div className="ihub-todo-h">
+            <b>Needs you</b>
+            <span>{todos.length ? `${todos.length} ${todos.length === 1 ? "thing" : "things"}` : "All caught up"}</span>
+          </div>
+          {todos.map((t, i) => (
+            <div key={i} className="ihub-todo-r">
+              <span className={`ihub-ic ${t.tone}`} aria-hidden="true">{t.icon}</span>
+              <span className="ihub-todo-b"><b>{t.title}</b><span>{t.sub}</span></span>
+              <Link href={t.href} className={`b2 sm${i === 0 ? "" : " quiet"}`}>{t.go}</Link>
+            </div>
+          ))}
+          {!k.expiringLots && !k.expiredLots ? (
+            <div className="ihub-todo-ok"><CircleCheck size={17} aria-hidden="true" /> No lots expire in the next {EXPIRING_DAYS} days</div>
+          ) : null}
+        </section>
+
+        {can(profile, "receiving") || can(profile, "inventory") || can(profile, "transfers") ? (
+          <div className="ihub-acts">
+            {can(profile, "receiving") || can(profile, "inventory") ? <Link href={`/inventory/incoming/receive?b=${hereBranch}`} className="b2 quiet"><ScanLine size={18} /> New Receiving Report</Link> : null}
+            {can(profile, "transfers") ? <Link href={`/inventory/transfers/new?b=${hereBranch}`} className="b2 quiet"><ArrowLeftRight size={18} /> Send a transfer</Link> : null}
+            {can(profile, "inventory") ? <Link href={`/inventory/spot?b=${hereBranch}`} className="b2 quiet"><ClipboardCheck size={18} /> Spot check</Link> : null}
+          </div>
+        ) : null}
+
+        <section className="ihub-kpis" aria-label="Key numbers">
+          {kpi(
+            `/inventory/reports?r=value&${q}`,
+            <>Stock value <Help label="How stock value is worked out">Stock value is an estimate of what the stock would sell for: each item&apos;s List value; if it has none, the Sell Price on the location&apos;s COUNT SHEET; else the catalog price. Shipped is what completed orders sold for. Received is valued the same way as stock.{starts.length ? ` The app has tracked sales here since ${dateShort(starts[0])}, so aging fills in over time.` : ""}</Help></>,
+            short(k.value),
+            "Estimate",
+          )}
+          {kpi(`/inventory/reports?r=movement&${q}`, "Shipped, last 30 days", short(k.shipped30), "Completed orders")}
+          {kpi(
+            `/inventory/reports?r=counts&${q}`,
+            "Count accuracy",
+            k.accuracy === null ? "-" : `${k.accuracy}%`,
+            k.countLines ? `${whole(k.countLines)} ${k.countLines === 1 ? "line" : "lines"} counted in 90 days` : "No counts in the last 90 days",
+            k.accuracy !== null && k.accuracy < 95 ? "warn" : undefined,
+          )}
+          {kpi(`/inventory/transfers?b=${hereBranch}`, "On a truck between locations", whole(k.inTransitOut + k.inTransitIn), `${k.inTransitOut} going out · ${k.inTransitIn} coming in`)}
+        </section>
+
+        <div className="ihub-grid">
+          <section className="card2 ihub-card">
+            <div className="ihub-card-h"><b>Shipped vs. received</b><span>Each week, last 12 weeks</span></div>
+            <ColumnChart
+              rows={weeks}
+              series={[{ key: "shipped", label: "Shipped (orders)" }, { key: "received", label: "Received (trucks and transfers)" }]}
+              caption="Dollars shipped on completed orders and received each week for the last 12 weeks"
             />
+            <span className="ihub-foot">Received in the last 30 days: {usd(k.received30)} · {k.expected} {k.expected === 1 ? "delivery" : "deliveries"} on the way</span>
           </section>
-        ) : null}
-
-        <section className="card col hub-card wide">
-          <div className="row between"><b>Shipped vs. received</b><span className="tiny faint">Weekly, last 12 weeks</span></div>
-          <ColumnChart
-            rows={weeks}
-            series={[{ key: "shipped", label: "Shipped (orders)" }, { key: "received", label: "Received (trucks and transfers)" }]}
-            caption="Dollars shipped on completed orders and received each week for the last 12 weeks"
-          />
-        </section>
-
-        <section className="card col hub-card">
-          <div className="row between"><b>Stock value by group</b><Link className="tiny" href={`/inventory/reports?r=value&${q}`}>Report</Link></div>
-          {cats.length ? <BarList rows={cats} caption="Stock value by product group" /> : <p className="small muted" style={{ margin: 0 }}>Nothing priced in stock yet.</p>}
-        </section>
-
-        <section className="card col hub-card">
-          <div className="row between"><b>How long stock has sat</b><Link className="tiny" href={`/inventory/reports?r=aging&${q}`}>Report</Link></div>
-          <BarList rows={ages} caption="Stock value by days since the item last sold" sub={`Days since each item last sold here${starts.length ? ` (or since ${dateShort(starts[0])}, when the app started tracking, if it hasn't sold since)` : ""}.`} />
-        </section>
-
-        <section className="card col hub-card">
-          <div className="row between"><b>Top sellers, last 30 days</b><Link className="tiny" href={`/inventory/reports?r=movement&${q}`}>Report</Link></div>
-          {top.length ? (
-            <BarList rows={top.map((i) => ({ label: `${i.sku}${many ? ` · ${name(i.branch)}` : ""}`, value: Math.round(i.soldValue30), note: `${whole(i.sold30)} ${plural(i.unit, i.sold30)} · ${i.name}` }))} caption="Top sellers by dollars, last 30 days" />
-          ) : (
-            <p className="small muted" style={{ margin: 0 }}>No completed orders in the last 30 days.</p>
-          )}
-        </section>
-
-        <section className="card col hub-card">
-          <div className="row between"><b>Lots to use first</b><Link className="tiny" href={`/inventory/reports?r=expiring&${q}`}>All lots</Link></div>
-          {expiring.length ? (
-            <div className="hub-rows">
-              {expiring.map((l, i) => (
-                <div key={i} className={`hub-row${l.days !== null && l.days < 0 ? " err" : ""}`}>
-                  <Hourglass size={15} aria-hidden />
-                  <span className="grow ellipsis"><b>{l.sku}</b> lot {l.lot_no}{many ? ` · ${name(l.branch)}` : ""}</span>
-                  <span className="v">{l.estimated ? "~" : ""}{whole(l.remaining)} · {l.days !== null && l.days < 0 ? `expired ${dateShort(l.use_by)}` : `use by ${dateShort(l.use_by)}`}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="small muted" style={{ margin: 0 }}>No lots expire in the next {EXPIRING_DAYS} days.</p>
-          )}
-        </section>
-
-        <section className="card col hub-card">
-          <div className="row between"><b>Put on sale</b><Link className="tiny" href={`/inventory/reports?r=aging&${q}`}>All aging stock</Link></div>
-          {toSell.length ? (
-            <div className="hub-rows">
-              {toSell.map((i, x) => (
-                <div key={x} className="hub-row">
-                  <span className="grow ellipsis"><b>{i.sku}</b> {i.name}{many ? ` · ${name(i.branch)}` : ""}</span>
-                  <span className="v">{whole(i.on_hand)} · {i.value ? usd(i.value) : "no value"} · {i.idle}d</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="small muted" style={{ margin: 0 }}>Nothing has gone {AGING_DAYS} days without a sale.</p>
-          )}
-          {profile.role === "admin" && toSell.length ? <Link href="/admin/promos" className="btn sm dark" style={{ alignSelf: "flex-start" }}>Set up a sale in Promos</Link> : null}
-        </section>
+          <section className="card2 ihub-card">
+            <div className="ihub-card-h"><b>Where the money sits</b><Link href={`/inventory/reports?r=value&${q}`}>All groups</Link></div>
+            {cats.length ? <BarList rows={cats} caption="Stock value by product group" /> : <p className="small muted" style={{ margin: 0 }}>Nothing priced in stock yet.</p>}
+          </section>
+          {many ? (
+            <section className="card2 ihub-card wide">
+              <div className="ihub-card-h"><b>Stock value by location</b><Link href={`/inventory/reports?r=value&${q}`}>Report</Link></div>
+              <BarList
+                rows={hub.byBranch.map((x) => ({
+                  label: name(x.branch),
+                  value: Math.round(x.value),
+                  note: `${whole(x.items)} ${x.items === 1 ? "item" : "items"} in stock${x.noPrice ? ` · ${x.noPrice} with no value yet` : ""}`,
+                }))}
+                caption="Estimated sell value of the stock at each location"
+              />
+            </section>
+          ) : null}
+        </div>
       </div>
-
-      <div className="inv-tools">
-        {can(profile, "receiving") || can(profile, "inventory") ? (
-          <Link href={`/inventory/incoming/receive?b=${hereBranch}`} className="inv-tool">
-            <ScanLine size={20} />
-            <span className="grow"><b>New Receiving Report</b><span className="tiny faint">Snap the BOL and the app fills it in</span></span>
-            <ChevronRight size={16} />
-          </Link>
-        ) : null}
-        {can(profile, "transfers") ? (
-          <Link href={`/inventory/transfers/new?b=${hereBranch}`} className="inv-tool">
-            <ArrowLeftRight size={20} />
-            <span className="grow"><b>Send a transfer</b><span className="tiny faint">Stock to another AMBIT location</span></span>
-            <ChevronRight size={16} />
-          </Link>
-        ) : null}
-        {can(profile, "inventory") ? (
-          <Link href={`/inventory/spot?b=${hereBranch}`} className="inv-tool">
-            <ClipboardCheck size={20} />
-            <span className="grow"><b>Spot check</b><span className="tiny faint">Today&apos;s item to count</span></span>
-            <ChevronRight size={16} />
-          </Link>
-        ) : null}
-        {profile.role === "admin" ? (
-          <Link href="/inventory/values" className="inv-tool">
-            <Tags size={20} />
-            <span className="grow"><b>List values</b><span className="tiny faint">What each item is worth on these dashboards{k.noPrice ? ` · ${k.noPrice} missing` : ""}</span></span>
-            <ChevronRight size={16} />
-          </Link>
-        ) : null}
-        <Link href={`/inventory/reports?${q}`} className="inv-tool">
-          <FileDown size={20} />
-          <span className="grow"><b>Reports</b><span className="tiny faint">Reorder, expiring, aging, movement, value, counts</span></span>
-          <ChevronRight size={16} />
-        </Link>
-        {can(profile, "receiving") || can(profile, "inventory") ? (
-          <Link href={`/inventory/incoming?b=${hereBranch}`} className="inv-tool">
-            <Truck size={20} />
-            <span className="grow"><b>Receiving</b><span className="tiny faint">On the way and received</span></span>
-            <ChevronRight size={16} />
-          </Link>
-        ) : null}
-        {(can(profile, "receiving") || can(profile, "inventory")) && restWaiting ? (
-          <Link href={`/inventory/incoming?b=${hereBranch}`} className="inv-tool">
-            <PackageOpen size={20} />
-            <span className="grow"><b>Partial orders: waiting on the rest</b><span className="tiny faint">{restWaiting} {restWaiting === 1 ? "order is" : "orders are"} still missing items</span></span>
-            <span className="dot-badge static">{restWaiting}</span>
-          </Link>
-        ) : null}
-        {can(profile, "inventory") ? (
-          <Link href={`/inventory/reorders${pick === "all" ? "" : `?b=${pick}`}`} className="inv-tool">
-            <Send size={20} />
-            <span className="grow"><b>Reorder requests</b><span className="tiny faint">{reorderOpen ? `${reorderOpen} waiting on purchasing` : "Asked of purchasing"}</span></span>
-            {reorderOpen ? <span className="dot-badge static">{reorderOpen}</span> : <ChevronRight size={16} />}
-          </Link>
-        ) : null}
-      </div>
-
-      <p className="tiny faint" style={{ margin: 0 }}>
-        Stock value is an estimate of what the stock would sell for: each item&apos;s List value
-        {profile.role === "admin" ? <> (<Link href="/inventory/values">set them in List values</Link>)</> : null}; if it has none, the Sell Price on the
-        location&apos;s COUNT SHEET; else the catalog price. Shipped is what completed orders sold for. Received is valued the same way as stock. {starts.length ? `The app has tracked sales here since ${dateShort(starts[0])}, so aging fills in over time.` : ""}
-      </p>
     </main>
   );
 }

@@ -23,8 +23,32 @@ export function Help({ children, label = "More about this" }: { children: React.
   }, [open]);
   return (
     <span ref={box} className="help">
-      <button type="button" className="help-btn" aria-label={label} aria-expanded={open} onClick={() => setOpen((v) => !v)}>?</button>
-      {open ? <span role="note" className="help-tip">{children}</span> : null}
+      <button
+        type="button"
+        className="help-btn"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={(e) => {
+          // Works inside a link or a fold-out row too: the tap opens the tip, nothing else.
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        ?
+      </button>
+      {open ? (
+        <span
+          role="note"
+          className="help-tip"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!(e.target as HTMLElement).closest("a")) e.preventDefault();
+          }}
+        >
+          {children}
+        </span>
+      ) : null}
     </span>
   );
 }

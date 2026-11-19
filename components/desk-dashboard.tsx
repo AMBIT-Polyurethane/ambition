@@ -49,7 +49,10 @@ export function DeskDashboard({
   tab,
   branches,
   mine = false,
+  hideFilters = false,
 }: {
+  /** The page shows its own location and time pickers. */
+  hideFilters?: boolean;
   stats: DeskStats;
   range: RangeKey;
   branch: string | null;
@@ -125,7 +128,7 @@ export function DeskDashboard({
   return (
     <div className="dash" ref={root} onPointerMove={onMove} onPointerLeave={() => setTip(null)} onFocusCapture={onFocus} onBlurCapture={() => setTip(null)}>
       {/* ---- filters: scope everything below, including the order lists */}
-      <div className="dash-filters">
+      {hideFilters ? null : <div className="dash-filters">
         <div className="chips" role="group" aria-label="Time range">
           {RANGES.map((r) => (
             <Link key={r.key} href={href({ r: r.key })} className={`chip sm${range === r.key ? " on" : ""}`} scroll={false}>
@@ -141,7 +144,7 @@ export function DeskDashboard({
             </Link>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* ---- the numbers at a glance */}
       <div className="dash-tiles">

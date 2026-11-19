@@ -4,7 +4,18 @@ import { useEffect, useRef } from "react";
 import { Ellipsis } from "lucide-react";
 
 /** The ⋯ button: everything you only need now and then, out of the way. Closes on a tap outside, Escape, or a pick. */
-export function MoreMenu({ children, label = "More" }: { children: React.ReactNode; label?: string }) {
+export function MoreMenu({
+  children,
+  label = "More",
+  trigger,
+  triggerClass,
+}: {
+  children: React.ReactNode;
+  label?: string;
+  /** What the button shows instead of the three dots (a picker like "Location: All"). */
+  trigger?: React.ReactNode;
+  triggerClass?: string;
+}) {
   const box = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const close = (e: MouseEvent | TouchEvent) => {
@@ -25,8 +36,8 @@ export function MoreMenu({ children, label = "More" }: { children: React.ReactNo
   }, []);
   return (
     <details ref={box} className="menu2">
-      <summary className="b2 quiet icon" aria-label={label} title={label}>
-        <Ellipsis size={20} />
+      <summary className={triggerClass ?? "b2 quiet icon"} aria-label={label} title={label}>
+        {trigger ?? <Ellipsis size={20} />}
       </summary>
       <div
         className="menu2-p"

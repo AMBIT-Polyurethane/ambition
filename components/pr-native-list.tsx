@@ -1,11 +1,52 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Icon } from "@/components/icons";
-import { dateShort } from "@/lib/format";
+import { dateShort, monthDay } from "@/lib/format";
 import { PR_STATUS, prRef, type PrRow } from "@/lib/price-requests";
 
 /** Price requests made in the app (0066). */
-export function PrNativeList({ rows, counts, showRep = false }: { rows: PrRow[]; counts: Map<number, { n: number; auto: number }>; showRep?: boolean }) {
+export function PrNativeList({
+  rows,
+  counts,
+  showRep = false,
+  table = false,
+}: {
+  rows: PrRow[];
+  counts: Map<number, { n: number; auto: number }>;
+  showRep?: boolean;
+  /** Approvers: one clean table, with how long each has waited. */
+  table?: boolean;
+}) {
+  if (table) {
+    const now = Date.now();
+    return (
+      <div className="card2 pra-list">
+        <div className="pra-row pra-cols" aria-hidden="true">
+          <span>Customer</span><span>Sales rep</span><span className="num">Products</span><span>Sent</span><span>Waiting</span><span />
+        </div>
+        {rows.map((r) => {
+          const c = counts.get(r.id);
+          const d = Math.max(0, Math.floor((now - new Date(r.created_at).getTime()) / 86400_000));
+          return (
+            <Link key={r.id} className="pra-row" href={`/price-requests/n/${r.id}`}>
+              <span className="pra-cust"><b>{r.company_name}</b><span>{[prRef(r.id), r.contact].filter(Boolean).join(" · ")}</span></span>
+              <span className="pra-rep">{r.rep_name ?? "-"}</span>
+              <span className="num">{c ? c.n : "-"}</span>
+              <span className="pra-sent">{monthDay(r.created_at)}</span>
+              <span className="pra-wait">
+                {r.status === "pending" ? (
+                  <span className={`pill2 sm ${d >= 14 ? "err" : d >= 3 ? "warn" : ""}`}>{d === 0 ? "Today" : `${d} ${d === 1 ? "day" : "days"}`}</span>
+                ) : (
+                  <span className={`pill2 sm ${r.status === "approved" ? "ok" : r.status === "denied" ? "err" : ""}`}>{PR_STATUS[r.status].label}{r.decided_at ? ` ${monthDay(r.decided_at)}` : ""}</span>
+                )}
+              </span>
+              <ChevronRight size={18} className="chev" aria-hidden="true" />
+            </Link>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="list">
       {rows.map((r) => {

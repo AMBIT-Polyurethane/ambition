@@ -1,7 +1,10 @@
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { emailConfigured } from "@/lib/email";
 import { MICROSOFT_SIGNIN } from "@/lib/env";
-import { ListLink, TopBar } from "@/components/ui";
+import { Help } from "@/components/help";
+import { TileSection } from "@/components/tile-grid";
 
 export const metadata = { title: "Admin" };
 
@@ -14,35 +17,76 @@ export default async function AdminPage() {
     supabase.from("orders").select("id", { count: "exact", head: true }).eq("status", "new"),
   ]);
   const mail = emailConfigured();
+  const waiting = pending.count ?? 0;
 
   return (
-    <main className="shell">
-      <TopBar title="Admin" back="/profile" />
-      {!mail ? (
-        <div className="alert warn small">Email sending isn&apos;t set up yet. Orders are saved and listed under Orders, but nothing is emailed to orders@ambitpu.com.</div>
-      ) : null}
-      {!MICROSOFT_SIGNIN ? (
-        <div className="alert info small">&ldquo;Sign in with Microsoft&rdquo; is off. Until IT finishes the Microsoft set-up, add AMBIT staff by having them request access, then set their role to Employee here.</div>
-      ) : null}
-      <div className="list">
-        <ListLink href="/admin/assistant" icon="spark" title="Ask AMBIT" sub="Teach the assistant, answer questions sent to AMBIT's expert, settings" />
-        <ListLink href="/admin/users" icon="users" title="Accounts" sub={`${pending.count ?? 0} waiting for approval`} />
-        <ListLink href="/admin/email-alerts" icon="mail" title="Email alerts" sub="Who gets the credit check emails" />
-        <ListLink href="/admin/companies" icon="building" title="Customers" sub={`${companies.count ?? 0} companies · sales reps`} />
-        <ListLink href="/admin/ops" icon="ops" title="AMBIT-OPS workspaces" sub="Turn OPS on for a contractor, demo workspaces, help a contractor" />
-        <ListLink href="/admin/sales-goals" icon="target" title="Sales goals" sub="Monthly goals by product group for sales reps and warehouse managers" />
-        <ListLink href="/admin/products" icon="box" title="Products & pricing" sub={`${products.count ?? 0} active products`} />
-        <ListLink href="/orders?status=new" icon="cart" title="Orders" sub={`${newOrders.count ?? 0} new`} />
-        <ListLink href="/admin/data-check" icon="shield" title="Data check" sub="Everything that needs fixing in inventory and orders, who it's on, and their emails" />
-        <ListLink href="/admin/inventory" icon="boxes" title="Inventory" sub="Live stock from each location's spreadsheet (Microsoft connection)" />
-        <ListLink href="/admin/expenses" icon="receipt" title="Expense reports" sub="Approvals, the Chase statement and the expense dashboard" />
-        <ListLink href="/admin/forms" icon="form" title="Forms hub" sub="Credit applications, account setups and every Jotform form" />
-        <ListLink href="/admin/promos" icon="megaphone" title="Home banner" sub="Sale slides and news at the top of Home" />
-        <ListLink href="/admin/holidays" icon="calendar" title="Holidays" sub="Days AMBIT is closed, and the holiday touches on Home" />
-        <ListLink href="/admin/links" icon="link" title="Home screen links & forms" sub="Jotform links, marketing kit, videos" />
-        <ListLink href="/admin/docs" icon="docs" title="Docs & bulletins" sub="TDS, SDS, ESR, TSB uploads" />
-        <ListLink href="/admin/academy" icon="academy" title="Academy courses" />
-        <ListLink href="/admin/branches" icon="pin" title="Branches" sub="Addresses and phone numbers" />
+    <main className="shell wide">
+      <div className="o2 adm">
+        <div className="o2-head">
+          <div className="o2-head-l">
+            <Link href="/profile" className="o2-back" aria-label="Back"><ChevronLeft size={22} /></Link>
+            <div className="o2-title"><h1>Admin</h1></div>
+          </div>
+        </div>
+
+        {!mail || !MICROSOFT_SIGNIN ? (
+          <section className="card2 adm-setup" aria-label="Finish setting up">
+            {!mail ? (
+              <div className="adm-setup-r">
+                <span className="adm-dot warn" aria-hidden="true" />
+                <span className="grow"><b>Order emails are off.</b> <span>Nothing goes to orders@ambitpu.com yet. Orders are still saved under Orders.</span></span>
+              </div>
+            ) : null}
+            {!MICROSOFT_SIGNIN ? (
+              <div className="adm-setup-r">
+                <span className="adm-dot info" aria-hidden="true" />
+                <span className="grow"><b>Sign in with Microsoft is off.</b> <span>Staff ask for access for now.</span></span>
+                <Help label="How to add staff until Microsoft sign-in is on">
+                  Until IT finishes the Microsoft set-up, have new staff request access, then open Accounts and set their role to Employee.
+                </Help>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        <TileSection
+          title="People"
+          tiles={[
+            { key: "users", href: "/admin/users", icon: "users", title: "Accounts", sub: waiting ? `${waiting} waiting for approval` : "Who can sign in", badge: waiting },
+            { key: "alerts", href: "/admin/email-alerts", icon: "mail", title: "Email alerts", sub: "Who gets credit emails" },
+            { key: "branches", href: "/admin/branches", icon: "pin", title: "Branches", sub: "Addresses and phones" },
+            { key: "holidays", href: "/admin/holidays", icon: "calendar", title: "Holidays", sub: "Days AMBIT is closed" },
+          ]}
+        />
+        <TileSection
+          title="Selling"
+          tiles={[
+            { key: "companies", href: "/admin/companies", icon: "building", title: "Customers", sub: `${companies.count ?? 0} companies, sales reps` },
+            { key: "products", href: "/admin/products", icon: "box", title: "Products & pricing", sub: `${products.count ?? 0} active, photos` },
+            { key: "goals", href: "/admin/sales-goals", icon: "target", title: "Sales goals", sub: "Monthly, by product group" },
+            { key: "promos", href: "/admin/promos", icon: "megaphone", title: "Home banner", sub: "Sale slides and news" },
+          ]}
+        />
+        <TileSection
+          title="Running the business"
+          tiles={[
+            { key: "orders", href: "/orders?status=new", icon: "cart", title: "Orders", sub: `${newOrders.count ?? 0} new`, badge: newOrders.count ?? 0 },
+            { key: "inventory", href: "/admin/inventory", icon: "boxes", title: "Inventory", sub: "Spreadsheet connection" },
+            { key: "check", href: "/admin/data-check", icon: "shield", title: "Data check", sub: "What needs fixing, and who" },
+            { key: "expenses", href: "/admin/expenses", icon: "receipt", title: "Expense reports", sub: "Approvals and the Chase statement" },
+            { key: "forms", href: "/admin/forms", icon: "form", title: "Forms hub", sub: "Credit apps, account setups" },
+            { key: "ops", href: "/admin/ops", icon: "ops", title: "AMBIT-OPS", sub: "Contractor workspaces" },
+          ]}
+        />
+        <TileSection
+          title="Help & content"
+          tiles={[
+            { key: "assistant", href: "/admin/assistant", icon: "spark", title: "Ask AMBIT", sub: "Teach the assistant" },
+            { key: "docs", href: "/admin/docs", icon: "docs", title: "Docs & bulletins", sub: "TDS, SDS, ESR, TSB" },
+            { key: "academy", href: "/admin/academy", icon: "academy", title: "Academy courses", sub: "Lessons and videos" },
+            { key: "links", href: "/admin/links", icon: "link", title: "Home screen links", sub: "Jotform, marketing kit" },
+          ]}
+        />
       </div>
     </main>
   );

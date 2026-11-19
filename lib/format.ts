@@ -36,6 +36,13 @@ export function dateShort(iso: string | null | undefined): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago" });
 }
 
+/** "Nov 12": month and day, no year (lists where the year is obvious). */
+export function monthDay(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" });
+}
+
 export function dateTime(iso: string | null | undefined): string {
   if (!iso) return "";
   return new Date(iso).toLocaleString("en-US", {

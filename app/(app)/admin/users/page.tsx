@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { dateShort, searchSafe } from "@/lib/format";
-import { Empty, TopBar } from "@/components/ui";
+import { Empty } from "@/components/ui";
 import { Submit } from "@/components/forms";
 import { saveUser } from "@/app/(app)/admin/actions";
 import { AccessPicker } from "@/components/access-picker";
 import { ResendInvite } from "@/components/invite-form";
 import { cancelInvite } from "./invite-actions";
-import { Pencil, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronLeft, Pencil, Search, UserPlus } from "lucide-react";
+import { Help } from "@/components/help";
 import { needsRole, roleLabel } from "@/lib/access";
 import type { Branch, Company, Profile } from "@/lib/types";
 
@@ -15,9 +16,9 @@ export const metadata = { title: "Accounts" };
 
 const TABS = [
   ["pending", "Waiting"],
-  ["invited", "Invited"],
-  ["customer", "Contractors"],
   ["employee", "AMBIT staff"],
+  ["customer", "Contractors"],
+  ["invited", "Invited"],
   ["norole", "Needs a role"],
   ["disabled", "Turned off"],
 ] as const;
@@ -37,39 +38,55 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   else query = query.eq("status", "active").in("role", ["employee", "admin"]);
   if (q) query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%,requested_company.ilike.%${q}%`);
 
-  const [{ data: users }, { data: companies }, { data: branches }] = await Promise.all([
+  const [{ data: users }, { data: companies }, { data: branches }, { count: waitingN }] = await Promise.all([
     query,
     supabase.from("companies").select("id, name, account_no").order("name"),
     supabase.from("branches").select("id, name, state").order("sort"),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "pending").eq("demo", false),
   ]);
   const list = tab === "invited" ? [] : ((users ?? []) as Profile[]);
   const cos = (companies ?? []) as Pick<Company, "id" | "name" | "account_no">[];
 
   return (
     <main className="shell wide">
-      <TopBar title="Accounts" back="/admin" />
-      <div>
-        <Link href="/admin/users/new" className="btn sm"><UserPlus size={15} /> Create an account</Link>
-      </div>
-      <div className="row wrap" style={{ gap: 10 }}>
-        <div className="chips">
-          {TABS.map(([id, label]) => (
-            <Link key={id} href={`/admin/users?tab=${id}`} className={`chip${tab === id ? " on" : ""}`}>{label}</Link>
-          ))}
+      <div className="o2 acc">
+      <div className="o2-head">
+        <div className="o2-head-l">
+          <Link href="/admin" className="o2-back" aria-label="Back to admin"><ChevronLeft size={22} /></Link>
+          <div className="o2-title">
+            <h1>Accounts</h1>
+            <span className="o2-sub">{waitingN ? `${waitingN} ${waitingN === 1 ? "person is" : "people are"} waiting for you` : "No one is waiting"}</span>
+          </div>
         </div>
-        <form action="/admin/users" className="grow" style={{ minWidth: 220 }}>
+        <div className="o2-head-r">
+          <Link href="/admin/users/new" className="b2 sm"><UserPlus size={16} /> Add a person</Link>
+        </div>
+      </div>
+      <div className="stk-bar">
+        <nav className="seg2" aria-label="Show">
+          {TABS.map(([id, label]) => (
+            <Link key={id} href={`/admin/users?tab=${id}`} className={tab === id ? "on" : undefined} aria-current={tab === id ? "page" : undefined}>
+              {label}{id === "pending" && waitingN ? <span className="stk-n warn">{waitingN}</span> : null}
+            </Link>
+          ))}
+        </nav>
+        <form action="/admin/users" className="stk-search" role="search">
+          <Search size={18} aria-hidden="true" />
           <input type="hidden" name="tab" value={tab} />
-          <input className="input sm" name="q" defaultValue={q} placeholder="Search name, email or company" />
+          <input type="search" name="q" defaultValue={q} placeholder="Name, email or company" aria-label="Search accounts" />
         </form>
       </div>
 
       {sp.error ? <div className="alert err">{sp.error}</div> : null}
       {sp.saved ? <div className="alert ok">Saved {sp.saved}.</div> : null}
-      {tab === "pending" ? (
-        <div className="alert info small">
-          Staff access (internal forms, directory, ordering for customers) is only possible for @ambitpu.com accounts.
-          Until Microsoft sign-in is on, only approve AMBIT emails for people you know: anyone can type any email when requesting access.
-          Safer for staff: use Create an account, which emails them a private link.
+      {tab === "pending" && list.length ? (
+        <div className="acc-tip">
+          <span>Only approve people you know.</span>
+          <Help label="Why: anyone can type any email">
+            Staff access (internal forms, directory, ordering for customers) is only possible for @ambitpu.com accounts. Until Microsoft sign-in is on,
+            only approve AMBIT emails for people you know: anyone can type any email when requesting access. Safer for staff: use Add a person, which
+            emails them a private link.
+          </Help>
         </div>
       ) : null}
 
@@ -78,8 +95,8 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       ) : list.length === 0 ? (
         <Empty icon="users" title={tab === "pending" ? "No one is waiting" : "No accounts here"} />
       ) : (
-        <div className="col">
-          {list.map((u) => {
+        <div className="card2 acc-list">
+          {list.map((u, i) => {
             const match =
               u.company_id ??
               cos.find((c) => u.requested_account_no && c.account_no?.toLowerCase() === u.requested_account_no.toLowerCase())?.id ??
@@ -88,19 +105,30 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
             const isMe = u.id === me.id;
             const ambit = u.email.toLowerCase().endsWith("@ambitpu.com");
             const roleDefault = u.status === "pending" && ambit && u.role === "customer" ? "employee" : u.role;
+            const initials = (u.full_name ?? u.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
             return (
-              <form key={u.id} action={saveUser} className="card col" style={{ gap: 12 }}>
+              <details key={u.id} className="acc-item" open={(tab === "pending" && i === 0) || list.length === 1}>
+                <summary className="acc-sum">
+                  <span className={`acc-av${ambit ? " ambit" : ""}`} aria-hidden="true">{initials || "?"}</span>
+                  <span className="acc-who">
+                    <b>{u.full_name ?? "(no name)"}{isMe ? " (you)" : ""}</b>
+                    <span>{u.email}{u.requested_company ? ` · asked for ${u.requested_company}` : u.company?.name ? ` · ${u.company.name}` : ""}</span>
+                  </span>
+                  <span className="acc-tags">
+                    {ambit ? <span className="pill2 sm">AMBIT email</span> : <span className="pill2 sm">Outside email</span>}
+                    {u.status === "active" && u.role !== "customer" ? (roleLabel(u.job_role) ? <span className="pill2 ok sm">{roleLabel(u.job_role)}</span> : needsRole(u) ? <span className="pill2 warn sm">Needs a role</span> : null) : null}
+                    {u.status === "pending" ? <span className="pill2 warn sm">Waiting {dateShort(u.created_at)}</span> : null}
+                  </span>
+                  <ChevronDown size={18} className="prd-chev" aria-hidden="true" />
+                </summary>
+              <form action={saveUser} className="col acc-form" style={{ gap: 12 }}>
                 <input type="hidden" name="user_id" value={u.id} />
                 <input type="hidden" name="tab" value={tab} />
-                <div className="row between wrap">
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{u.full_name ?? "(no name)"} {isMe ? <span className="pill grey">You</span> : null} {ambit ? <span className="pill">AMBIT email</span> : <span className="pill grey">Outside email</span>}</div>
-                    <div className="small muted">{u.email}{u.phone ? ` · ${u.phone}` : ""}</div>
-                    {u.requested_company ? (
-                      <div className="small">Requested: <b>{u.requested_company}</b>{u.requested_account_no ? ` · acct ${u.requested_account_no}` : ""}</div>
-                    ) : null}
-                  </div>
-                  <span className="tiny faint">Joined {dateShort(u.created_at)}</span>
+                <div className="row between wrap" style={{ gap: 8 }}>
+                  <span className="small">
+                    {u.requested_company ? <>Asked for a login for <b>{u.requested_company}</b>{u.requested_account_no ? ` · acct ${u.requested_account_no}` : ""}</> : null}
+                  </span>
+                  <span className="tiny faint">Joined {dateShort(u.created_at)}{u.phone ? ` · ${u.phone}` : ""}</span>
                 </div>
                 <div className="grid3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                   <label className="field">
@@ -155,12 +183,14 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                     </select>
                   </label>
                 </div>
-                <div><Submit className="btn sm" pendingText="Saving…">{u.status === "pending" ? "Save & notify" : "Save"}</Submit></div>
+                <div><Submit className="b2" pendingText="Saving…">{u.status === "pending" ? "Save & notify" : "Save"}</Submit></div>
               </form>
+              </details>
             );
           })}
         </div>
       )}
+      </div>
     </main>
   );
 }
