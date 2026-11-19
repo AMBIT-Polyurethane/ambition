@@ -6,7 +6,7 @@ import { Camera, Images, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { RASTER, runPool, toJpeg, uploadProductPhoto } from "@/lib/images";
 import { ProductPhoto } from "@/components/product-photo";
-import { setProductImages, type ImportResult } from "@/app/(app)/admin/actions";
+import { setAdcImages, setProductImages, type ImportResult } from "@/app/(app)/admin/actions";
 
 // One product's photo (inside the product's edit panel).
 export function ProductPhotoField({ sku, url, name }: { sku: string; url: string | null; name?: string }) {
@@ -57,7 +57,7 @@ export function ProductPhotoField({ sku, url, name }: { sku: string; url: string
 }
 
 // Many photos at once, matched to products by file name (e.g. 336508.jpg).
-export function BulkPhotoUpload({ skus }: { skus: string[] }) {
+export function BulkPhotoUpload({ skus, store = "app" }: { skus: string[]; /** "adc": the ADC web store's photos (ADC logo). */ store?: "app" | "adc" }) {
   const router = useRouter();
   const [matched, setMatched] = useState<{ sku: string; file: File }[]>([]);
   const [unmatched, setUnmatched] = useState<string[]>([]);
@@ -88,13 +88,13 @@ export function BulkPhotoUpload({ skus }: { skus: string[] }) {
       const failed: string[] = [];
       await runPool(matched, 4, async ({ sku, file }) => {
         try {
-          saved.push({ sku, url: await uploadProductPhoto(supabase, sku, await toJpeg(file, 1600, 0.9)) });
+          saved.push({ sku, url: await uploadProductPhoto(supabase, sku, await toJpeg(file, 1600, 0.9), store === "adc" ? "adc" : "p") });
         } catch {
           failed.push(sku);
         }
       }, (n) => setProgress(`Uploading ${n} of ${matched.length}…`));
       setProgress(null);
-      const res = saved.length ? await setProductImages(saved) : { ok: false, message: "Nothing was uploaded." };
+      const res = saved.length ? await (store === "adc" ? setAdcImages(saved) : setProductImages(saved)) : { ok: false, message: "Nothing was uploaded." };
       setResult(failed.length ? { ok: false, message: `${res.message} ${failed.length} failed: ${failed.slice(0, 5).join(", ")}` } : res);
       setMatched([]);
       router.refresh();
@@ -107,7 +107,7 @@ export function BulkPhotoUpload({ skus }: { skus: string[] }) {
         Photos are resized automatically.
       </p>
       <label className="btn sm dark" style={{ alignSelf: "flex-start" }}>
-        <Images size={16} /> Choose photos
+        <Images size={16} /> {store === "adc" ? "Choose ADC photos" : "Choose photos"}
         <input type="file" accept="image/*" multiple hidden onChange={(e) => pick(e.target.files)} />
       </label>
       {matched.length || unmatched.length ? (

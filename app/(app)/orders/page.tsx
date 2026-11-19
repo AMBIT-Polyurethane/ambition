@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { orderBoardCounts } from "@/lib/chat";
 import { OrderChatButton } from "@/components/chat/order-button";
-import { ChevronDown, ChevronLeft, ChevronRight, Clock, ClipboardList, OctagonAlert, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, ClipboardList, Globe, OctagonAlert, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can, seesOrders } from "@/lib/access";
@@ -130,7 +130,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     if (emp && access === "mine") c = c.or(`placed_by.eq.${profile.id},sales_rep_id.eq.${profile.id}`);
     return open ? c.not("stage", "in", "(completed,cancelled)") : c.gte("created_at", centralStart(addDays(today, -30)));
   };
-  const [{ count: openN }, { count: monthN }] = await Promise.all([headCount(true), headCount(false)]);
+  const [{ count: openN }, { count: monthN }, webRes] = await Promise.all([
+    headCount(true),
+    headCount(false),
+    emp ? supabase.from("adc_orders").select("id", { count: "exact", head: true }).eq("status", "new") : Promise.resolve({ count: 0, error: null }),
+  ]);
+  const webNew = webRes.error ? 0 : (webRes.count ?? 0);
 
   const href = (o: { status?: string; b?: string | null }) => {
     const u = new URLSearchParams();
@@ -215,10 +220,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           </div>
           <div className="o2-head-r">
             {!emp || can(profile, "ordering") ? <Link href="/order" className="b2 sm"><Plus size={17} /> New order</Link> : null}
+            {emp && webNew && access ? <Link href="/orders/web" className="b2 quiet sm"><Globe size={16} /> {webNew} web {webNew === 1 ? "order" : "orders"}</Link> : null}
             {emp && (access || keeper) ? (
               <MoreMenu label="More: order desk, return or exchange, deleted orders">
                 {access ? <Link className="menu2-i" href="/orders/desk"><ClipboardList size={18} /> Order desk</Link> : null}
                 {access && (can(profile, "ordering") || can(profile, "order_desk")) ? <Link className="menu2-i" href="/orders/return"><RotateCcw size={18} /> Return or exchange</Link> : null}
+                {access && (profile.role === "admin" || can(profile, "order_desk") || can(profile, "ordering")) ? <Link className="menu2-i" href="/orders/web"><Globe size={18} /> ADC web orders{webNew ? ` · ${webNew} new` : ""}</Link> : null}
                 {keeper ? <Link className="menu2-i" href="/orders/deleted"><Trash2 size={18} /> Deleted orders{deletedCount ? ` · ${deletedCount}` : ""}</Link> : null}
               </MoreMenu>
             ) : null}

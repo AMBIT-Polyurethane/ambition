@@ -649,3 +649,22 @@ export async function setProductImages(list: { sku: string; url: string | null }
   revalidatePath("/order");
   return { ok: true, message: `${data ?? 0} product photo${data === 1 ? "" : "s"} saved.` };
 }
+
+/** The ADC web store's photos (ADC logo), matched by SKU. */
+export async function setAdcImages(list: { sku: string; url: string | null }[]): Promise<ImportResult> {
+  const { supabase } = await requireAdmin();
+  const clean = list
+    .filter((x) => x && typeof x.sku === "string" && x.sku.trim())
+    .map((x) => ({ sku: x.sku.trim(), url: x.url && /^https?:\/\//.test(x.url) ? x.url : null }));
+  if (clean.length === 0) return { ok: false, message: "No photos to save." };
+  const { data, error } = await supabase.rpc("admin_set_adc_images", { p: clean });
+  if (error) {
+    if (/function .* does not exist|Could not find the function/i.test(error.message)) {
+      return { ok: false, message: "ADC photos need database update 0091. Run it in Supabase, then try again." };
+    }
+    return { ok: false, message: error.message };
+  }
+  revalidatePath("/admin/products");
+  revalidatePath("/adc", "layout");
+  return { ok: true, message: `Saved ${data ?? clean.length} ADC store ${Number(data) === 1 ? "photo" : "photos"}.` };
+}

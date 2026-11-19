@@ -127,7 +127,18 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
             </Help>
             <ChevronDown size={18} className="prd-chev" aria-hidden="true" />
           </summary>
-          <div className="prd-photos-in"><BulkPhotoUpload skus={all.map((p) => p.sku)} /></div>
+          <div className="prd-photos-in">
+            <div className="prd-up">
+              <b>App photos <span className="faint">(AMBIT logo)</span></b>
+              <span className="small muted">Staff and contractors see these in AMBIT Intelligence. Folder: AMBIT PHOTOS - UPLOAD THESE.</span>
+              <BulkPhotoUpload skus={all.map((p) => p.sku)} />
+            </div>
+            <div className="prd-up">
+              <b>ADC web store photos <span className="faint">(ADC logo)</span> · {active.filter((p) => (p as { adc_image_url?: string | null }).adc_image_url).length} of {active.length}</b>
+              <span className="small muted">Guests see these on the ADC store. Folder: ADC PHOTOS - UPLOAD THESE.</span>
+              <BulkPhotoUpload skus={all.map((p) => p.sku)} store="adc" />
+            </div>
+          </div>
         </details>
 
         <div className="prd-grid">

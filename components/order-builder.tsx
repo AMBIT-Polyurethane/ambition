@@ -5,10 +5,12 @@ import { HowToChip } from "@/components/howto-chip";
 import { ClosedWarning } from "@/components/holiday";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardPaste, Filter, FlaskConical, Layers, MapPin, Minus, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { Icon, categoryIcon } from "@/components/icons";
 import { CatIcon, lookFor } from "@/components/cat-icon";
 import { ProductPhoto } from "@/components/product-photo";
+import { PartsDiagram, type PartInfo } from "@/components/parts-diagram";
+import { diagramFor, diagramSkus, type Diagram } from "@/lib/diagrams";
 import { readCart, writeCart, readOrderBranch, writeOrderBranch, readLots, writeLots, NO_LOTS, type Cart, type LotPicks } from "@/lib/cart";
 import { money, plural } from "@/lib/format";
 import { customerDetails, customerFavorites, customerRep, placeOrder, type Favorite } from "@/app/(app)/order/actions";
@@ -217,6 +219,8 @@ export function OrderBuilder(props: Props) {
   const [lotPicks, setLotPicks] = useState<LotPicks>(NO_LOTS);
   const [notice, setNotice] = useState<string | null>(null);
   const [zoom, setZoom] = useState<CatalogProduct | null>(null);
+  const [parts, setParts] = useState<Diagram | null>(null);
+  const [partNote, setPartNote] = useState<string | null>(null);
 
   const [delivery, setDelivery] = useState<"pickup" | "jobsite" | "dropship">("pickup");
   const [branchId, setBranchId] = useState(isEmployee ? "" : me.defaultBranch ?? branches[0]?.id ?? "");
@@ -594,6 +598,40 @@ export function OrderBuilder(props: Props) {
       </div>
     </div>
   ) : null;
+
+  // The exploded parts diagram: tap a part to add it to this order (parts not in the catalog yet: ask AMBIT).
+  const partsModal = parts
+    ? (() => {
+        const bySku = new Map(products.filter((x) => carried(x.id) && !x.custom).map((x) => [x.sku.toLowerCase(), x]));
+        const info: Record<string, PartInfo> = {};
+        for (const sku of diagramSkus(parts)) {
+          const x = bySku.get(sku.toLowerCase());
+          if (x) info[sku] = { id: x.id, price: x.cp ? null : x.list_price, sale: null, quote: x.cp };
+        }
+        return (
+          <div className="pd-modal" role="dialog" aria-modal="true" aria-label={parts.title}>
+            <div className="pd-modal-h">
+              <b>{parts.title}</b>
+              {partNote ? <span className="pd-modal-note" role="status"><Check size={15} /> {partNote}</span> : <span className="faint small">Tap a part to add it to this order</span>}
+              <button type="button" className="b2 quiet icon" onClick={() => { setParts(null); setPartNote(null); }} aria-label="Close the diagram"><X size={20} /></button>
+            </div>
+            <div className="pd-modal-b">
+              <PartsDiagram
+                diagram={parts}
+                info={info}
+                canAddMissing={false}
+                theme="dark"
+                onAdd={(pt, i) => {
+                  if (!i?.id) return;
+                  setQty(i.id, (cart[i.id] ?? 0) + 1);
+                  setPartNote(`Added ${pt.name} (${pt.sku})`);
+                }}
+              />
+            </div>
+          </div>
+        );
+      })()
+    : null;
 
   // ---------------------------------------------------------------- location
   if (step === "location") {
@@ -1138,6 +1176,11 @@ export function OrderBuilder(props: Props) {
           <PriceLine p={p} />
           <StockTag s={stockHere?.[p.id]} staff={isEmployee} />
           {p.sqft ? <SqftBox p={p} qty={qty} onQty={(n) => setQty(p.id, n)} /> : null}
+          {diagramFor(p.sku) ? (
+            <button type="button" className="b2 quiet sm pd-open" onClick={() => setParts(diagramFor(p.sku))}>
+              <Layers size={16} /> Every part (diagram)
+            </button>
+          ) : null}
         </div>
         {qty > 0 ? (
           <Stepper qty={qty} label={p.name} onChange={(n) => setQty(p.id, n)} />
@@ -1267,6 +1310,7 @@ export function OrderBuilder(props: Props) {
 
       {cartBar}
       {lightbox}
+      {partsModal}
     </main>
   );
 }

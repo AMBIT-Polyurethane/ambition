@@ -5,7 +5,7 @@ import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/env";
 // /approve: customers approve orders from an emailed link without an account.
 // /api/inventory/sync, /api/tax/reminders, /api/expenses/daily and /api/inventory/holds: Vercel's timers (they check CRON_SECRET themselves).
 // /lead: a contractor's public "Request a quote" form (AMBIT-OPS).
-const PUBLIC_PATHS = ["/signin", "/request-access", "/forgot", "/auth", "/setup", "/approve", "/join", "/lead", "/p", "/f", "/api/forms/upload", "/api/inventory/sync", "/api/tax/reminders", "/api/expenses/daily", "/api/inventory/holds"];
+const PUBLIC_PATHS = ["/adc", "/signin", "/request-access", "/forgot", "/auth", "/setup", "/approve", "/join", "/lead", "/p", "/f", "/api/forms/upload", "/api/inventory/sync", "/api/tax/reminders", "/api/expenses/daily", "/api/inventory/holds"];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });

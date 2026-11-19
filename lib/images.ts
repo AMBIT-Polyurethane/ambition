@@ -23,14 +23,15 @@ export async function toJpeg(blob: Blob, max = 640, quality = 0.85): Promise<Blo
   );
 }
 
-export function photoPath(sku: string): string {
+export function photoPath(sku: string, folder = "p"): string {
   const slug = sku.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item";
-  return `p/${slug}.jpg`;
+  return `${folder}/${slug}.jpg`;
 }
 
 // Uploads (or replaces) a product's photo and returns its public address.
-export async function uploadProductPhoto(supabase: SupabaseClient, sku: string, jpeg: Blob): Promise<string> {
-  const path = photoPath(sku);
+// folder "p": the app's photos (AMBIT logo); "adc": the ADC web store's (ADC logo).
+export async function uploadProductPhoto(supabase: SupabaseClient, sku: string, jpeg: Blob, folder = "p"): Promise<string> {
+  const path = photoPath(sku, folder);
   const { error } = await supabase.storage.from("product-images").upload(path, jpeg, {
     contentType: "image/jpeg",
     upsert: true,
