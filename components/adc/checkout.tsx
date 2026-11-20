@@ -153,10 +153,11 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
         use_bucks: f.get("bucks") === "on",
         customer: {
           kind,
-          check: s("acct_check"),
+          check: "",
           bill_same: delivery !== "pickup" && billSame,
           bill: { street: s("bill_street"), city: s("bill_city"), state: s("bill_state"), zip: s("bill_zip") },
-          tax_exempt: f.get("tax_exempt") === "on",
+          tax_exempt: false,
+          hours: s("hours"),
           site,
           unload,
         },
@@ -246,10 +247,7 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
             <button type="button" role="radio" aria-checked={kind === "new"} className={kind === "new" ? "on" : undefined} onClick={() => setKind("new")}>{t.custNo}</button>
           </div>
           {kind === "account" ? (
-            <>
-              <label className="adc-f"><span>{t.acctCheck}</span><input name="acct_check" required autoComplete="off" /></label>
-              <p className="adc-muted small" style={{ margin: 0 }}>{t.acctCheckHint}</p>
-            </>
+            <p className="adc-muted small" style={{ margin: 0 }}>{t.acctCheckHint}</p>
           ) : kind === "new" ? (
             <p className="adc-note-b small" style={{ margin: 0 }}><Info size={15} aria-hidden="true" /> {t.newCustNote}</p>
           ) : null}
@@ -285,6 +283,7 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
                 <button type="button" role="radio" aria-checked={site === "home"} className={site === "home" ? "on" : undefined} onClick={() => setSite("home")}>{t.siteHome}</button>
               </div>
             </div>
+            <label className="adc-f wide"><span>{t.hoursQ}</span><input name="hours" maxLength={120} placeholder={t.hoursPh} autoComplete="off" /></label>
             {freight.length || truck.length ? (
               <div className="adc-f wide">
                 <span>{t.unloadQ}</span>
@@ -322,7 +321,6 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
             ) : null}
           </div>
         ) : null}
-        <label className="adc-check"><input type="checkbox" name="tax_exempt" /> <span>{t.taxExempt}</span></label>
         <label className="adc-f"><span>{t.notes}</span><textarea name="notes" rows={3} placeholder={t.notesPh} /></label>
         {me && me.bucks > 0 ? (
           <label className="adc-check"><input type="checkbox" name="bucks" defaultChecked /> <span>{t.useBucks(usd(me.bucks))}</span></label>

@@ -18,7 +18,7 @@ type Row = {
 };
 const KIND: Record<Shipment["kind"], string> = { parcel: "Parcel (UPS / FedEx Ground)", ltl: "LTL freight", truck: "Full truck", vendor: "Vendor ships", pickup: "Customer picks up" };
 const MATCH: Record<string, [string, string]> = {
-  verified: ["AMBIT customer (verified)", "pill2 ok sm"],
+  verified: ["AMBIT customer (matched by name: double-check)", "pill2 ok sm"],
   unverified: ["Not verified: prepay until confirmed", "pill2 err sm"],
   added: ["New customer: added to A.I.", "pill2 err sm"],
   new: ["New customer", "pill2 err sm"],
@@ -111,7 +111,6 @@ export default async function StrategyPage({ params }: { params: Promise<{ id: s
           <Truck size={14} aria-hidden="true" />{" "}
           {o.delivery === "pickup" ? `Picks up at ${o.pickup_branch ?? "?"}` : a ? `${o.delivery === "truckload" ? "Full truck to" : "Ship to"} ${a.street}, ${a.city}, ${a.state} ${a.zip}` : "No address"}
           {o.delivery !== "pickup" ? ` · ${o.site === "home" ? "home / job site" : "business"} · ${o.unload === "liftgate" ? "needs a liftgate" : o.unload === "forklift" ? "has a forklift" : "has a dock"}` : ""}
-          {o.tax_exempt ? " · says tax exempt" : ""}
         </span>
         {s ? <span className="small">{Math.round(s.weight).toLocaleString("en-US")} lb in all{o.delivery !== "pickup" && s.estimate !== null ? ` · customer was shown ${money(s.estimate)} estimated shipping` : ""} · figured {monthDay(s.at)}</span> : null}
       </section>

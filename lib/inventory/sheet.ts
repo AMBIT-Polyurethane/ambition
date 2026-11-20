@@ -141,8 +141,22 @@ const COUNT_COLS = {
   counted: (h: string) => h === "last counted",
   by: (h: string) => h === "counted by",
   notes: (h: string) => h === "notes",
+  // Read only (the app never writes them): who we buy it from and how long they take. Used by the ADC Best Strategy.
+  vendor: (h: string) => h.startsWith("preferred vendor") || h === "vendor",
+  lead: (h: string) => h.startsWith("lead time"),
 };
 export type CountCol = keyof typeof COUNT_COLS;
+
+/** A lead time cell as business days: 5, "5", "3-5 days" (the longer end), "2 weeks". */
+export function leadDays(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v >= 0 && v < 400 ? Math.round(v) : null;
+  const t = cellText(v).toLowerCase();
+  const nums = (t.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+  if (!nums.length) return null;
+  const n = Math.max(...nums);
+  const days = /week|wk/.test(t) ? n * 5 : /month/.test(t) ? n * 21 : n;
+  return days >= 0 && days < 400 ? Math.round(days) : null;
+}
 
 export type SheetItem = {
   row: number;
@@ -159,6 +173,8 @@ export type SheetItem = {
   max: number | null;
   counted: string | null;
   countedBy: string;
+  vendor: string;
+  lead: number | null;
 };
 
 export type CountSheet = { headerRow: number; cols: Partial<Record<CountCol, number>>; items: SheetItem[]; duplicates: string[] };
@@ -198,6 +214,8 @@ export function parseCountSheet(g: Grid): CountSheet {
       max: cellNum(get("max")),
       counted: cellDate(get("counted")),
       countedBy: cellText(get("by")),
+      vendor: cellText(get("vendor")),
+      lead: leadDays(get("lead")),
     });
   }
   return { headerRow: h.row, cols: c, items, duplicates };

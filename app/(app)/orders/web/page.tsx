@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronDown, ChevronLeft, CircleAlert, ExternalLink, FlaskConical, Mail, Phone, Route, Trash2, Truck, UserRound } from "lucide-react";
+import { ChevronDown, ChevronLeft, CircleAlert, CircleCheck, ExternalLink, FlaskConical, Mail, Phone, Route, Trash2, Truck, UserRound } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
 import { monthDay, money } from "@/lib/format";
 import { Empty } from "@/components/ui";
-import { deleteAdcTest, setAdcOrderStatus, setAdcTest } from "./actions";
+import { acceptAdcOrder, deleteAdcTest, setAdcOrderStatus, setAdcTest } from "./actions";
 import { WebPay } from "./pay";
 
 export const metadata = { title: "ADC web orders" };
@@ -22,7 +22,7 @@ type WebOrder = {
   match?: string | null; ship_est?: number | null; alerts?: string[] | null; company_id?: string | null;
 };
 const MATCH: Record<string, [string, string]> = {
-  verified: ["AMBIT customer", "pill2 ok sm"],
+  verified: ["AMBIT customer (by name)", "pill2 ok sm"],
   unverified: ["Not verified", "pill2 err sm"],
   added: ["New customer", "pill2 err sm"],
   new: ["New customer", "pill2 err sm"],
@@ -121,6 +121,12 @@ export default async function AdcOrdersPage({ searchParams }: { searchParams: Pr
                     <div className="webo-flags small">
                       {o.delivery !== "pickup" && o.ship_est !== null && o.ship_est !== undefined ? <span><Truck size={14} aria-hidden="true" /> Customer saw {money(o.ship_est)} estimated shipping</span> : null}
                       <Link href={`/orders/web/${o.id}/strategy`} className="b2 quiet sm"><Route size={15} /> Best Strategy sheet</Link>
+                      {canEdit && !o.is_test && (o.status === "new" || o.status === "working") ? (
+                        <form action={acceptAdcOrder}>
+                          <input type="hidden" name="id" value={o.id} />
+                          <button type="submit" className="b2 sm" title="Opens it as a normal A.I. order, ready to send: placing it holds the stock and puts it on PENDING ORDERS."><CircleCheck size={15} /> Accept: make it an A.I. order</button>
+                        </form>
+                      ) : null}
                       {o.company_id ? <Link href={`/customers/${o.company_id}`} className="b2 quiet sm"><UserRound size={15} /> Customer in A.I.</Link> : null}
                     </div>
                     <table className="webo-t">

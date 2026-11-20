@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireActive } from "@/lib/session";
 import { can } from "@/lib/access";
 
@@ -84,4 +85,78 @@ export async function recalcAdcStrategy(f: FormData) {
   await supabase.from("adc_orders").update({ strategy }).eq("id", id);
   revalidatePath(`/orders/web/${id}/strategy`);
   revalidatePath("/orders/web");
+}
+
+/**
+ * Staff: Accept a web order. It becomes a ready-to-send order in the normal order screen (the customer, the location
+ * from the Best Strategy, the address and the items, with the ISO drum for every spray foam set). Placing it there
+ * holds the stock and puts it on PENDING ORDERS like any other order.
+ */
+export async function acceptAdcOrder(f: FormData) {
+  const { supabase, profile } = await requireActive();
+  if (!(profile.role === "admin" || can(profile, "order_desk") || can(profile, "ordering"))) return;
+  const id = Number(f.get("id"));
+  if (!id) return;
+  const { data } = await supabase.from("adc_orders").select("*").eq("id", id).maybeSingle();
+  type Item = { product_id?: string | null; sku: string; name: string; qty: number; set?: boolean };
+  type Strat = { best: string | null; options: { key: string; shipments: { from: string; kind: string; weight: number }[] }[] } | null;
+  const o = data as {
+    id: number; name: string; company: string | null; email: string; phone: string; delivery: string; pickup_branch: string | null; notes: string | null;
+    address: { street: string; street2?: string; city: string; state: string; zip: string } | null; items: Item[]; company_id: string | null; strategy: Strat; ship_est: number | null;
+  } | null;
+  if (!o) return;
+
+  // Where it ships from: the pickup location, or the location sending the most weight in the Best Strategy.
+  let branch: string | null = o.delivery === "pickup" ? o.pickup_branch : null;
+  const best = o.strategy?.options.find((x) => x.key === o.strategy?.best);
+  if (!branch && best) {
+    const byWeight = new Map<string, number>();
+    for (const s of best.shipments) if (s.kind !== "vendor" && s.from && s.from !== "vendor") byWeight.set(s.from, (byWeight.get(s.from) ?? 0) + Number(s.weight));
+    branch = [...byWeight.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
+
+  // Items: the web lines, plus one ISO (A-side) drum for every spray foam set.
+  const items: { raw: string; product_id: string | null; qty: number; confidence: number; note: string | null }[] = o.items.map((l) => ({
+    raw: `${l.sku} ${l.name}`, product_id: l.product_id ?? null, qty: Number(l.qty), confidence: l.product_id ? 1 : 0, note: l.product_id ? null : "Not in the catalog: price and add by hand",
+  }));
+  const sets = o.items.filter((l) => l.set).reduce((n, l) => n + Number(l.qty), 0);
+  if (sets > 0) {
+    const { data: iso } = await supabase.from("products").select("id, sku, name").eq("sku", "ISO").eq("active", true).maybeSingle();
+    if (iso) items.push({ raw: `${(iso as { sku: string }).sku} ${(iso as { name: string }).name}`, product_id: (iso as { id: string }).id, qty: sets, confidence: 1, note: "ISO A-side for the spray foam sets" });
+  }
+  const a = o.address;
+  const notes = [
+    `ADC web order ADC-${1000 + o.id} from ${o.name} (${o.phone}, ${o.email}).`,
+    o.ship_est !== null && o.delivery !== "pickup" ? `Customer was shown $${Number(o.ship_est).toFixed(2)} estimated shipping.` : "",
+    best && best.shipments.length > 1 ? "Best Strategy has more than one shipment: see the sheet." : "",
+    o.notes ?? "",
+  ].filter(Boolean).join(" ").slice(0, 2000);
+
+  const { data: draft, error } = await supabase
+    .from("order_drafts")
+    .insert({
+      created_by: profile.id,
+      created_by_name: profile.full_name || profile.email,
+      source_text: `ADC web order ADC-${1000 + o.id}`,
+      customer_text: o.company || o.name,
+      company_id: o.company_id,
+      branch_id: branch,
+      delivery_method: o.delivery === "pickup" ? "pickup" : "jobsite",
+      ship_address: o.delivery === "pickup" || !a ? null : `${a.street}${a.street2 ? `, ${a.street2}` : ""}, ${a.city}, ${a.state} ${a.zip}`,
+      notes,
+      items,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+  if (error || !draft) {
+    console.error("accept web order: draft failed", error?.message);
+    return;
+  }
+  await supabase
+    .from("adc_orders")
+    .update({ status: "working", staff_note: `Accepted: entering it as an A.I. order`, handled_by: profile.id, handled_by_name: profile.full_name ?? profile.email, handled_at: new Date().toISOString() })
+    .eq("id", id);
+  revalidatePath("/orders/web");
+  redirect(`/order?draft=${(draft as { id: string }).id}`);
 }

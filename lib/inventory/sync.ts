@@ -114,6 +114,9 @@ type Inv = {
   count_dirty: boolean;
   on_sheet: boolean;
   sheet_row: number | null;
+  /** The sheet's Preferred Vendor and Lead Time (update 0101; absent before it). */
+  vendor?: string | null;
+  lead_days?: number | null;
 };
 
 type Ord = {
@@ -478,6 +481,9 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
       if (row.sheet_row !== item.row) patch.sheet_row = item.row;
       if (!row.on_sheet) patch.on_sheet = true;
       if (row.sku !== item.sku) patch.sku = item.sku;
+      // Preferred Vendor and Lead Time, only once the database has the columns (update 0101).
+      if ("vendor" in row && count.cols.vendor && (item.vendor || null) !== (row.vendor || null)) patch.vendor = item.vendor || null;
+      if ("lead_days" in row && count.cols.lead && !same(item.lead, num(row.lead_days ?? null))) patch.lead_days = item.lead;
       const pendingHere = r2(manualPending.get(item.key) ?? 0);
       if (!same(pendingHere, num(row.sheet_pending))) patch.sheet_pending = pendingHere;
 

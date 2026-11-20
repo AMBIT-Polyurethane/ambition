@@ -2,7 +2,7 @@ import "server-only";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { siteUrl } from "@/lib/env";
 import { todayCentral } from "@/lib/sale";
-import { findExisting, nearestBranch, planOrder, verifyCustomer, type Co, type Delivery, type Site, type Strategy } from "@/lib/adc-logistics";
+import { findExisting, matchCustomerByName, nearestBranch, planOrder, type Co, type Delivery, type Site, type Strategy } from "@/lib/adc-logistics";
 
 // What happens right after an ADC web order is saved: who the customer is (an AMBIT account we can confirm, someone
 // who says they are, or someone new we add to A.I.), the Best Strategy for getting it to them, the alerts for the order
@@ -36,6 +36,8 @@ export type Intake = {
   estimate: number | null;
 };
 
+/** Ship-to farther than this from every AMBIT location gets the red alert (a real freight quote first). */
+const FAR_MILES = 600;
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const addrText = (a: Addr | null) => (a ? `${a.street}${a.street2 ? `, ${a.street2}` : ""}, ${a.city}, ${a.state.toUpperCase()} ${a.zip}` : "");
 
@@ -58,14 +60,21 @@ export async function intakeAdcOrder(o: IntakeIn): Promise<Intake> {
 
   // ---------------------------------------------------------------- who is it
   if (o.kind === "account") {
-    co = await verifyCustomer(db, o.company, o.check, o.email);
-    if (co) match = "verified";
-    else {
+    // Matched by business name only (customers rarely know their account #): staff double-check every one.
+    const m = await matchCustomerByName(db, o.company);
+    if (m.co) {
+      co = m.co;
+      match = "verified";
+      alerts.unshift(
+        `DOUBLE-CHECK THE CUSTOMER: "${o.company}" was matched to ${m.co.name}${m.co.account_no ? ` (acct ${m.co.account_no})` : ""} by business name only. Confirm it's them (phone or email on file) before using their terms.${m.others.length ? ` Other close names: ${m.others.map((x) => x.name).join(", ")}.` : ""}`,
+      );
+    } else {
       match = "unverified";
       const maybe = await findExisting(db, o.company, o.email, o.phone);
       if (maybe) co = maybe.co;
+      const close = [...new Set([...(maybe ? [maybe.co.name] : []), ...m.others.map((x) => x.name)])];
       red.push(
-        `SAYS THEY'RE AN AMBIT CUSTOMER, BUT IT DIDN'T MATCH: "${o.company}" with "${o.check}"${maybe ? ` (closest: ${maybe.co.name})` : ""}. Call them to confirm the account before using their terms. Until then, treat it as prepay.`,
+        `SAYS THEY'RE AN AMBIT CUSTOMER, BUT "${o.company}" DIDN'T MATCH ONE ACCOUNT${close.length ? ` (close: ${close.join(", ")})` : ""}. Find the right account and confirm with them before using their terms. Until then, treat it as prepay.`,
       );
     }
   } else {
@@ -113,7 +122,6 @@ export async function intakeAdcOrder(o: IntakeIn): Promise<Intake> {
       red.push(`Over the credit line: owes ${usd(owed)} + this order ${usd(o.subtotal)} is more than the ${usd(Number(co.credit_limit))} line.`);
     }
   }
-  if (o.tax_exempt) alerts.push("Says they're tax exempt: get their certificate before invoicing without tax.");
 
   // ---------------------------------------------------------------- how to get it there
   let strategy: Strategy | null = null;
@@ -122,8 +130,16 @@ export async function intakeAdcOrder(o: IntakeIn): Promise<Intake> {
   } catch (e) {
     alerts.push(`The Best Strategy didn't work out (${(e as Error).message}). Plan the shipping by hand.`);
   }
+  if (o.delivery !== "pickup" && o.site.site === "home") {
+    red.push("HOME DELIVERY: confirm a freight truck can get there and someone can receive it (residential and liftgate fees apply).");
+  }
   if (strategy) {
-    if (strategy.vendor.length) alerts.push(`Needs a vendor order: ${strategy.vendor.map((v) => `${v.qty} x ${v.sku}`).join(", ")}.`);
+    if (strategy.vendor.length) {
+      red.push(`NEEDS A VENDOR ORDER: ${strategy.vendor.map((v) => `${v.qty} x ${v.sku}${v.vendor ? ` from ${v.vendor}` : ""}${v.lead ? ` (${v.lead} days)` : ""}`).join(", ")}. Place it and confirm the timing with the customer.`);
+    }
+    if (o.delivery !== "pickup" && strategy.nearest && strategy.nearest.miles > FAR_MILES) {
+      red.push(`FAR FROM EVERY LOCATION: ${strategy.nearest.miles.toLocaleString("en-US")} road miles from the closest (${strategy.nearest.name}). Get a real freight quote before confirming the price.`);
+    }
     if (strategy.partial && o.delivery !== "pickup") alerts.push("The shipping estimate leaves some items out: confirm those by hand.");
     const best = strategy.options.find((x) => x.key === strategy!.best);
     if (best?.transfers.length) alerts.push(`Needs a transfer between locations first: ${best.transfers.map((t) => `${t.qty} x ${t.sku} ${t.fromName} → ${t.toName}`).join(", ")}.`);

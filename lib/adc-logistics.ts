@@ -49,6 +49,8 @@ export type Strategy = {
   estimate: number | null;
   partial: boolean;
   notes: string[];
+  /** How far the closest AMBIT location is from the customer (road miles). */
+  nearest: { id: string; name: string; miles: number } | null;
 };
 
 type Branch = { id: string; name: string; lat: number; lng: number };
@@ -135,6 +137,7 @@ type Ctx = {
   prod: Map<string, Prod>;
   weight: Map<string, number>;
   avail: Map<string, Map<string, number>>; // branch -> product -> qty free to sell
+  vendors: Map<string, Map<string, { vendor: string; lead: number | null }>>; // product -> branch -> preferred vendor on that sheet
 };
 
 async function loadCtx(db: SupabaseClient, ids: string[]): Promise<Ctx> {
@@ -144,7 +147,7 @@ async function loadCtx(db: SupabaseClient, ids: string[]): Promise<Ctx> {
       ? db.from("products").select("*, category:categories(adc_ship)").in("id", ids)
       : Promise.resolve({ data: [] as unknown[] }),
     ids.length
-      ? db.from("inventory").select("branch_id, product_id, on_hand, sheet_pending, unit_weight, on_sheet").in("product_id", ids).range(0, 9999)
+      ? db.from("inventory").select("*").in("product_id", ids).range(0, 9999)
       : Promise.resolve({ data: [] as unknown[] }),
     ids.length
       ? db.from("inventory_lines").select("branch_id, product_id, qty").eq("state", "reserved").in("product_id", ids).range(0, 9999)
@@ -166,14 +169,19 @@ async function loadCtx(db: SupabaseClient, ids: string[]): Promise<Ctx> {
   }
   const weight = new Map<string, number>();
   const avail = new Map<string, Map<string, number>>();
-  for (const r of (inv.data ?? []) as { branch_id: string; product_id: string; on_hand: number | null; sheet_pending: number | null; unit_weight: number | null; on_sheet: boolean }[]) {
+  const vendors = new Map<string, Map<string, { vendor: string; lead: number | null }>>();
+  for (const r of (inv.data ?? []) as { branch_id: string; product_id: string; on_hand: number | null; sheet_pending: number | null; unit_weight: number | null; on_sheet: boolean; vendor?: string | null; lead_days?: number | null }[]) {
     if (r.unit_weight !== null && Number(r.unit_weight) > 0) weight.set(r.product_id, Math.max(weight.get(r.product_id) ?? 0, Number(r.unit_weight)));
+    if (r.vendor && r.vendor.trim()) {
+      if (!vendors.has(r.product_id)) vendors.set(r.product_id, new Map());
+      vendors.get(r.product_id)!.set(r.branch_id, { vendor: r.vendor.trim(), lead: r.lead_days === null || r.lead_days === undefined ? null : Number(r.lead_days) });
+    }
     if (!r.on_sheet || r.on_hand === null) continue;
     const free = Math.max(0, Number(r.on_hand) - Number(r.sheet_pending ?? 0) - (reserved.get(`${r.branch_id}|${r.product_id}`) ?? 0));
     if (!avail.has(r.branch_id)) avail.set(r.branch_id, new Map());
     avail.get(r.branch_id)!.set(r.product_id, free);
   }
-  return { branches, prod, weight, avail };
+  return { branches, prod, weight, avail, vendors };
 }
 
 /**
@@ -250,29 +258,40 @@ export async function planOrder(
     const s = Math.max(0, k.l.qty - network(k));
     if (s > 0) short.set(k.p.id, s);
   }
+  // Who supplies it: the product's own Vendor box, else the Preferred Vendor on the closest location's spreadsheet.
+  const anchor = dest ?? ctx.branches.find((b) => b.id === input.pickup_branch) ?? null;
+  const supplier = (p: Prod): { vendor: string | null; lead: number | null } => {
+    if (p.vendor_name) return { vendor: p.vendor_name, lead: p.vendor_lead_days };
+    const per = ctx.vendors.get(p.id);
+    if (!per || !per.size) return { vendor: null, lead: p.vendor_lead_days };
+    const order = anchor ? near(anchor).map((b) => b.id) : ctx.branches.map((b) => b.id);
+    const hit = order.map((id) => per.get(id)).find(Boolean) ?? [...per.values()][0];
+    return { vendor: hit.vendor, lead: p.vendor_lead_days ?? hit.lead };
+  };
   const vendor: VendorLine[] = known
     .filter((k) => short.has(k.p.id))
-    .map((k) => ({ sku: k.p.sku, name: k.p.name, qty: short.get(k.p.id)!, vendor: k.p.vendor_name, lead: k.p.vendor_lead_days }));
+    .map((k) => ({ sku: k.p.sku, name: k.p.name, qty: short.get(k.p.id)!, ...supplier(k.p) }));
   const vendorShipments = (): Shipment[] => {
     const groups = new Map<string, { k: L; qty: number }[]>();
     for (const k of known) {
       const s = short.get(k.p.id);
       if (!s) continue;
-      const key = `${k.p.vendor_name ?? "?"}|${k.p.vendor_zip ?? ""}`;
+      const key = `${supplier(k.p).vendor ?? "?"}|${k.p.vendor_zip ?? ""}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push({ k, qty: s });
     }
     return [...groups.values()].map((g) => {
       const p = g[0].k.p;
+      const sup = supplier(p);
       const vz = p.vendor_zip ? zipPoint(p.vendor_zip) : null;
-      const s = ship(vz && input.delivery !== "pickup" ? { id: "vendor", name: p.vendor_name ?? "Vendor", lat: vz.lat, lng: vz.lng } : null, g, true);
-      const lead = p.vendor_lead_days;
+      const s = ship(vz && input.delivery !== "pickup" ? { id: "vendor", name: sup.vendor ?? "Vendor", lat: vz.lat, lng: vz.lng } : null, g, true);
+      const lead = sup.lead;
       return {
         ...s,
         kind: "vendor" as const,
-        fromName: p.vendor_name ? `Vendor: ${p.vendor_name}` : "Vendor (not set on the product)",
+        fromName: sup.vendor ? `Vendor: ${sup.vendor}` : "Vendor (no Preferred Vendor on the spreadsheet)",
         days: lead ? `${lead} days for the vendor + ${s.days === "To confirm" ? "shipping" : s.days}` : s.days,
-        note: input.delivery === "pickup" ? "Have the vendor ship to the pickup location." : p.vendor_zip ? "Vendor ships straight to the customer (drop ship)." : "Add the vendor's ship-from ZIP on the product for an estimate.",
+        note: input.delivery === "pickup" ? "Have the vendor ship to the pickup location." : p.vendor_zip ? "Vendor ships straight to the customer (drop ship)." : "Freight from the vendor: get a quote (or add the vendor's ship-from ZIP on the product).",
       };
     });
   };
@@ -309,10 +328,10 @@ export async function planOrder(
       title: atB ? `Pick up at ${atB.name}` : "Pick up",
       ok: Boolean(atB),
       why: atB ? undefined : "No pickup location picked.",
-      shipments: [{ from: at, fromName: atB?.name ?? at, kind: "pickup", lines: known.map((k) => ({ sku: k.p.sku, name: k.p.name, qty: inStock(k) })).filter((x) => x.qty > 0), weight: totalWeight, miles: 0, cost: 0, days: transfers.length ? "After the transfer arrives (3-5 business days)" : "Ready when we confirm" }, ...v],
+      shipments: [{ from: at, fromName: atB?.name ?? at, kind: "pickup", lines: known.map((k) => ({ sku: k.p.sku, name: k.p.name, qty: inStock(k) })).filter((x) => x.qty > 0), weight: totalWeight, miles: 0, cost: 0, days: transfers.length ? "After the transfer arrives (4-7 business days)" : "Ready when we confirm" }, ...v],
       transfers,
       total: 0,
-      days: transfers.length ? "3-5 business days (transfer first)" : "Ready when we confirm",
+      days: transfers.length ? "4-7 business days (transfer first)" : "Ready when we confirm",
     });
   } else if (dest && known.length) {
     const stocked = known.filter((k) => inStock(k) > 0);
@@ -367,7 +386,7 @@ export async function planOrder(
       }
       if (possible && transfers.length) {
         const s = [ship(hub, stocked.map((k) => ({ k, qty: inStock(k) })))];
-        options.push({ key: "gather", title: `Move stock to ${hub.name} first, then ship once`, ok: true, shipments: [...s, ...v], transfers, total: sum([...s, ...v]), days: slowest([...s, ...v], "3-5 days for the transfer") });
+        options.push({ key: "gather", title: `Move stock to ${hub.name} first, then ship once`, ok: true, shipments: [...s, ...v], transfers, total: sum([...s, ...v]), days: slowest([...s, ...v], "4-7 days for the transfer") });
       }
     }
     if (!stocked.length && v.length) {
@@ -375,10 +394,10 @@ export async function planOrder(
     }
   }
 
-  // Best: the lowest cost, counting the hassle too: a transfer between locations (a few days and a stop for our
-  // truck) is worth about $60, and each extra shipment about $15. So a small saving doesn't win a transfer.
+  // Best: the lowest cost, counting the hassle too. Transfers between locations only happen when needed (no regular
+  // route), so one is worth about $150 of trouble and days; each extra shipment about $15.
   const ok = options.filter((o) => o.ok);
-  const score = (o: PlanOption) => knownSum(o.shipments) + (o.transfers.length ? 60 : 0) + Math.max(0, o.shipments.length - 1) * 15;
+  const score = (o: PlanOption) => knownSum(o.shipments) + (o.transfers.length ? 150 : 0) + Math.max(0, o.shipments.length - 1) * 15;
   ok.sort((a, b) => score(a) - score(b));
   const best = ok[0] ?? null;
   const partial = unknown.length > 0 || Boolean(best && best.shipments.some((s) => s.cost === null));
@@ -404,6 +423,7 @@ export async function planOrder(
     estimate,
     partial,
     notes,
+    nearest: dest && ctx.branches.length ? (() => { const b = near(dest)[0]; return { id: b.id, name: b.name, miles: roadMiles(b, dest) }; })() : null,
   };
 }
 
@@ -437,18 +457,23 @@ async function nameCandidates(db: SupabaseClient, company: string): Promise<Co[]
 }
 
 /**
- * A shopper who says they're an AMBIT customer: verified when the business name is close AND the phone or account #
- * they typed matches the one on file. Otherwise null (treated as prepay until staff confirm).
+ * A shopper who says they're an AMBIT customer, matched by business name only (most customers don't know their
+ * account #, so staff double-check every one). The exact name wins; otherwise the one closest name if it's clear.
+ * Returns the match and any other close names for staff to look at.
  */
-export async function verifyCustomer(db: SupabaseClient, company: string, check: string, email: string): Promise<Co | null> {
-  const list = await nameCandidates(db, company);
-  const c = check.trim().toLowerCase();
-  const d = digits(check);
-  return (
-    list.find((x) => x.active && ((x.account_no && x.account_no.trim().toLowerCase() === c) || (d.length === 10 && digits(x.phone) === d))) ??
-    list.find((x) => x.active && x.email && email && x.email.trim().toLowerCase() === email.trim().toLowerCase() && (d.length === 10 ? digits(x.phone) === d : false)) ??
-    null
-  );
+export async function matchCustomerByName(db: SupabaseClient, company: string): Promise<{ co: Co | null; others: Co[] }> {
+  const list = (await nameCandidates(db, company)).filter((x) => x.active);
+  if (!list.length) return { co: null, others: [] };
+  const want = normName(company);
+  const exact = list.find((x) => normName(x.name) === want);
+  if (exact) return { co: exact, others: list.filter((x) => x.id !== exact.id).slice(0, 3) };
+  if (list.length === 1) return { co: list[0], others: [] };
+  // Several close names: the one sharing the most words, if it clearly leads.
+  const words = new Set(want.split(" ").filter((w) => w.length >= 3));
+  const score = (x: Co) => normName(x.name).split(" ").filter((w) => words.has(w)).length - Math.abs(normName(x.name).split(" ").length - words.size) * 0.1;
+  const ranked = [...list].sort((a, b) => score(b) - score(a));
+  if (score(ranked[0]) - score(ranked[1]) >= 1) return { co: ranked[0], others: ranked.slice(1, 4) };
+  return { co: null, others: ranked.slice(0, 4) };
 }
 
 /** A new shopper who's already in A.I. (same email or phone, or the same name): so they aren't added twice. */

@@ -33,6 +33,8 @@ export type AdcOrderInput = {
     tax_exempt: boolean;
     site: "business" | "home";
     unload: "dock" | "forklift" | "liftgate";
+    /** When they can take a delivery (goes on the order notes). */
+    hours?: string;
   };
 };
 export type AdcOrderResult = { ok: true; order_no: string } | { ok: false; error: string };
@@ -43,7 +45,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 const MATCH: Record<Intake["match"], string> = {
-  verified: "CURRENT AMBIT CUSTOMER (verified: the name and the phone or account # match)",
+  verified: "CURRENT AMBIT CUSTOMER: matched by business name (double-check it's them)",
   unverified: "NOT VERIFIED: treat as prepay until you confirm who they are",
   new: "NEW CUSTOMER",
   added: "NEW CUSTOMER: added to A.I. (Pays in advance, needs QuickBooks setup)",
@@ -67,9 +69,9 @@ function staffBlocks(o: AdcOrderInput, i: Intake | null, id: number): string {
   const b = c && !c.bill_same ? c.bill : o.delivery !== "pickup" ? o.address : null;
   const who = `<div style="margin:18px 0 0;padding:14px 16px;background:#f4f4f2;border-radius:10px;font-size:14px;">
 <b>Customer:</b> ${i ? esc(MATCH[i.match]) : "Check by hand"}${i?.company ? ` · A.I. customer: <b>${esc(i.company.name)}</b>${i.company.account_no ? ` (acct ${esc(i.company.account_no)})` : ""}` : ""}<br>
-${c?.kind === "account" ? `They said: current customer · typed "${esc(c.check)}"<br>` : ""}
+${c?.kind === "account" ? "They said they're a current AMBIT customer.<br>" : ""}
 <b>Billing:</b> ${b ? `${esc(b.street)}, ${esc(b.city)}, ${esc(b.state.toUpperCase())} ${esc(b.zip)}` : "not given"}${c?.bill_same && o.delivery !== "pickup" ? " (same as shipping)" : ""}<br>
-<b>Tax exempt:</b> ${c?.tax_exempt ? "they say YES: get the certificate" : "no"} · <b>Delivery site:</b> ${c?.site === "home" ? "home / job site" : "business"} · <b>Unloading:</b> ${c?.unload === "liftgate" ? "no dock or forklift: LIFTGATE" : c?.unload === "forklift" ? "forklift" : "loading dock"}
+<b>Delivery site:</b> ${c?.site === "home" ? "home / job site" : "business"} · <b>Unloading:</b> ${c?.unload === "liftgate" ? "no dock or forklift: LIFTGATE" : c?.unload === "forklift" ? "forklift" : "loading dock"}
 ${i?.alerts.length ? `<div style="margin:8px 0 0;">${i.alerts.map((a) => `<div style="color:#8a4b00;font-weight:700;">&#9679; ${esc(a)}</div>`).join("")}</div>` : ""}
 </div>`;
   const s: Strategy | null | undefined = i?.strategy;
@@ -175,7 +177,8 @@ export async function placeAdcOrder(o: AdcOrderInput): Promise<AdcOrderResult> {
       check: clean(o.customer?.check, 60),
       bill_same: o.delivery === "pickup" ? false : o.customer?.bill_same !== false,
       bill: { street: clean(o.customer?.bill?.street, 160), city: clean(o.customer?.bill?.city, 80), state: clean(o.customer?.bill?.state, 2).toUpperCase(), zip: clean(o.customer?.bill?.zip, 10) },
-      tax_exempt: Boolean(o.customer?.tax_exempt),
+      tax_exempt: false,
+      hours: clean(o.customer?.hours, 120),
       site: o.customer?.site === "home" ? "home" : "business",
       unload: o.customer?.unload === "forklift" ? "forklift" : o.customer?.unload === "liftgate" ? "liftgate" : "dock",
     },
@@ -184,7 +187,8 @@ export async function placeAdcOrder(o: AdcOrderInput): Promise<AdcOrderResult> {
   // a new customer gives a billing address (the shipping address counts when they say it's the same).
   const cu = input.customer!;
   if (input.company.length < 2) return { ok: false, error: "Please add your business name." };
-  if (cu.kind === "account" && cu.check.replace(/[^a-z0-9]/gi, "").length < 3) return { ok: false, error: "Please add the phone number or account # we have on file." };
+  // Receiving hours ride on the order notes, so they show everywhere the order does.
+  if (input.delivery !== "pickup" && cu.hours) input.notes = `${input.notes ? `${input.notes}\n` : ""}Receiving hours: ${cu.hours}`.slice(0, 2000);
   if (cu.kind === "new" && !cu.bill_same && (cu.bill.street.length < 3 || cu.bill.city.length < 2 || cu.bill.state.length < 2 || cu.bill.zip.replace(/\D/g, "").length < 5)) {
     return { ok: false, error: "Please add the billing address." };
   }
