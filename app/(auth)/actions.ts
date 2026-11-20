@@ -1,5 +1,6 @@
 "use server";
 
+import { PW_RULE_EN, pwOk } from "@/lib/password";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { currentOrigin, safeNext } from "@/lib/origin";
@@ -50,7 +51,7 @@ export async function requestAccess(_prev: FormState, form: FormData): Promise<F
 
   if (!full_name || !company || !phone || !email) return { error: "Please fill in your name, company, phone and email." };
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: "That email address doesn't look right." };
-  if (password.length < 8) return { error: "Use a password with at least 8 characters." };
+  if (!pwOk(password)) return { error: PW_RULE_EN };
   if (MICROSOFT_SIGNIN && email.endsWith("@ambitpu.com")) {
     return { error: "AMBIT employees don't need to request access. Go back and use Sign in with Microsoft." };
   }
@@ -107,7 +108,7 @@ export async function forgotPassword(_prev: FormState, form: FormData): Promise<
 export async function updatePassword(_prev: FormState, form: FormData): Promise<FormState> {
   const password = String(form.get("password") ?? "");
   const confirm = String(form.get("confirm") ?? "");
-  if (password.length < 8) return { error: "Use at least 8 characters." };
+  if (!pwOk(password)) return { error: PW_RULE_EN };
   if (password !== confirm) return { error: "The two passwords don't match." };
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });

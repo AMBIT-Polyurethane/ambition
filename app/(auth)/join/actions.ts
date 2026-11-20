@@ -1,5 +1,6 @@
 "use server";
 
+import { PW_RULE_EN, pwOk } from "@/lib/password";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { currentOrigin } from "@/lib/origin";
@@ -28,7 +29,7 @@ export async function joinCreate(_prev: JoinState, form: FormData): Promise<Join
   const phone = str(form, "phone");
   const password = String(form.get("password") ?? "");
   if (!full_name) return { error: "Type your name." };
-  if (password.length < 8) return { error: "Use a password with at least 8 characters." };
+  if (!pwOk(password)) return { error: PW_RULE_EN };
 
   const { supabase, hash, info } = await lookup(token);
   if (!info) return { error: GONE };

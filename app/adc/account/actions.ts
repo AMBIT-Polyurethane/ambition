@@ -1,5 +1,6 @@
 "use server";
 
+import { pwOk } from "@/lib/password";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -77,7 +78,7 @@ export async function adcSignUp(_p: AdcFormState, f: FormData): Promise<AdcFormS
   const password = String(f.get("password") ?? "");
   if (name.length < 2) return { error: errText("Please add your name.", lang) };
   if (!okEmail(email)) return { error: errText("Please add a good email address.", lang) };
-  if (password.length < 8) return { error: t.pwShort };
+  if (!pwOk(password)) return { error: t.pwShort };
   if (!serviceReady()) return { error: "Accounts aren't switched on yet. Please check out as a guest." };
   if (await throttled("signup", email)) return { error: t.tooMany };
   const meta = {
@@ -166,7 +167,7 @@ export async function adcForgot(_p: AdcFormState, f: FormData): Promise<AdcFormS
 export async function adcResetPassword(_p: AdcFormState, f: FormData): Promise<AdcFormState> {
   const t = dict(await adcLang());
   const password = String(f.get("password") ?? "");
-  if (password.length < 8) return { error: t.pwShort };
+  if (!pwOk(password)) return { error: t.pwShort };
   if (password !== String(f.get("confirm") ?? "")) return { error: t.pwMatch };
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });

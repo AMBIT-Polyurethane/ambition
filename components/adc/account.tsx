@@ -7,6 +7,7 @@ import { CircleAlert, CircleCheck, LoaderCircle, RotateCcw } from "lucide-react"
 import { adcForgot, adcNotifyMe, adcResendConfirm, adcResetPassword, adcSaveAccount, adcSignIn, adcSignUp, type AdcFormState } from "@/app/adc/account/actions";
 import { useAdc } from "@/components/adc/lang";
 import { useAdcCart } from "@/components/adc/cart";
+import { PwRules } from "@/components/pw-rules";
 
 function Go({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();
@@ -39,7 +40,7 @@ function Resend({ email }: { email: string }) {
 
 /** Sign in, or make an account (checked: email me deals). */
 export function AdcAuth({ next }: { next: string }) {
-  const { t } = useAdc();
+  const { t, lang } = useAdc();
   const [tab, setTab] = useState<"in" | "up" | "forgot">("in");
   const [inS, signIn] = useActionState(adcSignIn, null);
   const [upS, signUp] = useActionState(adcSignUp, null);
@@ -76,6 +77,7 @@ export function AdcAuth({ next }: { next: string }) {
               <label className="adc-f"><span>{t.phone}</span><input name="phone" type="tel" autoComplete="tel" /></label>
               <label className="adc-f wide"><span>{t.passwordNew}</span><input name="password" type="password" required minLength={8} autoComplete="new-password" /></label>
             </div>
+            <PwRules lang={lang} />
             <label className="adc-check"><input type="checkbox" name="promo" defaultChecked /> <span>{t.promoOpt}</span></label>
             <input name="website" tabIndex={-1} autoComplete="off" className="adc-hp" aria-hidden="true" />
             <Note s={upS} />
@@ -98,11 +100,12 @@ export function AdcAuth({ next }: { next: string }) {
 }
 
 export function AdcResetForm() {
-  const { t } = useAdc();
+  const { t, lang } = useAdc();
   const [s, act] = useActionState(adcResetPassword, null);
   return (
     <form action={act} className="adc-stack-s" style={{ gap: 14 }}>
       <label className="adc-f"><span>{t.newPassword}</span><input name="password" type="password" required minLength={8} autoComplete="new-password" /></label>
+      <PwRules lang={lang} />
       <label className="adc-f"><span>{t.confirmPassword}</span><input name="confirm" type="password" required minLength={8} autoComplete="new-password" /></label>
       <Note s={s} />
       <Go>{t.savePassword}</Go>

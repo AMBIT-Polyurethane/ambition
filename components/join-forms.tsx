@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { joinCreate, joinSignIn, type JoinState } from "@/app/(auth)/join/actions";
 import { FormMessage, Submit } from "@/components/forms";
+import { PwRules } from "@/components/pw-rules";
 
 export function JoinCreateForm({ token, name, phone }: { token: string; name: string; phone: string }) {
   const [state, action] = useActionState<JoinState, FormData>(joinCreate, null);
@@ -21,8 +22,9 @@ export function JoinCreateForm({ token, name, phone }: { token: string; name: st
       </label>
       <label className="field">
         <span className="label">Create a password</span>
-        <input className="input" type="password" name="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" required />
+        <input className="input" type="password" name="password" autoComplete="new-password" minLength={8} required />
       </label>
+      <PwRules />
       <FormMessage state={state} />
       <Submit pendingText="Setting up…">Set up my account</Submit>
     </form>

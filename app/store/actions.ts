@@ -1,5 +1,6 @@
 "use server";
 
+import { pwOk } from "@/lib/password";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
@@ -150,7 +151,7 @@ export async function partnerResetPassword(_prev: PFormState, form: FormData): P
   const slug = clean(form.get("slug"), 40);
   const t = pdict(await adcLang());
   const password = String(form.get("password") ?? "");
-  if (password.length < 8) return { error: t.pwShort };
+  if (!pwOk(password)) return { error: t.pwShort };
   if (password !== String(form.get("confirm") ?? "")) return { error: t.pwMatch };
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password });
@@ -178,7 +179,7 @@ export async function partnerJoinCreate(_prev: PFormState, form: FormData): Prom
   const full_name = clean(form.get("full_name"), 120);
   const password = String(form.get("password") ?? "");
   if (full_name.length < 2) return { error: t.yourName };
-  if (password.length < 8) return { error: t.pwShort };
+  if (!pwOk(password)) return { error: t.pwShort };
   const { supabase, hash, info } = await lookup(token);
   if (!info) return { error: t.inviteGone };
   if (info.has_account) return { error: t.joinHas };

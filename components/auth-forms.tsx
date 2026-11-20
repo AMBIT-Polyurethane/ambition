@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { forgotPassword, requestAccess, signIn, updatePassword, type FormState } from "@/app/(auth)/actions";
 import { FormMessage, Submit } from "@/components/forms";
+import { PwRules } from "@/components/pw-rules";
 import type { Branch } from "@/lib/types";
 
 export function SignInForm({ next }: { next: string }) {
@@ -64,8 +65,9 @@ export function RequestAccessForm({ branches }: { branches: Pick<Branch, "id" | 
       </label>
       <label className="field">
         <span className="label">Create a password</span>
-        <input className="input" type="password" name="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" required />
+        <input className="input" type="password" name="password" autoComplete="new-password" minLength={8} required />
       </label>
+      <PwRules />
       <FormMessage state={state} />
       <Submit pendingText="Sending…">Request access</Submit>
     </form>
@@ -94,6 +96,7 @@ export function ResetForm() {
         <span className="label">New password</span>
         <input className="input" type="password" name="password" autoComplete="new-password" minLength={8} required />
       </label>
+      <PwRules />
       <label className="field">
         <span className="label">Type it again</span>
         <input className="input" type="password" name="confirm" autoComplete="new-password" minLength={8} required />

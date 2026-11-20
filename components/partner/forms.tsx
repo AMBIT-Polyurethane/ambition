@@ -6,6 +6,7 @@ import { useFormStatus } from "react-dom";
 import { CircleAlert, CircleCheck, LoaderCircle } from "lucide-react";
 import { partnerForgot, partnerJoinCreate, partnerJoinFinish, partnerJoinSignIn, partnerResetPassword, partnerSignIn, type PFormState } from "@/app/store/actions";
 import { usePartner } from "@/components/partner/ctx";
+import { PwRules } from "@/components/pw-rules";
 
 function Go({ children, busy }: { children: React.ReactNode; busy: string }) {
   const { pending } = useFormStatus();
@@ -53,12 +54,13 @@ export function PForgotForm() {
 }
 
 export function PResetForm() {
-  const { store, t } = usePartner();
+  const { store, t, lang } = usePartner();
   const [s, act] = useActionState(partnerResetPassword, null);
   return (
     <form action={act} className="adc-stack-s" style={{ gap: 14 }}>
       <input type="hidden" name="slug" value={store.slug} />
       <label className="adc-f"><span>{t.newPassword}</span><input name="password" type="password" required minLength={8} autoComplete="new-password" /></label>
+      <PwRules lang={lang === "es" ? "es" : "en"} />
       <label className="adc-f"><span>{t.confirmPassword}</span><input name="confirm" type="password" required minLength={8} autoComplete="new-password" /></label>
       <Note s={s} />
       <Go busy="...">{t.savePassword}</Go>
@@ -67,7 +69,7 @@ export function PResetForm() {
 }
 
 export function PJoinForm({ token, mode }: { token: string; mode: "create" | "signin" | "finish" }) {
-  const { t, base } = usePartner();
+  const { t, base, lang } = usePartner();
   const [s, act] = useActionState(mode === "create" ? partnerJoinCreate : mode === "signin" ? partnerJoinSignIn : partnerJoinFinish, null);
   return (
     <form action={act} className="adc-stack-s" style={{ gap: 14 }}>
@@ -76,6 +78,7 @@ export function PJoinForm({ token, mode }: { token: string; mode: "create" | "si
         <>
           <label className="adc-f"><span>{t.yourName}</span><input name="full_name" required minLength={2} autoComplete="name" /></label>
           <label className="adc-f"><span>{t.makePassword}</span><input name="password" type="password" required minLength={8} autoComplete="new-password" /></label>
+          <PwRules lang={lang === "es" ? "es" : "en"} />
         </>
       ) : mode === "signin" ? (
         <label className="adc-f"><span>{t.password}</span><input name="password" type="password" required autoComplete="current-password" /></label>
