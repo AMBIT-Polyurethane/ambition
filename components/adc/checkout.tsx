@@ -1,5 +1,7 @@
 "use client";
 
+import { seasonOf } from "@/lib/adc-season";
+import { SeasonChip } from "@/components/adc/season";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -127,6 +129,9 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
               <b>{r.c?.name ?? r.name}</b>
               <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}</span>
               {r.c?.is_set ? <span className="adc-set">{t.setBadge} · {t.sets(r.qty)}</span> : null}
+              {seasonOf({ sku: r.sku, name: r.c?.name ?? r.name, category_id: r.c ? (r.c.foam ? "ambit-foam" : "other") : null }) ? (
+                <span className="adc-line-season"><SeasonChip season={seasonOf({ sku: r.sku, name: r.c?.name ?? r.name, category_id: r.c ? (r.c.foam ? "ambit-foam" : "other") : null })} lang={lang} /></span>
+              ) : null}
               {r.c && r.c.sale_price !== null && !r.c.quote ? <span className="adc-line-sale">{t.salePrice}</span> : null}
               {r.c?.quote && r.c.foam && foamNote ? <span className="adc-line-sale">{foamNote}</span> : null}
             </span>

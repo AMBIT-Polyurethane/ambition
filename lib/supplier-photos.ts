@@ -181,3 +181,59 @@ export async function brandPhoto(src: Buffer): Promise<{ ambit: Buffer; adc: Buf
   const [ambit, adc] = await Promise.all([make(PHOTO_BADGES.ambit), make(PHOTO_BADGES.adc)]);
   return { ambit, adc };
 }
+
+/** Downloads one of our own photos (product storage) without the supplier's headers. */
+export async function fetchOwnPhoto(url: string): Promise<Buffer> {
+  const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error(`The photo didn't load (${r.status})`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.length < 500) throw new Error("The photo came back empty");
+  return buf;
+}
+
+const AMBIT_BADGE_BOX = { left: 64, top: 62, width: 266, height: 102 };
+
+/** How much the top left of a 1600 x 1600 photo differs from the AMBIT badge (0 = the same; a plain white corner is far off). */
+async function ambitBadgeDiff(flat1600: Buffer): Promise<number> {
+  const raw = (b: Buffer) => sharp(b).extract(AMBIT_BADGE_BOX).greyscale().raw().toBuffer();
+  const badge = await sharp({ create: { width: CANVAS, height: CANVAS, channels: 3, background: "#ffffff" } })
+    .composite([{ input: Buffer.from(PHOTO_BADGES.ambit.png, "base64"), left: PHOTO_BADGES.ambit.left, top: PHOTO_BADGES.ambit.top, blend: "multiply" }])
+    .png()
+    .toBuffer();
+  const [a, b] = await Promise.all([raw(flat1600), raw(badge)]);
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / a.length;
+}
+
+/**
+ * The ADC version of a photo the app already has. One of our own AMBIT photos (square, the AMBIT oval at the top left)
+ * keeps everything and only trades the oval for the ADC wordmark; any other photo is dressed like a supplier photo.
+ */
+export async function adcFromAppPhoto(src: Buffer): Promise<{ adc: Buffer; swapped: boolean }> {
+  const meta = await sharp(src, { failOn: "none" }).rotate().metadata();
+  const w = meta.width ?? 0;
+  const h = meta.height ?? 0;
+  const square = w > 300 && h > 300 && Math.abs(w - h) / Math.max(w, h) < 0.02;
+  if (square) {
+    const flat = await sharp(src, { failOn: "none" })
+      .rotate()
+      .flatten({ background: "#ffffff" })
+      .toColourspace("srgb")
+      .resize(CANVAS, CANVAS, { kernel: "lanczos3", fit: "fill" })
+      .png()
+      .toBuffer();
+    if ((await ambitBadgeDiff(flat)) < 30) {
+      const white = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="130"><rect width="300" height="130" fill="#fff"/></svg>`);
+      const adc = await sharp(flat)
+        .composite([
+          { input: white, left: 52, top: 52 },
+          { input: Buffer.from(PHOTO_BADGES.adc.png, "base64"), left: PHOTO_BADGES.adc.left, top: PHOTO_BADGES.adc.top, blend: "multiply" },
+        ])
+        .jpeg({ quality: 88, mozjpeg: true })
+        .toBuffer();
+      return { adc, swapped: true };
+    }
+  }
+  return { adc: (await brandPhoto(src)).adc, swapped: false };
+}

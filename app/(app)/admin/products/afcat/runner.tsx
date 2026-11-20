@@ -3,12 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, CircleAlert, CircleCheck, LoaderCircle, Wand2 } from "lucide-react";
-import { brandAfcatPhotos, type BrandResult } from "./actions";
+import { adcFromAppPhotos, brandAfcatPhotos, type BrandResult } from "./actions";
 
 export type AfcatRow = { sku: string; name: string; afcat: string; ambit: string | null; adc: string | null };
 
-export function AfcatPhotos({ rows }: { rows: AfcatRow[] }) {
+/** mode "afcat": AFCAT photo -> AMBIT and ADC photos. mode "app": the app's photo -> an ADC photo for the web store. */
+export function AfcatPhotos({ rows: fresh, mode = "afcat" }: { rows: AfcatRow[]; mode?: "afcat" | "app" }) {
   const router = useRouter();
+  // The "app" list is items still missing an ADC photo, so after a save the page's list shrinks: keep the first list on screen.
+  const [first] = useState(fresh);
+  const rows = mode === "app" ? first : fresh;
   const [pick, setPick] = useState<Set<string>>(() => new Set(rows.filter((r) => !r.adc).map((r) => r.sku)));
   const [res, setRes] = useState<Record<string, BrandResult>>({});
   const [busy, setBusy] = useState(false);
@@ -22,7 +26,7 @@ export function AfcatPhotos({ rows }: { rows: AfcatRow[] }) {
     for (let i = 0; i < list.length; i += 4) {
       const part = list.slice(i, i + 4);
       try {
-        const out = await brandAfcatPhotos(part);
+        const out = await (mode === "app" ? adcFromAppPhotos(part) : brandAfcatPhotos(part));
         setRes((cur) => ({ ...cur, ...Object.fromEntries(out.map((o) => [o.sku, o])) }));
       } catch (e) {
         setRes((cur) => ({ ...cur, ...Object.fromEntries(part.map((s) => [s, { sku: s, ok: false, error: (e as Error).message || "Timed out" }])) }));
@@ -31,25 +35,27 @@ export function AfcatPhotos({ rows }: { rows: AfcatRow[] }) {
     }
     setBusy(false);
     setPick(new Set());
-    router.refresh();
+    // The "app" list only shows items still missing an ADC photo, so it stays put to show what was made.
+    if (mode === "afcat") router.refresh();
   };
 
   const failed = Object.values(res).filter((r) => !r.ok);
   const okN = Object.values(res).filter((r) => r.ok).length;
   const toggle = (sku: string) => setPick((cur) => { const n = new Set(cur); if (n.has(sku)) n.delete(sku); else n.add(sku); return n; });
 
+  if (!rows.length) return null;
   return (
     <div className="afp">
       <div className="card2 afp-bar">
         <span className="afp-sum">
-          <b>{rows.length} items</b> have an AFCAT photo · {rows.filter((r) => r.adc).length} done · {pick.size} picked
+          <b>{rows.length} items</b> {mode === "app" ? "have an app photo" : "have an AFCAT photo"} · {rows.filter((r) => r.adc || res[r.sku]?.ok).length} done · {pick.size} picked
         </span>
         <span className="afp-btns">
           <button type="button" className="b2 quiet sm" disabled={busy} onClick={() => setPick(new Set(rows.map((r) => r.sku)))}>Pick all</button>
           <button type="button" className="b2 quiet sm" disabled={busy} onClick={() => setPick(new Set())}>Clear</button>
           {failed.length ? <button type="button" className="b2 quiet sm" disabled={busy} onClick={() => setPick(new Set(failed.map((f) => f.sku)))}>Pick the {failed.length} that failed</button> : null}
           <button type="button" className="b2" disabled={busy || !pick.size} onClick={run}>
-            {busy ? <><LoaderCircle size={17} className="spin" /> {done} of {todo.length}</> : <><Wand2 size={17} /> Brand and save {pick.size} photo{pick.size === 1 ? "" : "s"}</>}
+            {busy ? <><LoaderCircle size={17} className="spin" /> {done} of {todo.length}</> : <><Wand2 size={17} /> {mode === "app" ? "Make" : "Brand and save"} {pick.size} {mode === "app" ? "ADC " : ""}photo{pick.size === 1 ? "" : "s"}</>}
           </button>
         </span>
         {busy ? <span className="prd-bar afp-prog" aria-hidden="true"><span style={{ width: `${todo.length ? Math.round((done / todo.length) * 100) : 0}%` }} /></span> : null}

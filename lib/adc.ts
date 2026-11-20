@@ -75,3 +75,30 @@ export function adcCategories(items: AdcItem[]) {
 }
 
 export const adcSlug = (sku: string) => encodeURIComponent(sku);
+
+export { seasonOf, type Season } from "@/lib/adc-season";
+
+export type AdcDoc = { title: string; doc_type: string; revision: string | null; url: string };
+export type AdcExtras = { gallery: string[]; docs: AdcDoc[] };
+
+const loadExtras = unstable_cache(
+  async (sku: string): Promise<AdcExtras> => {
+    if (!SUPABASE_URL || !SUPABASE_KEY) return { gallery: [], docs: [] };
+    const supabase = createAnon(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data, error } = await supabase.rpc("adc_product_extras", { p_sku: sku });
+    if (error) throw new Error(error.message);
+    const d = (data ?? {}) as Partial<AdcExtras>;
+    return { gallery: (d.gallery ?? []).filter(Boolean), docs: d.docs ?? [] };
+  },
+  ["adc-extras-v1"],
+  { revalidate: 300, tags: [ADC_CATALOG_TAG] },
+);
+
+/** A product's extra photos (data sheet pages for spray foam) and its public documents (TDS, SDS, code reports...). */
+export async function adcProductExtras(sku: string): Promise<AdcExtras> {
+  try {
+    return await loadExtras(sku);
+  } catch {
+    return { gallery: [], docs: [] };
+  }
+}

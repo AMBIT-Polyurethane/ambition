@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Layers, Truck } from "lucide-react";
-import { adcCatalog } from "@/lib/adc";
+import { FileText, Layers, Truck } from "lucide-react";
+import { adcCatalog, adcProductExtras, seasonOf } from "@/lib/adc";
+import { AdcGallery } from "@/components/adc/gallery";
 import { diagramFor, diagramSkus } from "@/lib/diagrams";
 import { AdcBuyBox, AdcPrice } from "@/components/adc/bits";
-import { AdcGrid, AdcImg, foamNote } from "@/components/adc/grid";
+import { AdcGrid, foamNote } from "@/components/adc/grid";
+import { SeasonChip } from "@/components/adc/season";
 import { AdcDiagram } from "@/components/adc/diagram";
 import type { PartInfo } from "@/components/parts-diagram";
 import { catName, dict, unitName } from "@/lib/adc-i18n";
@@ -41,6 +43,10 @@ export default async function AdcProduct({ params }: { params: Promise<{ sku: st
   const parts = d ? diagramSkus(d).map((s) => bySku.get(s.toLowerCase())).filter((x): x is NonNullable<typeof x> => Boolean(x)) : [];
   const more = (parts.length ? parts : items.filter((x) => x.category_id === it.category_id && x.id !== it.id)).filter((x) => x.image).slice(0, 4);
   const note = foamNote(it, sale, lang);
+  const extras = await adcProductExtras(it.sku);
+  const photos = [it.image, ...extras.gallery].filter((x): x is string => Boolean(x));
+  const ORDER = ["TDS", "SDS", "CCRR", "ESR", "Guide", "Warranty", "Certificate"];
+  const docs = [...extras.docs].sort((a, b) => (ORDER.indexOf(a.doc_type) + 99) % 99 - (ORDER.indexOf(b.doc_type) + 99) % 99 || a.title.localeCompare(b.title));
 
   return (
     <div className="adc-wrap adc-pad adc-stack">
@@ -50,7 +56,9 @@ export default async function AdcProduct({ params }: { params: Promise<{ sku: st
         <span>{it.name}</span>
       </nav>
       <div className="adc-prod">
-        <div className="adc-prod-ph"><AdcImg src={it.image} alt={it.name} /></div>
+        <AdcGallery images={photos} alt={it.name}>
+          <SeasonChip season={seasonOf(it)} lang={lang} big />
+        </AdcGallery>
         <div className="adc-prod-b">
           <span className="adc-sku">{t.part} {it.sku}{it.category ? ` · ${catName(it.category, lang).toUpperCase()}` : ""}</span>
           <h1 className="adc-h1">{it.name}</h1>
@@ -76,6 +84,25 @@ export default async function AdcProduct({ params }: { params: Promise<{ sku: st
           {d ? <Link href={`/adc/parts/${d.slug}`} className="adc-ghost dark"><Layers size={18} aria-hidden="true" /> {t.seeEveryPart}</Link> : null}
         </div>
       </div>
+
+      {docs.length ? (
+        <section className="adc-stack-s" aria-label={t.docsTitle}>
+          <div className="adc-sec-h"><h2 className="adc-h2">{t.docsTitle}</h2><span className="adc-muted">{t.docsHint}</span></div>
+          <div className="adc-docs">
+            {docs.map((doc) => (
+              <a key={doc.url} href={doc.url} target="_blank" rel="noopener noreferrer" className={`adc-doc t-${doc.doc_type.toLowerCase()}`}>
+                <span className="adc-doc-ic" aria-hidden="true"><FileText size={20} /></span>
+                <span className="adc-doc-b">
+                  <span className="adc-doc-k">{t.docType(doc.doc_type)}</span>
+                  <b>{doc.title}</b>
+                  {doc.revision ? <span className="adc-muted small">{doc.revision}</span> : null}
+                </span>
+                <span className="adc-doc-go">{t.openPdf}</span>
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {d ? (
         <section className="adc-stack-s" aria-label={t.everyPart}>

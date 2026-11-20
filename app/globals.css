@@ -5578,3 +5578,38 @@ body:has(.adc) { background: #f4f4f2; }
 .pw-rules li.ok { color: #1f9d55; }
 .pw-rules.dark { color: #9a9aa3; }
 .pw-rules.dark li.ok { color: #4ade80; }
+/* ADC: winter / summer blend chip on spray foam photos */
+.adc-season { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px 0 8px; border-radius: 14px; font-size: 12px; font-weight: 800; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14); }
+.adc-season.winter { color: #1d6fd6; border: 1.5px solid #9cc5f5; }
+.adc-season.summer { color: #d9670b; border: 1.5px solid #f7c48d; }
+.adc-season.big { height: 34px; font-size: 14px; padding: 0 12px 0 10px; left: 14px; bottom: 14px; border-radius: 17px; }
+.adc-line-season { display: inline-flex; margin-top: 2px; }
+.adc-line-season .adc-season { position: static; box-shadow: none; height: 24px; }
+/* ADC: product photo gallery (data sheet pages after the photo) */
+.adc-gal { flex: 1 1 480px; max-width: 620px; display: flex; flex-direction: column; gap: 10px; }
+.adc-gal .adc-prod-ph { position: relative; max-width: none; flex: none; }
+.adc-prod-ph { position: relative; }
+.adc-gal .adc-img.doc { object-fit: contain; background: #fff; }
+.adc-gal-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 21px; border: 1px solid var(--a-line); background: rgba(255, 255, 255, 0.92); color: #141414; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
+.adc-gal-nav.prev { left: 10px; }
+.adc-gal-nav.next { right: 10px; }
+.adc-gal-count { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 3px 10px; border-radius: 12px; background: rgba(20, 20, 20, 0.72); color: #fff; font-size: 12px; font-weight: 700; }
+.adc-gal-thumbs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.adc-gal-thumbs button { flex: none; width: 74px; height: 74px; padding: 0; border-radius: 12px; border: 2px solid var(--a-line); background: #fff; overflow: hidden; cursor: pointer; }
+.adc-gal-thumbs button.on { border-color: var(--a-red2, #e33527); }
+.adc-gal-thumbs img { width: 100%; height: 100%; object-fit: contain; }
+/* ADC: product documents */
+.adc-docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.adc .adc-doc { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: #fff; border: 1px solid var(--a-line); color: inherit; }
+.adc .adc-doc:hover { border-color: #b9b9c0; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06); }
+.adc-doc-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: #fdecea; color: #c8102e; }
+.adc-doc.t-sds .adc-doc-ic { background: #fff4e0; color: #b45309; }
+.adc-doc.t-ccrr .adc-doc-ic, .adc-doc.t-esr .adc-doc-ic { background: #e8f1fd; color: #1d5fb8; }
+.adc-doc-b { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.adc-doc-k { font-size: 11.5px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; color: #6b6b74; }
+.adc-doc-b b { font-size: 15px; }
+.adc-doc-go { flex: none; font-size: 13px; font-weight: 800; color: #c8102e; }
+@media (max-width: 640px) {
+  .adc-docs { grid-template-columns: 1fr; }
+  .adc-gal-thumbs button { width: 60px; height: 60px; }
+}

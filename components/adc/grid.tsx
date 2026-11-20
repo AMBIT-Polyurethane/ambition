@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Camera, Tag } from "lucide-react";
 import type { AdcItem, AdcSale } from "@/lib/adc";
+import { seasonOf } from "@/lib/adc-season";
+import { SeasonChip } from "@/components/adc/season";
 import { AdcAddButton, AdcPrice } from "@/components/adc/bits";
 import { catName, dict, type Lang } from "@/lib/adc-i18n";
 
@@ -31,6 +33,7 @@ export function AdcGrid({ items, sale, lang = "en" }: { items: AdcItem[]; sale: 
             <Link href={href(i.sku)} className="adc-card-ph" aria-label={i.name}>
               <AdcImg src={i.image} alt={i.name} />
               {i.sale_price !== null ? <span className="adc-flag"><Tag size={13} aria-hidden="true" /> {sale?.name ?? t.sale}</span> : null}
+              <SeasonChip season={seasonOf(i)} lang={lang} />
             </Link>
             <div className="adc-card-b">
               <span className="adc-sku">{i.sku}{i.category ? ` · ${catName(i.category, lang).toUpperCase()}` : ""}</span>
