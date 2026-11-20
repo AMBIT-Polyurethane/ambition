@@ -5594,6 +5594,16 @@ body:has(.adc) { background: #f4f4f2; }
 .adc-gal-nav.prev { left: 10px; }
 .adc-gal-nav.next { right: 10px; }
 .adc-gal-count { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 3px 10px; border-radius: 12px; background: rgba(20, 20, 20, 0.72); color: #fff; font-size: 12px; font-weight: 700; }
+/* ADC checkout: who's ordering, billing, delivery site, estimate */
+.adc-cust, .adc-bill { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--a-line); border-radius: 14px; background: #fff; }
+.adc-q { font-weight: 800; font-size: 14px; }
+.adc-seg.sm button { font-size: 13px; padding: 6px 8px; height: auto; min-height: 42px; line-height: 1.2; }
+.adc-cust .adc-seg button { height: auto; min-height: 42px; padding: 6px 8px; line-height: 1.2; }
+.adc-tot-est { border-top: 1px dashed var(--a-line); padding-top: 8px; }
+.adc-shipline .adc-muted { font-weight: 600; }
+.adc-shipline .spin { vertical-align: -2px; }
+.adc-gal-open { display: block; width: 100%; height: 100%; cursor: zoom-in; }
+.adc-gal-zoom { position: absolute; bottom: 12px; right: 12px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 14px; background: rgba(20, 20, 20, 0.78); color: #fff; font-size: 12px; font-weight: 700; }
 .adc-gal-thumbs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
 .adc-gal-thumbs button { flex: none; width: 74px; height: 74px; padding: 0; border-radius: 12px; border: 2px solid var(--a-line); background: #fff; overflow: hidden; cursor: pointer; }
 .adc-gal-thumbs button.on { border-color: var(--a-red2, #e33527); }
@@ -5613,3 +5623,21 @@ body:has(.adc) { background: #f4f4f2; }
   .adc-docs { grid-template-columns: 1fr; }
   .adc-gal-thumbs button { width: 60px; height: 60px; }
 }
+
+/* Best Strategy sheet (ADC web orders) */
+.bs { display: flex; flex-direction: column; gap: 14px; }
+.bs .card2 { padding: 14px 16px; }
+.bs-red { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border: 3px solid #c8102e; background: #fdecee; color: #7a0a1a; border-radius: 14px; font-weight: 700; }
+.bs-red > b { display: inline-flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 900; color: #c8102e; text-transform: uppercase; letter-spacing: 0.3px; }
+.bs-who { display: flex; flex-direction: column; gap: 6px; }
+.bs-plan { display: flex; flex-direction: column; gap: 8px; }
+.bs-plan.best { border: 2px solid var(--ok, #1f8a4c); }
+.bs-plan.no { opacity: 0.7; }
+.bs-plan-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bs-cost { font-size: 18px; font-variant-numeric: tabular-nums; }
+.bs-transfers { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--s1); }
+.bs-transfers span { display: inline-flex; align-items: center; gap: 5px; }
+.bs .webo-t { display: block; overflow-x: auto; }
+.webo-red { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 2px solid #c8102e; background: #fdecee; color: #7a0a1a; border-radius: 12px; font-size: 13.5px; font-weight: 700; }
+.webo-red > b { color: #c8102e; font-weight: 900; text-transform: uppercase; }
+@media print { .bs-noprint, .side, nav { display: none !important; } .bs .card2 { break-inside: avoid; } }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ZoomIn } from "lucide-react";
 import { useAdc } from "@/components/adc/lang";
 
 /** The product's photos: the main one big, arrows and thumbnails to cycle through the rest (swipe on a phone). */
@@ -31,7 +31,15 @@ export function AdcGallery({ images, alt, children }: { images: string[]; alt: s
           x0.current = null;
         }}
       >
-        <img src={images[i]} alt={i === 0 ? alt : `${alt}: ${t.photoOf(i + 1, n)}`} className={`adc-img${i > 0 ? " doc" : ""}`} />
+        {i === 0 ? (
+          <img src={images[i]} alt={alt} className="adc-img" />
+        ) : (
+          // Data sheet pages: tap to open the page full size (pinch to zoom on a phone).
+          <a href={images[i]} target="_blank" rel="noopener noreferrer" className="adc-gal-open" aria-label={t.zoomDoc}>
+            <img src={images[i]} alt={`${alt}: ${t.photoOf(i + 1, n)}`} className="adc-img doc" />
+            <span className="adc-gal-zoom"><ZoomIn size={15} aria-hidden="true" /> {t.zoomDoc}</span>
+          </a>
+        )}
         {i === 0 ? children : null}
         <button type="button" className="adc-gal-nav prev" onClick={() => go(-1)} aria-label={t.prevPhoto}><ChevronLeft size={22} /></button>
         <button type="button" className="adc-gal-nav next" onClick={() => go(1)} aria-label={t.nextPhoto}><ChevronRight size={22} /></button>

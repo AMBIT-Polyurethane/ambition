@@ -49,6 +49,16 @@ function ProductFields({ p, cats }: { p?: Product; cats: Category[] }) {
         <span className="label">Shelf life (months)</span>
         <input className="input sm" name="shelf_life_months" type="number" min={1} max={120} defaultValue={p?.shelf_life_months ?? ""} placeholder="Fills in Exp from Mfg" />
       </label>
+      <label className="field" title="Used for ADC shipping estimates when the inventory spreadsheet has no weight for this item.">
+        <span className="label">Ship weight (lb each)</span>
+        <input className="input sm" name="ship_weight" inputMode="decimal" defaultValue={p?.ship_weight ?? ""} placeholder="If the sheet has none" />
+      </label>
+      <label className="field" title="For the ADC Best Strategy: who ships it when no AMBIT location has enough.">
+        <span className="label">Vendor</span>
+        <input className="input sm" name="vendor_name" defaultValue={p?.vendor_name ?? ""} placeholder="Who we buy it from" />
+      </label>
+      <label className="field"><span className="label">Vendor ships from (ZIP)</span><input className="input sm" name="vendor_zip" inputMode="numeric" maxLength={5} defaultValue={p?.vendor_zip ?? ""} /></label>
+      <label className="field"><span className="label">Vendor lead time (days)</span><input className="input sm" name="vendor_lead_days" type="number" min={0} max={180} defaultValue={p?.vendor_lead_days ?? ""} /></label>
       <label className="check" style={{ alignSelf: "end", paddingBottom: 8 }} title="Receiving asks for the Lot / Batch # and expiration date, and they go onto the spreadsheet.">
         <input type="checkbox" name="track_lots" defaultChecked={p ? Boolean(p.track_lots) : false} /> Track lot &amp; expiration
       </label>

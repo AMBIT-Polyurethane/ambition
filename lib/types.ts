@@ -99,6 +99,10 @@ export type Product = {
   track_lots?: boolean | null;
   /** Months from the Mfg date to expiration, so receiving fills it in. */
   shelf_life_months?: number | null;
+  ship_weight?: number | null;
+  vendor_name?: string | null;
+  vendor_zip?: string | null;
+  vendor_lead_days?: number | null;
   active: boolean;
   sort: number;
 };

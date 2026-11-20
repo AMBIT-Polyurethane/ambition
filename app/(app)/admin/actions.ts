@@ -334,8 +334,27 @@ export async function saveProduct(form: FormData) {
     })(),
   };
   if (!row.sku || !row.name) return;
-  if (id) await supabase.from("products").update(row).eq("id", id);
-  else await supabase.from("products").insert(row);
+  // ADC shipping facts (update 0100): saved separately so a product still saves before that update is run.
+  const ship = {
+    ship_weight: (() => {
+      const w = num(form.get("ship_weight"));
+      return w !== null && w > 0 && w < 100000 ? w : null;
+    })(),
+    vendor_name: n(form, "vendor_name"),
+    vendor_zip: (s(form, "vendor_zip").replace(/\D/g, "").slice(0, 5) || null) as string | null,
+    vendor_lead_days: (() => {
+      const d = num(form.get("vendor_lead_days"));
+      return d !== null && d >= 0 && d <= 180 ? Math.round(d) : null;
+    })(),
+  };
+  const hasShip = form.has("vendor_name");
+  if (id) {
+    await supabase.from("products").update(row).eq("id", id);
+    if (hasShip) await supabase.from("products").update(ship).eq("id", id);
+  } else {
+    const { data: made } = await supabase.from("products").insert(row).select("id").maybeSingle();
+    if (hasShip && made) await supabase.from("products").update(ship).eq("id", (made as { id: string }).id);
+  }
   revalidatePath("/admin/products");
   revalidatePath("/order");
 }

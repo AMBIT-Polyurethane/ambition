@@ -62,3 +62,26 @@ export async function deleteAdcTest(f: FormData) {
   await supabase.rpc("adc_order_delete_test", { p_id: id });
   revalidatePath("/orders/web");
 }
+
+/** Staff: run the Best Strategy again with today's stock (after a count, a transfer or a vendor set on a product). */
+export async function recalcAdcStrategy(f: FormData) {
+  const { supabase, profile } = await requireActive();
+  if (!(profile.role === "admin" || can(profile, "order_desk") || can(profile, "ordering"))) return;
+  const id = Number(f.get("id"));
+  if (!id) return;
+  const { data } = await supabase.from("adc_orders").select("id, delivery, pickup_branch, address, items, site, unload").eq("id", id).maybeSingle();
+  const o = data as { id: number; delivery: "ship" | "pickup" | "truckload"; pickup_branch: string | null; address: { zip: string } | null; items: { product_id?: string | null; sku: string; name: string; qty: number }[]; site: string | null; unload: string | null } | null;
+  if (!o) return;
+  const { planOrder } = await import("@/lib/adc-logistics");
+  const { serviceClient, serviceReady } = await import("@/lib/supabase/service");
+  const strategy = await planOrder(serviceReady() ? serviceClient() : supabase, {
+    lines: o.items.map((l) => ({ product_id: l.product_id ?? null, sku: l.sku, name: l.name, qty: Number(l.qty) })),
+    delivery: o.delivery,
+    zip: o.address?.zip ?? "",
+    pickup_branch: o.pickup_branch,
+    site: { site: o.site === "home" ? "home" : "business", unload: o.unload === "liftgate" ? "liftgate" : o.unload === "forklift" ? "forklift" : "dock" },
+  });
+  await supabase.from("adc_orders").update({ strategy }).eq("id", id);
+  revalidatePath(`/orders/web/${id}/strategy`);
+  revalidatePath("/orders/web");
+}

@@ -4,10 +4,10 @@ import { seasonOf } from "@/lib/adc-season";
 import { SeasonChip } from "@/components/adc/season";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { CircleAlert, Gift, Info, LoaderCircle, Minus, Plus, ShoppingCart, Trash2, Truck, UserRound } from "lucide-react";
 import { useAdcCart } from "@/components/adc/cart";
-import { placeAdcOrder } from "@/app/adc/actions";
+import { adcShipEstimate, placeAdcOrder, type ShipQuote } from "@/app/adc/actions";
 import { useAdc } from "@/components/adc/lang";
 import { errText } from "@/lib/adc-i18n";
 
@@ -47,6 +47,14 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [delivery, setDelivery] = useState<"ship" | "pickup" | "truckload">("ship");
+  // Who's ordering and where it goes (for the customer match, the billing and the shipping estimate).
+  const [kind, setKind] = useState<"account" | "new" | null>(null);
+  const [billSame, setBillSame] = useState(true);
+  const [site, setSite] = useState<"business" | "home">("business");
+  const [unload, setUnload] = useState<"dock" | "forklift" | "liftgate">("dock");
+  const [zip, setZip] = useState(me?.zip ?? "");
+  const [quote, setQuote] = useState<ShipQuote | null>(null);
+  const [quoting, setQuoting] = useState(false);
 
   const rows = lines.map((l) => {
     const c = l.id ? cat[l.id] : undefined;
@@ -76,6 +84,37 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
             ? `${t.truckFill(pct)} ${t.truckNeed}`
             : null;
 
+  // The shipping estimate: asked again (after a short pause) when the ZIP, the cart or the delivery choices change.
+  const cartKey = live.map((r) => `${r.id ?? r.sku}:${r.qty}`).join(",");
+  const zip5 = zip.replace(/\D/g, "").slice(0, 5);
+  useEffect(() => {
+    if (!ready || !cartKey || delivery === "pickup" || zip5.length < 5) {
+      setQuote(null);
+      setQuoting(false);
+      return;
+    }
+    let stop = false;
+    setQuoting(true);
+    const h = setTimeout(async () => {
+      const items = cartKey.split(",").map((x) => {
+        const [k, q] = x.split(":");
+        const r = live.find((y) => (y.id ?? y.sku) === k);
+        return { product_id: r?.id ?? null, sku: r?.sku ?? k, qty: Number(q) };
+      });
+      const res = await adcShipEstimate({ items, delivery, zip: zip5, site, unload }).catch(() => ({ ok: false }) as ShipQuote);
+      if (!stop) {
+        setQuote(res);
+        setQuoting(false);
+      }
+    }, 600);
+    return () => {
+      stop = true;
+      clearTimeout(h);
+    };
+    // live is derived from the cart; cartKey stands for it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, cartKey, delivery, zip5, site, unload]);
+
   if (!ready) return <div className="adc-empty"><LoaderCircle className="spin" size={26} /></div>;
   if (!lines.length) {
     return (
@@ -93,6 +132,10 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
       setError(blocked);
       return;
     }
+    if (!kind) {
+      setError(t.custQ);
+      return;
+    }
     const s = (k: string) => String(f.get(k) ?? "");
     start(async () => {
       const res = await placeAdcOrder({
@@ -108,6 +151,15 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
         lang,
         promo_opt_in: f.get("promo") === "on",
         use_bucks: f.get("bucks") === "on",
+        customer: {
+          kind,
+          check: s("acct_check"),
+          bill_same: delivery !== "pickup" && billSame,
+          bill: { street: s("bill_street"), city: s("bill_city"), state: s("bill_state"), zip: s("bill_zip") },
+          tax_exempt: f.get("tax_exempt") === "on",
+          site,
+          unload,
+        },
         items: live.map((r) => (r.id ? { product_id: r.id, qty: r.qty } : { sku: r.sku, name: r.name, qty: r.qty })),
       });
       if (!res.ok) {
@@ -149,8 +201,27 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
           <span>{toConfirm ? t.subtotalPriced : t.subtotal}</span>
           <b>{usd(subtotal)}</b>
         </div>
-        <div className="adc-shipline"><span><Truck size={16} aria-hidden="true" /> {t.shipping}</span><b>{t.shipQuoted}</b></div>
-        <p className="adc-muted small">{t.taxNote}{toConfirm ? t.confirmNote : ""} {t.shipDisclaimer}</p>
+        <div className="adc-shipline">
+          <span><Truck size={16} aria-hidden="true" /> {delivery === "pickup" ? t.shipping : t.shipEst}</span>
+          <b>
+            {delivery === "pickup"
+              ? t.shipPickupFree
+              : zip5.length < 5
+                ? <span className="adc-muted">{t.shipEstWait}</span>
+                : quoting
+                  ? <span className="adc-muted"><LoaderCircle size={14} className="spin" /> {t.shipEstCalc}</span>
+                  : quote?.ok && quote.estimate !== null
+                    ? <>{usd(quote.estimate)}{quote.partial ? <span className="adc-muted small"> {t.shipEstPlus}</span> : null}</>
+                    : t.shipQuoted}
+          </b>
+        </div>
+        {delivery !== "pickup" && quote?.ok && quote.estimate !== null ? (
+          <div className="adc-tot adc-tot-est">
+            <span>{t.subtotal} + {t.shipEst.toLowerCase()}</span>
+            <b>{usd(subtotal + quote.estimate)}</b>
+          </div>
+        ) : null}
+        <p className="adc-muted small">{delivery !== "pickup" && quote?.ok ? `${t.shipEstNote} ` : ""}{t.taxNote}{toConfirm ? t.confirmNote : ""} {t.shipDisclaimer}</p>
         <p className="adc-note-b small"><Info size={15} aria-hidden="true" /> {t.contactNote}</p>
       </section>
 
@@ -164,9 +235,24 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
         )}
         <div className="adc-f2">
           <label className="adc-f"><span>{t.name}</span><input name="name" required autoComplete="name" defaultValue={me?.name ?? ""} /></label>
-          <label className="adc-f"><span>{t.company}</span><input name="company" autoComplete="organization" defaultValue={me?.company ?? ""} /></label>
+          <label className="adc-f"><span>{t.bizName}</span><input name="company" required minLength={2} autoComplete="organization" placeholder={t.bizNamePh} defaultValue={me?.company ?? ""} /></label>
           <label className="adc-f"><span>{t.email}</span><input name="email" type="email" required autoComplete="email" defaultValue={me?.email ?? ""} /></label>
           <label className="adc-f"><span>{t.phone}</span><input name="phone" type="tel" required autoComplete="tel" defaultValue={me?.phone ?? ""} /></label>
+        </div>
+        <div className="adc-cust">
+          <span className="adc-q">{t.custQ}</span>
+          <div className="adc-seg" role="radiogroup" aria-label={t.custQ}>
+            <button type="button" role="radio" aria-checked={kind === "account"} className={kind === "account" ? "on" : undefined} onClick={() => setKind("account")}>{t.custYes}</button>
+            <button type="button" role="radio" aria-checked={kind === "new"} className={kind === "new" ? "on" : undefined} onClick={() => setKind("new")}>{t.custNo}</button>
+          </div>
+          {kind === "account" ? (
+            <>
+              <label className="adc-f"><span>{t.acctCheck}</span><input name="acct_check" required autoComplete="off" /></label>
+              <p className="adc-muted small" style={{ margin: 0 }}>{t.acctCheckHint}</p>
+            </>
+          ) : kind === "new" ? (
+            <p className="adc-note-b small" style={{ margin: 0 }}><Info size={15} aria-hidden="true" /> {t.newCustNote}</p>
+          ) : null}
         </div>
         <div className="adc-seg" role="radiogroup" aria-label={t.delivery}>
           <button type="button" role="radio" aria-checked={delivery === "ship"} className={delivery === "ship" ? "on" : undefined} onClick={() => setDelivery("ship")}>{t.shipIt}</button>
@@ -190,8 +276,25 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
             <label className="adc-f"><span>{t.city}</span><input name="city" required autoComplete="address-level2" defaultValue={me?.city ?? ""} /></label>
             <span className="adc-f2 tight">
               <label className="adc-f"><span>{t.state}</span><input name="state" required maxLength={2} autoComplete="address-level1" placeholder="OK" defaultValue={me?.state ?? ""} /></label>
-              <label className="adc-f"><span>{t.zip}</span><input name="zip" required inputMode="numeric" autoComplete="postal-code" defaultValue={me?.zip ?? ""} /></label>
+              <label className="adc-f"><span>{t.zip}</span><input name="zip" required inputMode="numeric" autoComplete="postal-code" defaultValue={me?.zip ?? ""} onChange={(e) => setZip(e.target.value)} /></label>
             </span>
+            <div className="adc-f wide">
+              <span>{t.siteQ}</span>
+              <div className="adc-seg sm" role="radiogroup" aria-label={t.siteQ}>
+                <button type="button" role="radio" aria-checked={site === "business"} className={site === "business" ? "on" : undefined} onClick={() => setSite("business")}>{t.siteBiz}</button>
+                <button type="button" role="radio" aria-checked={site === "home"} className={site === "home" ? "on" : undefined} onClick={() => setSite("home")}>{t.siteHome}</button>
+              </div>
+            </div>
+            {freight.length || truck.length ? (
+              <div className="adc-f wide">
+                <span>{t.unloadQ}</span>
+                <div className="adc-seg sm" role="radiogroup" aria-label={t.unloadQ}>
+                  <button type="button" role="radio" aria-checked={unload === "dock"} className={unload === "dock" ? "on" : undefined} onClick={() => setUnload("dock")}>{t.unloadDock}</button>
+                  <button type="button" role="radio" aria-checked={unload === "forklift"} className={unload === "forklift" ? "on" : undefined} onClick={() => setUnload("forklift")}>{t.unloadFork}</button>
+                  <button type="button" role="radio" aria-checked={unload === "liftgate"} className={unload === "liftgate" ? "on" : undefined} onClick={() => setUnload("liftgate")}>{t.unloadLift}</button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <label className="adc-f"><span>{t.pickupAt}</span>
@@ -201,6 +304,25 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
             </select>
           </label>
         )}
+        {kind === "new" ? (
+          <div className="adc-bill">
+            <span className="adc-q">{t.billTitle}</span>
+            {delivery !== "pickup" ? (
+              <label className="adc-check"><input type="checkbox" checked={billSame} onChange={(e) => setBillSame(e.target.checked)} /> <span>{t.billSame}</span></label>
+            ) : null}
+            {delivery === "pickup" || !billSame ? (
+              <div className="adc-f2">
+                <label className="adc-f wide"><span>{t.street}</span><input name="bill_street" required autoComplete="billing address-line1" /></label>
+                <label className="adc-f"><span>{t.city}</span><input name="bill_city" required autoComplete="billing address-level2" /></label>
+                <span className="adc-f2 tight">
+                  <label className="adc-f"><span>{t.state}</span><input name="bill_state" required maxLength={2} autoComplete="billing address-level1" placeholder="OK" /></label>
+                  <label className="adc-f"><span>{t.zip}</span><input name="bill_zip" required inputMode="numeric" autoComplete="billing postal-code" /></label>
+                </span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <label className="adc-check"><input type="checkbox" name="tax_exempt" /> <span>{t.taxExempt}</span></label>
         <label className="adc-f"><span>{t.notes}</span><textarea name="notes" rows={3} placeholder={t.notesPh} /></label>
         {me && me.bucks > 0 ? (
           <label className="adc-check"><input type="checkbox" name="bucks" defaultChecked /> <span>{t.useBucks(usd(me.bucks))}</span></label>

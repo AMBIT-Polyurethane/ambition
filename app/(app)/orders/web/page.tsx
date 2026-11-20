@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronDown, ChevronLeft, ExternalLink, FlaskConical, Mail, Phone, Trash2, Truck, UserRound } from "lucide-react";
+import { ChevronDown, ChevronLeft, CircleAlert, ExternalLink, FlaskConical, Mail, Phone, Route, Trash2, Truck, UserRound } from "lucide-react";
 import { requireActive, isEmployee } from "@/lib/session";
 import { can } from "@/lib/access";
 import { monthDay, money } from "@/lib/format";
@@ -19,6 +19,13 @@ type WebOrder = {
   staff_note: string | null; handled_by_name: string | null; handled_at: string | null;
   user_id?: string | null; promo_opt_in?: boolean | null; bucks_requested?: number | null; paid_total?: number | null; paid_at?: string | null;
   points_earned?: number | null; bucks_used?: number | null; is_test?: boolean | null;
+  match?: string | null; ship_est?: number | null; alerts?: string[] | null; company_id?: string | null;
+};
+const MATCH: Record<string, [string, string]> = {
+  verified: ["AMBIT customer", "pill2 ok sm"],
+  unverified: ["Not verified", "pill2 err sm"],
+  added: ["New customer", "pill2 err sm"],
+  new: ["New customer", "pill2 err sm"],
 };
 const STATUS = { new: ["New", "pill2 warn sm"], working: ["Working on it", "pill2 sm"], done: ["Done", "pill2 ok sm"], cancelled: ["Cancelled", "pill2 sm"] } as const;
 
@@ -73,6 +80,8 @@ export default async function AdcOrdersPage({ searchParams }: { searchParams: Pr
                     </span>
                     <span className="acc-tags">
                       {o.is_test ? <span className="pill2 sm webo-test">Test</span> : null}
+                      {o.alerts?.length && !o.paid_at && o.status !== "done" && o.status !== "cancelled" ? <span className="pill2 err sm">Action needed</span> : null}
+                      {o.match && MATCH[o.match] ? <span className={MATCH[o.match][1]}>{MATCH[o.match][0]}</span> : null}
                       {o.user_id ? <span className="pill2 sm" title="Has an ADC account">Account</span> : null}
                       {o.delivery === "truckload" ? <span className="pill2 warn sm">Full truck</span> : null}
                       {o.paid_at ? <span className="pill2 ok sm">Paid</span> : null}
@@ -102,6 +111,17 @@ export default async function AdcOrdersPage({ searchParams }: { searchParams: Pr
                       {o.bucks_requested ? <span className="webo-bucks">Wants to use {money(o.bucks_requested)} in AM-BUCKS</span> : null}
                       {o.promo_opt_in ? <span>OK to email deals</span> : null}
                       {o.delivery === "truckload" ? <span><Truck size={14} aria-hidden="true" /> Full truckload: confirm the load and freight</span> : null}
+                    </div>
+                    {o.alerts?.length ? (
+                      <div className="webo-red" role="alert">
+                        <b><CircleAlert size={15} aria-hidden="true" /> Action needed before this ships</b>
+                        {o.alerts.map((x, k) => <span key={k}>{x}</span>)}
+                      </div>
+                    ) : null}
+                    <div className="webo-flags small">
+                      {o.delivery !== "pickup" && o.ship_est !== null && o.ship_est !== undefined ? <span><Truck size={14} aria-hidden="true" /> Customer saw {money(o.ship_est)} estimated shipping</span> : null}
+                      <Link href={`/orders/web/${o.id}/strategy`} className="b2 quiet sm"><Route size={15} /> Best Strategy sheet</Link>
+                      {o.company_id ? <Link href={`/customers/${o.company_id}`} className="b2 quiet sm"><UserRound size={15} /> Customer in A.I.</Link> : null}
                     </div>
                     <table className="webo-t">
                       <thead><tr><th>Part #</th><th>Item</th><th className="n">Qty</th><th className="n">Each</th><th className="n">Total</th></tr></thead>
