@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { canEmailCustomers, sendEmail } from "@/lib/email";
 import { ORDERS_EMAIL, siteUrl } from "@/lib/env";
-import { estimateFor, intakeAdcOrder, type Intake } from "@/lib/adc-intake";
+import { estimateFor, intakeAdcOrder, priceForCustomer, type Intake } from "@/lib/adc-intake";
 import type { Strategy } from "@/lib/adc-logistics";
 
 export type AdcOrderInput = {
@@ -93,7 +93,7 @@ ${i?.alerts.length ? `<div style="margin:8px 0 0;">${i.alerts.map((a) => `<div s
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;">
 <tr style="background:#f4f4f2;"><th align="left" style="padding:6px;">From</th><th align="left" style="padding:6px;">How</th><th align="left" style="padding:6px;">What</th><th align="right" style="padding:6px;">Weight</th><th align="right" style="padding:6px;">Est.</th></tr>
 ${rows}</table>
-${best.transfers.length ? `<div style="margin:8px 0 0;font-size:13px;"><b>Transfers first:</b> ${best.transfers.map((t) => `${t.qty} x ${esc(t.sku)} ${esc(t.fromName)} &#8594; ${esc(t.toName)}`).join("; ")}</div>` : ""}
+${best.transfers.length ? `<div style="margin:8px 0 0;font-size:13px;"><b>Transfers first${best.transferCost ? ` (about ${usd(best.transferCost)} of freight to us)` : ""}:</b> ${best.transfers.map((t) => `${t.qty} x ${esc(t.sku)} ${esc(t.fromName)} &#8594; ${esc(t.toName)}`).join("; ")}</div>` : ""}
 ${others.length ? `<div style="margin:8px 0 0;font-size:13px;color:#55555c;"><b>Other options:</b> ${others.map((x) => `${esc(x.title)} (${x.total === null ? "partly quoted" : usd(x.total)})`).join(" · ")}</div>` : ""}
 ${s.notes.length ? `<div style="margin:8px 0 0;font-size:12px;color:#55555c;">${s.notes.map(esc).join("<br>")}</div>` : ""}
 <div style="margin:10px 0 0;"><a href="${siteUrl()}/orders/web/${id}/strategy" style="font-weight:700;color:#C8102E;">Open the full Best Strategy sheet</a></div>
@@ -199,7 +199,7 @@ export async function placeAdcOrder(o: AdcOrderInput): Promise<AdcOrderResult> {
   const res = data as { id: number; order_no: string; subtotal: number; has_quote: boolean; items: Line[]; bucks: number | null };
 
   // The lines exactly as the database saved them (its prices, sets and sale flags), for the emails.
-  const lines: Line[] = (res.items ?? []).map((l) => ({ ...l, price: l.price === null ? null : Number(l.price), qty: Number(l.qty) }));
+  let lines: Line[] = (res.items ?? []).map((l) => ({ ...l, price: l.price === null ? null : Number(l.price), qty: Number(l.qty) }));
   let branchName: string | null = null;
   if (input.delivery === "pickup" && input.pickup_branch) {
     const { data: b } = await supabase.from("branches").select("name").eq("id", input.pickup_branch).maybeSingle();
@@ -233,6 +233,19 @@ export async function placeAdcOrder(o: AdcOrderInput): Promise<AdcOrderResult> {
     console.error("adc intake failed", e);
   }
   const red = intake ? intake.red.length > 0 : true;
+
+  // Prices by who it is: an AMBIT customer gets the full sale price (the store only shows 5% off), and the spray
+  // foam sale is for AMBIT customers only.
+  try {
+    const priced = await priceForCustomer({ id: res.id, lines, ambitCustomer: intake?.match === "verified" });
+    if (priced) {
+      lines = priced.lines as Line[];
+      res.subtotal = priced.subtotal;
+      res.has_quote = priced.has_quote;
+    }
+  } catch (e) {
+    console.error("adc pricing failed", e);
+  }
   const h = await headers();
   const from = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
   const sent = await sendEmail({

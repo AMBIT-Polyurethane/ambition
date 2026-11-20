@@ -37,7 +37,7 @@ export default async function AdcCartPage() {
   return (
     <div className="adc-wrap adc-pad adc-stack">
       <h1 className="adc-h1">{t.yourCart}</h1>
-      <AdcCheckout cat={cat} me={me} branches={(branches ?? []) as { id: string; name: string }[]} foamNote={sale?.foam_off_per_lb ? t.foamOff(sale.name, `$${Number(sale.foam_off_per_lb).toFixed(2)}`) : null} />
+      <AdcCheckout cat={cat} me={me} branches={(branches ?? []) as { id: string; name: string }[]} foamNote={sale?.foam_off_per_lb ? t.foamOff(sale.name, `$${Number(sale.foam_off_per_lb).toFixed(2)}`) : null} saleName={sale?.name ?? null} />
     </div>
   );
 }

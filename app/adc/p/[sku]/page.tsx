@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, Layers, Truck } from "lucide-react";
+import { BadgeCheck, FileText, Layers, Truck } from "lucide-react";
 import { adcCatalog, adcProductExtras, seasonOf } from "@/lib/adc";
 import { AdcGallery } from "@/components/adc/gallery";
 import { diagramFor, diagramSkus } from "@/lib/diagrams";
@@ -65,6 +65,9 @@ export default async function AdcProduct({ params }: { params: Promise<{ sku: st
           {it.is_set ? <span className="adc-set big">{t.setBadge}</span> : null}
           <AdcPrice list={it.list_price} sale={it.sale_price} quote={it.quote} big />
           {note ? <span className="adc-promo big">{note}</span> : null}
+          {note && sale ? (
+            <div className="adc-foam-note"><BadgeCheck size={18} aria-hidden="true" /><span><b>{t.foamBannerTitle}.</b> {t.foamBanner(sale.name)}</span></div>
+          ) : null}
           {it.quote ? <p className="adc-muted" style={{ margin: 0 }}>{t.perCustomer}</p> : null}
           {it.is_set ? <p className="adc-muted" style={{ margin: 0 }}>{t.setNote(unitName(it.unit, lang).toLowerCase())}</p> : null}
           <AdcBuyBox id={it.id} sku={it.sku} name={it.name} image={it.image} quote={it.quote} />

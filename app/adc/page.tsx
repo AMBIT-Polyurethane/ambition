@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Layers, Search, Truck } from "lucide-react";
+import { BadgeCheck, Layers, Search, Truck } from "lucide-react";
 import { DIAGRAMS } from "@/lib/diagrams";
 import { adcCatalog, adcCategories } from "@/lib/adc";
 import { AdcGrid, AdcImg } from "@/components/adc/grid";
@@ -44,6 +44,12 @@ export default async function AdcHome({ searchParams }: { searchParams: Promise<
               <Link key={c.id} href={`/adc?c=${encodeURIComponent(c.id)}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={cat?.id === c.id ? "on" : undefined}>{catName(c.name, lang)}</Link>
             ))}
           </div>
+        ) : null}
+        {cat?.id === "ambit-foam" && sale?.foam_off_per_lb ? (
+          <section className="adc-diag-banner adc-foam-banner" aria-label={t.foamBannerTitle}>
+            <span className="adc-diag-ic" aria-hidden="true"><BadgeCheck size={26} /></span>
+            <span className="adc-diag-b"><b>{t.foamBannerTitle}</b><span>{t.foamBanner(sale.name)}</span></span>
+          </section>
         ) : null}
         {cat && /gun/i.test(`${cat.id} ${cat.name}`) && /part/i.test(`${cat.id} ${cat.name}`) && DIAGRAMS.length ? (
           <section className="adc-diag-banner" aria-label={t.diagramBannerTitle}>

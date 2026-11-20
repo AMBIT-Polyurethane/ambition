@@ -5,7 +5,7 @@ import { SeasonChip } from "@/components/adc/season";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { CircleAlert, Gift, Info, LoaderCircle, Minus, Plus, ShoppingCart, Trash2, Truck, UserRound } from "lucide-react";
+import { BadgeCheck, CircleAlert, Gift, Info, LoaderCircle, Minus, Plus, ShoppingCart, Trash2, Truck, UserRound } from "lucide-react";
 import { useAdcCart } from "@/components/adc/cart";
 import { adcShipEstimate, placeAdcOrder, type ShipQuote } from "@/app/adc/actions";
 import { useAdc } from "@/components/adc/lang";
@@ -40,7 +40,7 @@ export type AdcMe = {
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** The cart and checkout on one page. No payment: the order goes to AMBIT, who confirm price, shipping and payment. */
-export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<string, CatInfo>; branches: { id: string; name: string }[]; foamNote: string | null; me: AdcMe }) {
+export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { cat: Record<string, CatInfo>; branches: { id: string; name: string }[]; foamNote: string | null; me: AdcMe; saleName?: string | null }) {
   const { lines, setQty, clear, ready } = useAdcCart();
   const { t, lang } = useAdc();
   const router = useRouter();
@@ -247,7 +247,10 @@ export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<strin
             <button type="button" role="radio" aria-checked={kind === "new"} className={kind === "new" ? "on" : undefined} onClick={() => setKind("new")}>{t.custNo}</button>
           </div>
           {kind === "account" ? (
-            <p className="adc-muted small" style={{ margin: 0 }}>{t.acctCheckHint}</p>
+            <>
+              <p className="adc-muted small" style={{ margin: 0 }}>{t.acctCheckHint}</p>
+              {saleName ? <p className="adc-foam-note small" style={{ margin: 0 }}><BadgeCheck size={16} aria-hidden="true" /><span>{t.acctBfNote(saleName)}</span></p> : null}
+            </>
           ) : kind === "new" ? (
             <p className="adc-note-b small" style={{ margin: 0 }}><Info size={15} aria-hidden="true" /> {t.newCustNote}</p>
           ) : null}

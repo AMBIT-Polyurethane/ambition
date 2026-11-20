@@ -36,7 +36,7 @@ function Plan({ o, best }: { o: PlanOption; best: boolean }) {
           <div className="small muted">{o.shipments.length} {o.shipments.length === 1 ? "shipment" : "shipments"}{o.days ? ` · ${o.days}` : ""}</div>
           {o.transfers.length ? (
             <div className="bs-transfers">
-              <b className="small">Transfers first</b>
+              <b className="small">Transfers first{o.transferCost ? ` · about ${money(o.transferCost)} of freight to us` : ""}</b>
               {o.transfers.map((t, i) => (
                 <span key={i} className="small"><Warehouse size={14} aria-hidden="true" /> {t.qty} x {t.sku} · {t.fromName} <ArrowRight size={13} aria-hidden="true" /> {t.toName}</span>
               ))}

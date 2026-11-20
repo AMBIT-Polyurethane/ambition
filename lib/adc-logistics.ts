@@ -31,6 +31,8 @@ export type PlanOption = {
   why?: string;
   shipments: Shipment[];
   transfers: Transfer[];
+  /** What moving stock between locations first would cost us (not the customer): our estimate, high side. */
+  transferCost?: number;
   total: number | null;
   days: string;
 };
@@ -116,11 +118,14 @@ function parcelCost(lb: number, mi: number, site: Site) {
   if (site.site === "home") c += 6.5 * boxes;
   return { cost: c * 1.1, days: `${days} business days` };
 }
-/** LTL freight: pallets, per hundred pounds by distance, minimum charge, fuel 28%, liftgate and home delivery fees, 10% cushion. */
+/** LTL freight: pallets, per hundred pounds by distance with weight breaks, minimum charge, fuel 28%, liftgate and home fees, 10% cushion. */
 function ltlCost(lb: number, mi: number, site: Site) {
   const pallets = Math.max(1, Math.ceil(lb / 1500));
   const cwt = Math.max(lb + pallets * 50, 200) / 100;
-  let c = Math.max(190, cwt * (9 + 0.032 * mi)) * 1.28;
+  // LTL weight breaks: the more it weighs, the less each hundred pounds costs.
+  const lbs = cwt * 100;
+  const brk = lbs < 500 ? 1 : lbs < 2000 ? 0.85 : lbs < 5000 ? 0.7 : lbs < 10000 ? 0.6 : 0.5;
+  let c = Math.max(190, cwt * (9 + 0.032 * mi) * brk) * 1.28;
   if (site.unload === "liftgate") c += 75;
   if (site.site === "home") c += 85;
   const d = Math.ceil(mi / 450);
@@ -238,8 +243,11 @@ export async function planOrder(
     const truckLines = list.filter((x) => x.k.mode === "truckload");
     if (input.delivery === "truckload" && truckLines.length) {
       const fill = truckLines.reduce((s, x) => s + (x.k.p.truck_qty ? x.qty / x.k.p.truck_qty : 0), 0);
-      const t = truckCost(mi, Math.ceil(Math.max(1, fill) - 0.05));
-      return { from: from.id, fromName: from.name, kind: "truck", lines: shipLines, weight: lb, miles: mi, cost: r2(t.cost), days: t.days };
+      // At least half a truck goes as a truck; a smaller part of a split load goes as LTL freight (or a truck if cheaper).
+      if (fill >= 0.5 || truckLines.some((x) => !x.k.p.truck_qty)) {
+        const t = truckCost(mi, Math.ceil(Math.max(1, fill) - 0.05));
+        return { from: from.id, fromName: from.name, kind: "truck", lines: shipLines, weight: lb, miles: mi, cost: r2(t.cost), days: t.days };
+      }
     }
     const freight = list.some((x) => x.k.mode === "freight" || x.k.mode === "truckload") || lb > 150;
     const c = freight ? ltlCost(lb, mi, input.site) : parcelCost(lb, mi, input.site);
@@ -386,7 +394,21 @@ export async function planOrder(
       }
       if (possible && transfers.length) {
         const s = [ship(hub, stocked.map((k) => ({ k, qty: inStock(k) })))];
-        options.push({ key: "gather", title: `Move stock to ${hub.name} first, then ship once`, ok: true, shipments: [...s, ...v], transfers, total: sum([...s, ...v]), days: slowest([...s, ...v], "4-7 days for the transfer") });
+        // The transfers cost us real freight (no regular route between locations): price each leg like a shipment.
+        let transferCost = 0;
+        const legs = new Map<string, number>();
+        for (const t of transfers) {
+          const k = stocked.find((x) => x.p.sku === t.sku);
+          legs.set(t.from, (legs.get(t.from) ?? 0) + (k ? k.each * t.qty : 0));
+        }
+        for (const [from, lb] of legs) {
+          const b = ctx.branches.find((x) => x.id === from)!;
+          const mi = roadMiles(b, hub);
+          const big = lb > 8000 || stocked.some((k) => k.mode === "truckload" && transfers.some((t) => t.sku === k.p.sku && t.from === from));
+          const c = big ? truckCost(mi, Math.ceil(lb / 42000)) : lb > 150 ? ltlCost(lb, mi, { site: "business", unload: "dock" }) : parcelCost(lb, mi, { site: "business", unload: "dock" });
+          transferCost += c.cost + 60;
+        }
+        options.push({ key: "gather", title: `Move stock to ${hub.name} first, then ship once`, ok: true, shipments: [...s, ...v], transfers, transferCost: r2(transferCost), total: sum([...s, ...v]), days: slowest([...s, ...v], "4-7 days for the transfer") });
       }
     }
     if (!stocked.length && v.length) {
@@ -394,10 +416,10 @@ export async function planOrder(
     }
   }
 
-  // Best: the lowest cost, counting the hassle too. Transfers between locations only happen when needed (no regular
-  // route), so one is worth about $150 of trouble and days; each extra shipment about $15.
+  // Best: the lowest total cost to us. A transfer between locations (only when needed, no regular route) counts what
+  // that freight would cost plus about $60 of handling; each extra shipment about $15.
   const ok = options.filter((o) => o.ok);
-  const score = (o: PlanOption) => knownSum(o.shipments) + (o.transfers.length ? 150 : 0) + Math.max(0, o.shipments.length - 1) * 15;
+  const score = (o: PlanOption) => knownSum(o.shipments) + (o.transferCost ?? (o.transfers.length ? 150 : 0)) + Math.max(0, o.shipments.length - 1) * 15;
   ok.sort((a, b) => score(a) - score(b));
   const best = ok[0] ?? null;
   const partial = unknown.length > 0 || Boolean(best && best.shipments.some((s) => s.cost === null));

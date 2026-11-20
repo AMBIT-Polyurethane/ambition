@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Eye, EyeOff, Minus, Plus, Search, ShoppingCart } from "lucide-react";
+import { Check, Eye, EyeOff, Maximize2, Minus, Plus, Search, ShoppingCart, X } from "lucide-react";
 import { PART_GROUPS, type Diagram, type DiagramPart, type PartGroup } from "@/lib/diagrams";
 import { groupName } from "@/lib/adc-i18n";
 
@@ -13,13 +13,16 @@ const pk = (p: DiagramPart) => `${p.sku}#${p.n}`;
 const WORDS = {
   en: { quote: "Request a quote", confirm: "Price to confirm", ask: "Ask AMBIT", every: "Every part", hide: "Hide part colors", show: "Show all parts", part: "Part", added: "Added", add: "Add to cart",
     addedCart: "Added to your cart", click: "Click to add to cart", notYet: "Not in our catalog yet. Ask AMBIT.", find: "Part name, number or #", findLabel: "Find a part", none: "No part matches.",
-    src: (s: string) => `Drawing: ${s}. Point at any part to see it light up; click to add it to your cart.`, area: "Show one area of the gun", zoom: "Zoom the drawing", zin: "Zoom in", zout: "Zoom out" },
+    src: (s: string) => `Drawing: ${s}. Point at any part to see it light up; click to add it to your cart.`, area: "Show one area of the gun", zoom: "Zoom the drawing", zin: "Zoom in", zout: "Zoom out", full: "Full screen", close: "Close full screen", turn: "Tap a part to see it. Tap again or Add to put it in the cart.",
+    choices: (n: number) => `${n} choices`, pickIn: (n: number) => `Comes in ${n} choices. Pick one in the list.`, every2: "Show every part" },
   es: { quote: "Pida una cotización", confirm: "Precio por confirmar", ask: "Pregunte a AMBIT", every: "Todas las piezas", hide: "Ocultar colores", show: "Mostrar todas las piezas", part: "Parte", added: "Agregado", add: "Agregar al carrito",
     addedCart: "Agregado al carrito", click: "Haga clic para agregarlo al carrito", notYet: "Aún no está en el catálogo. Pregunte a AMBIT.", find: "Nombre, número o # de la pieza", findLabel: "Buscar una pieza", none: "Ninguna pieza coincide.",
-    src: (s: string) => `Dibujo: ${s}. Señale cualquier pieza para resaltarla; haga clic para agregarla al carrito.`, area: "Mostrar un área de la pistola", zoom: "Acercar el dibujo", zin: "Acercar", zout: "Alejar" },
+    src: (s: string) => `Dibujo: ${s}. Señale cualquier pieza para resaltarla; haga clic para agregarla al carrito.`, area: "Mostrar un área de la pistola", zoom: "Acercar el dibujo", zin: "Acercar", zout: "Alejar", full: "Pantalla completa", close: "Cerrar pantalla completa", turn: "Toque una pieza para verla. Toque otra vez o Agregar para ponerla en el carrito.",
+    choices: (n: number) => `${n} opciones`, pickIn: (n: number) => `Viene en ${n} opciones. Elija una en la lista.`, every2: "Ver todas las piezas" },
   zh: { quote: "询价", confirm: "价格待确认", ask: "咨询 AMBIT", every: "所有零件", hide: "隐藏零件颜色", show: "显示所有零件", part: "零件", added: "已加入", add: "加入购物车",
     addedCart: "已加入购物车", click: "点击加入购物车", notYet: "尚未列入我们的目录。请咨询 AMBIT。", find: "零件名称、编号或序号", findLabel: "查找零件", none: "没有匹配的零件。",
-    src: (s: string) => `图纸：${s}。指向任意零件即可高亮显示；点击即可加入购物车。`, area: "显示喷枪的某个区域", zoom: "缩放图纸", zin: "放大", zout: "缩小" },
+    src: (s: string) => `图纸：${s}。指向任意零件即可高亮显示；点击即可加入购物车。`, area: "显示喷枪的某个区域", zoom: "缩放图纸", zin: "放大", zout: "缩小", full: "全屏", close: "退出全屏", turn: "点击零件查看。再点一次或点击加入即可放入购物车。",
+    choices: (n: number) => `${n} 种选择`, pickIn: (n: number) => `共有 ${n} 种选择，请在列表中选择一种。`, every2: "显示所有零件" },
 };
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -66,8 +69,75 @@ export function PartsDiagram({
   const [zoom, setZoom] = useState(1);
   const [q, setQ] = useState("");
   const [added, setAdded] = useState<Record<string, number>>({});
+  /** An item number that comes in several part numbers (sizes, pack counts): the list shows just those. */
+  const [pick, setPick] = useState<string | null>(null);
+  const side = useRef<HTMLDivElement>(null);
   const touch = useRef(false);
+  const root = useRef<HTMLDivElement>(null);
+  const fsBox = useRef<HTMLDivElement>(null);
+  const realFs = useRef(false);
+  const [fs, setFs] = useState(false);
+  const [vp, setVp] = useState({ w: 0, h: 0 });
   const focus = hot ?? pinned;
+
+  // A part's popup goes away by itself after 5 seconds, or when you tap or click anywhere that isn't a part.
+  useEffect(() => {
+    if (!pinned) return;
+    const t = setTimeout(() => {
+      setPinned(null);
+      if (touch.current) setHot(null);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [pinned]);
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      const el = e.target as Element | null;
+      if (el?.closest?.(".pd-part, .pd-tip, .pd-list, .pd-pick, .pd-fs-bar")) return;
+      setPinned(null);
+      setHot(null);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, []);
+
+  // Full screen: the drawing fills the screen, turned sideways on a phone held upright. Phones that allow it also go
+  // truly full screen and lock to landscape; the rest get the same view inside the page.
+  useEffect(() => {
+    if (!fs) return;
+    const size = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    size();
+    window.addEventListener("resize", size);
+    window.addEventListener("orientationchange", size);
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
+    const box = fsBox.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
+    if (box?.requestFullscreen) {
+      box.requestFullscreen()
+        .then(() => {
+          realFs.current = true;
+          const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+          return o?.lock?.("landscape").catch(() => undefined);
+        })
+        .catch(() => undefined);
+    }
+    const left = () => {
+      if (realFs.current && !document.fullscreenElement) setFs(false);
+    };
+    document.addEventListener("fullscreenchange", left);
+    return () => {
+      window.removeEventListener("resize", size);
+      window.removeEventListener("orientationchange", size);
+      document.removeEventListener("fullscreenchange", left);
+      html.style.overflow = prev;
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
+      realFs.current = false;
+      const o = screen.orientation as ScreenOrientation & { unlock?: () => void };
+      try {
+        o?.unlock?.();
+      } catch {}
+    };
+  }, [fs]);
 
   // A soft flash of every part when the drawing first shows, so people see the parts are live.
   useEffect(() => {
@@ -80,7 +150,10 @@ export function PartsDiagram({
     return diagram.parts.filter((p) => (seen.has(p.sku) ? false : (seen.add(p.sku), true)));
   }, [diagram]);
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const listed = rows.filter((p) => (!only || p.group === only) && words.every((w) => `${p.n} ${p.sku} ${p.name}`.toLowerCase().includes(w)));
+  const listed = pick
+    ? rows.filter((p) => p.n === pick)
+    : rows.filter((p) => (!only || p.group === only) && words.every((w) => `${p.n} ${p.sku} ${p.name}`.toLowerCase().includes(w)));
+  const options = (p: DiagramPart) => (p.n ? rows.filter((r) => r.n === p.n).length : 1);
   const groups = (Object.keys(PART_GROUPS) as PartGroup[]).filter((g) => rows.some((p) => p.group === g));
 
   const priceText = (sku: string) => {
@@ -98,6 +171,16 @@ export function PartsDiagram({
   };
   // Mouse: a click adds it. Touch: the first tap shows it, a second tap (or Add) adds it.
   const choose = (p: DiagramPart, k: number) => {
+    // One number, several part numbers: show the choices in the list instead of guessing which one.
+    if (options(p) > 1) {
+      setPinned({ key: pk(p), k });
+      setPick(p.n);
+      setQ("");
+      setOnly(null);
+      if (fs) setFs(false);
+      setTimeout(() => side.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), fs ? 120 : 0);
+      return;
+    }
     if (touch.current && (pinned?.key !== pk(p))) {
       setPinned({ key: pk(p), k });
       return;
@@ -110,11 +193,17 @@ export function PartsDiagram({
   const tipPart = focus ? diagram.parts.find((p) => pk(p) === focus.key) : null;
   const tipBox = (() => {
     if (!tipPart || !focus) return null;
-    const d = tipPart.shapes?.[focus.k] ?? tipPart.shapes?.[0];
+    // Pointing at an item number: the tip goes by the part itself, so it never hides the part.
+    const t = focus.k >= 200 && !tipPart.shapes?.length && !tipPart.at?.length ? tipPart.tag?.[focus.k - 200] : null;
+    if (t) {
+      const r = diagram.tagR ?? 8;
+      return [t[0] - r, t[1] - r, t[0] + r, t[1] + r] as [number, number, number, number];
+    }
+    const d = (focus.k < 200 ? tipPart.shapes?.[focus.k] : null) ?? tipPart.shapes?.[0];
     if (d) return boxOf(d);
     const b = tipPart.box?.[0];
     if (b) return [b[0], b[1], b[0] + b[2], b[1] + b[3]] as [number, number, number, number];
-    const a = tipPart.at?.[focus.k] ?? tipPart.at?.[0];
+    const a = (focus.k < 200 ? tipPart.at?.[focus.k] : null) ?? tipPart.at?.[0];
     return a ? ([a[0] - 10, a[1] - 10, a[0] + 10, a[1] + 10] as [number, number, number, number]) : null;
   })();
   const below = tipBox ? tipBox[1] / diagram.h < 0.26 : false;
@@ -140,29 +229,8 @@ export function PartsDiagram({
     },
   });
 
-  return (
-    <div className={`pd ${theme}`}>
-      <div className="pd-legend" role="group" aria-label={w.area}>
-        <button type="button" className={!only ? "on" : undefined} onClick={() => setOnly(null)}>{w.every}</button>
-        {groups.map((g) => (
-          <button key={g} type="button" className={only === g ? "on" : undefined} onClick={() => setOnly(only === g ? null : g)}>
-            <span className="pd-sw" style={{ background: PART_GROUPS[g].color }} aria-hidden="true" />
-            {gname(g)}
-          </button>
-        ))}
-        <button type="button" className={showAll ? "on" : undefined} onClick={() => setShowAll((v) => !v)} aria-pressed={showAll}>
-          {showAll ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />} {showAll ? w.hide : w.show}
-        </button>
-        <span className="pd-zoom" role="group" aria-label={w.zoom}>
-          <button type="button" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label={w.zout}><Minus size={16} /></button>
-          <span>{Math.round(zoom * 100)}%</span>
-          <button type="button" onClick={() => setZoom((z) => Math.min(2.5, z + 0.5))} disabled={zoom >= 2.5} aria-label={w.zin}><Plus size={16} /></button>
-        </span>
-      </div>
-
-      <div className="pd-body">
-        <div className="pd-stage" onMouseLeave={() => setHot(null)}>
-          <div className={`pd-canvas${hint ? " hint" : ""}${showAll ? " all" : ""}${only ? " group" : ""}`} style={{ width: `${zoom * 100}%` }}>
+  const canvas = (style: React.CSSProperties) => (
+    <div className={`pd-canvas${hint ? " hint" : ""}${showAll ? " all" : ""}${only ? " group" : ""}`} style={style}>
             <img src={diagram.image} alt={diagram.source} width={diagram.w} height={diagram.h} draggable={false} />
             <svg className="pd-svg" viewBox={`0 0 ${diagram.w} ${diagram.h}`} preserveAspectRatio="none" aria-label="Parts on the drawing">
               {diagram.parts.flatMap((p, i) => {
@@ -178,7 +246,7 @@ export function PartsDiagram({
                 // No outline traced: an invisible spot where it's drawn.
                 if (!p.shapes?.length) {
                   (p.at ?? []).forEach(([x, y], k) => {
-                    els.push(<circle key={`c${i}-${k}`} cx={x} cy={y} r={11} className={`pd-part spot${state}`} style={style} {...partProps(p, k, label)} />);
+                    els.push(<circle key={`c${i}-${k}`} cx={x} cy={y} r={diagram.spotR ?? 11} className={`pd-part spot${state}`} style={style} {...partProps(p, k, label)} />);
                   });
                 }
                 // Rows in the drawing's own tables.
@@ -187,6 +255,20 @@ export function PartsDiagram({
                 });
                 return els;
               })}
+              {/* The item numbers, where the drawing's labels were: they light up with their part. */}
+              {diagram.parts.flatMap((p, i) =>
+                (p.tag ?? []).map(([x, y], k) => {
+                  const r = diagram.tagR ?? 8;
+                  const state = `${focus?.key === pk(p) ? " on" : ""}${only === p.group ? " tint" : ""}`;
+                  const label = `Item ${p.n}, ${p.name}, part ${p.sku}`;
+                  return (
+                    <g key={`t${i}-${k}`} className={`pd-part pd-tag${state}`} transform={`translate(${x} ${y})`} style={{ ["--c" as string]: PART_GROUPS[p.group].color } as React.CSSProperties} {...partProps(p, 200 + k, label)}>
+                      <circle r={r} />
+                      <text dy="0.36em" fontSize={r * (p.n.length > 1 ? 1.08 : 1.25)}>{p.n}</text>
+                    </g>
+                  );
+                }),
+              )}
             </svg>
             {tipPart && tipBox ? (
               <div
@@ -199,12 +281,14 @@ export function PartsDiagram({
               >
                 <span className="pd-tip-h">
                   <span className="pd-sw" style={{ background: PART_GROUPS[tipPart.group].color }} aria-hidden="true" />
-                  {tipPart.n ? `#${tipPart.n} · ` : ""}{w.part} {tipPart.sku}
+                  {options(tipPart) > 1 ? `#${tipPart.n}` : <>{tipPart.n ? `#${tipPart.n} · ` : ""}{w.part} {tipPart.sku}</>}
                 </span>
-                <b>{tipPart.name}</b>
+                <b>{options(tipPart) > 1 ? tipPart.name.split(/[,(]/)[0].trim() : tipPart.name}</b>
                 {tipPart.note ? <span className="pd-tip-note">{lang === "es" && tipPart.noteEs ? tipPart.noteEs : tipPart.note}</span> : null}
-                <span className="pd-tip-p">{priceText(tipPart.sku)}</span>
-                {pinned && touch.current && pinned.key === pk(tipPart) && addable(tipPart.sku) ? (
+                <span className="pd-tip-p">{options(tipPart) > 1 ? w.choices(options(tipPart)) : priceText(tipPart.sku)}</span>
+                {options(tipPart) > 1 ? (
+                  <span className="pd-tip-a">{w.pickIn(options(tipPart))}</span>
+                ) : pinned && touch.current && pinned.key === pk(tipPart) && addable(tipPart.sku) ? (
                   <button type="button" className="pd-tip-add" onClick={() => add(tipPart)}>
                     {added[tipPart.sku] ? <><Check size={15} strokeWidth={3} /> {w.added}</> : <><ShoppingCart size={15} /> {w.add}</>}
                   </button>
@@ -213,14 +297,56 @@ export function PartsDiagram({
                 )}
               </div>
             ) : null}
-          </div>
+    </div>
+  );
+
+  // Full screen frame: turned sideways when the screen is taller than wide, the drawing as big as it fits.
+  const turn = fs && vp.h > vp.w;
+  const frameW = turn ? vp.h : vp.w;
+  const frameH = turn ? vp.w : vp.h;
+  const fit = Math.max(0.1, Math.min((frameW - 24) / diagram.w, (frameH - 52 - 16) / diagram.h));
+
+  return (
+    <div className={`pd ${theme}`} ref={root}>
+      <div className="pd-legend" role="group" aria-label={w.area}>
+        <button type="button" className={!only && !pick ? "on" : undefined} onClick={() => { setOnly(null); setPick(null); }}>{w.every}</button>
+        {groups.map((g) => (
+          <button key={g} type="button" className={only === g ? "on" : undefined} onClick={() => { setPick(null); setOnly(only === g ? null : g); }}>
+            <span className="pd-sw" style={{ background: PART_GROUPS[g].color }} aria-hidden="true" />
+            {gname(g)}
+          </button>
+        ))}
+        <button type="button" className={showAll ? "on" : undefined} onClick={() => setShowAll((v) => !v)} aria-pressed={showAll}>
+          {showAll ? <EyeOff size={15} aria-hidden="true" /> : <Eye size={15} aria-hidden="true" />} {showAll ? w.hide : w.show}
+        </button>
+        <button type="button" onClick={() => setFs(true)} aria-label={w.full}>
+          <Maximize2 size={15} aria-hidden="true" /> {w.full}
+        </button>
+        <span className="pd-zoom" role="group" aria-label={w.zoom}>
+          <button type="button" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label={w.zout}><Minus size={16} /></button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button type="button" onClick={() => setZoom((z) => Math.min(2.5, z + 0.5))} disabled={zoom >= 2.5} aria-label={w.zin}><Plus size={16} /></button>
+        </span>
+      </div>
+
+      <div className="pd-body">
+        <div className="pd-stage" onMouseLeave={() => setHot(null)}>
+          {fs ? null : canvas({ width: `${zoom * 100}%` })}
         </div>
 
-        <div className="pd-side">
-          <label className="pd-find">
-            <Search size={16} aria-hidden="true" />
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={w.find} aria-label={w.findLabel} />
-          </label>
+        <div className="pd-side" ref={side}>
+          {pick ? (
+            <button type="button" className="pd-pick" onClick={() => setPick(null)}>
+              <span className="pd-n" style={{ background: PART_GROUPS[listed[0]?.group ?? "body"].color }}>{pick}</span>
+              <span>{w.choices(listed.length)}</span>
+              <span className="pd-pick-x"><X size={14} aria-hidden="true" /> {w.every2}</span>
+            </button>
+          ) : (
+            <label className="pd-find">
+              <Search size={16} aria-hidden="true" />
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={w.find} aria-label={w.findLabel} />
+            </label>
+          )}
           <ul className="pd-list">
             {listed.map((p) => (
               <li
@@ -253,6 +379,22 @@ export function PartsDiagram({
         </div>
       </div>
       <p className="pd-src">{w.src(diagram.source)}</p>
+      {fs ? (
+        <div className="pd-fs" ref={fsBox} role="dialog" aria-modal="true" aria-label={diagram.title}>
+          <div className={`pd-fs-in${turn ? " turn" : ""}`} style={{ width: frameW, height: frameH }}>
+            <div className="pd-fs-bar">
+              <b>{diagram.title}</b>
+              <span>{w.turn}</span>
+              <button type="button" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label={w.zout}><Minus size={18} /></button>
+              <button type="button" onClick={() => setZoom((z) => Math.min(3, z + 0.5))} disabled={zoom >= 3} aria-label={w.zin}><Plus size={18} /></button>
+              <button type="button" onClick={() => setFs(false)} aria-label={w.close}><X size={20} /></button>
+            </div>
+            <div className="pd-fs-stage" onMouseLeave={() => setHot(null)}>
+              {canvas({ width: diagram.w * fit * zoom, minWidth: 0 })}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

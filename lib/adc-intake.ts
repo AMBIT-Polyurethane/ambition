@@ -182,3 +182,55 @@ export async function intakeAdcOrder(o: IntakeIn): Promise<Intake> {
 
   return { match, company: co ? { id: co.id, name: co.name, account_no: co.account_no } : null, red, alerts, strategy, estimate };
 }
+
+// ---------------------------------------------------------------- prices by who the customer is
+
+export type PricedLine = {
+  product_id?: string | null; sku: string; name: string; unit: string | null; qty: number; price: number | null;
+  list_price?: number | null; on_sale?: boolean; promo?: string | null; set?: boolean; ship?: string;
+};
+
+/**
+ * The store shows sale items only 5% under the normal price. A current AMBIT customer (matched to an account) gets
+ * the full sale price on everything but spray foam, and the spray foam sale (per lb off) is theirs only: anyone else's
+ * foam lines lose that note. Saves the new lines and subtotal on the web order; null when nothing changed.
+ */
+export async function priceForCustomer(o: { id: number; lines: PricedLine[]; ambitCustomer: boolean }): Promise<{ lines: PricedLine[]; subtotal: number; has_quote: boolean } | null> {
+  if (!serviceReady()) return null;
+  const db = serviceClient();
+  const ids = [...new Set(o.lines.map((l) => l.product_id).filter((x): x is string => Boolean(x)))];
+  if (!ids.length) return null;
+  const [{ data: saleRows }, { data: prods }] = await Promise.all([db.rpc("adc_sale"), db.from("products").select("id, category_id").in("id", ids)]);
+  const sale = ((saleRows ?? []) as { slug: string; name: string }[])[0] ?? null;
+  const foam = new Set(((prods ?? []) as { id: string; category_id: string | null }[]).filter((p) => p.category_id === "ambit-foam").map((p) => p.id));
+  const full = new Map<string, number>();
+  if (sale && o.ambitCustomer) {
+    const { data: s } = await db.from("web_sales").select("id").eq("slug", sale.slug).maybeSingle();
+    if (s) {
+      const { data: items } = await db.from("web_sale_items").select("product_id, price").eq("sale_id", (s as { id: string }).id).in("product_id", ids).not("price", "is", null);
+      for (const i of (items ?? []) as { product_id: string; price: number }[]) full.set(i.product_id, Number(i.price));
+    }
+  }
+  let changed = false;
+  const lines = o.lines.map((l) => {
+    if (!l.product_id) return l;
+    if (foam.has(l.product_id)) {
+      if (!l.promo) return l;
+      changed = true;
+      return o.ambitCustomer ? { ...l, promo: `AMBIT customer ${l.promo}` } : { ...l, promo: null };
+    }
+    const f = full.get(l.product_id);
+    if (f === undefined || (l.price !== null && f >= l.price)) return l;
+    changed = true;
+    return { ...l, price: f, on_sale: true, promo: `AMBIT customer ${sale?.name ?? "sale"} price` };
+  });
+  if (!changed) return null;
+  const subtotal = Math.round(lines.reduce((t, l) => t + (l.price ?? 0) * l.qty, 0) * 100) / 100;
+  const has_quote = lines.some((l) => l.price === null);
+  const { error } = await db.from("adc_orders").update({ items: lines, subtotal, has_quote }).eq("id", o.id);
+  if (error) {
+    console.error("adc pricing: saving the customer prices failed", error.message);
+    return null;
+  }
+  return { lines, subtotal, has_quote };
+}
