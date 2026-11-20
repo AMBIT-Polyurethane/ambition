@@ -54,15 +54,23 @@ export default async function AdcProduct({ params }: { params: Promise<{ sku: st
         <div className="adc-prod-b">
           <span className="adc-sku">{t.part} {it.sku}{it.category ? ` · ${catName(it.category, lang).toUpperCase()}` : ""}</span>
           <h1 className="adc-h1">{it.name}</h1>
+          {it.is_set ? <span className="adc-set big">{t.setBadge}</span> : null}
           <AdcPrice list={it.list_price} sale={it.sale_price} quote={it.quote} big />
           {note ? <span className="adc-promo big">{note}</span> : null}
           {it.quote ? <p className="adc-muted" style={{ margin: 0 }}>{t.perCustomer}</p> : null}
+          {it.is_set ? <p className="adc-muted" style={{ margin: 0 }}>{t.setNote(unitName(it.unit, lang).toLowerCase())}</p> : null}
           <AdcBuyBox id={it.id} sku={it.sku} name={it.name} image={it.image} quote={it.quote} />
-          <div className="adc-ship"><Truck size={22} aria-hidden="true" /><span><b>{t.shipsTitle}</b><span>{t.shipsSub}</span></span></div>
+          <div className={`adc-ship ${it.ship}`}>
+            <Truck size={22} aria-hidden="true" />
+            <span>
+              <b>{it.ship === "pickup" ? t.shipPickup : it.ship === "truckload" ? t.shipTruck : it.ship === "freight" ? t.shipFreight : t.shipParcel}</b>
+              <span>{it.ship === "truckload" && it.truck_qty ? t.truckHolds(`${it.truck_qty.toLocaleString("en-US")} ${unitName(it.unit, lang).toLowerCase()}`) : t.shipDisclaimer}</span>
+            </span>
+          </div>
           <dl className="adc-facts">
             <dt>{t.partNo}</dt><dd>{it.sku}</dd>
             {it.category ? <><dt>{t.category}</dt><dd>{catName(it.category, lang)}</dd></> : null}
-            <dt>{t.soldAs}</dt><dd>{unitName(it.unit, lang)}</dd>
+            <dt>{t.soldAs}</dt><dd>{it.is_set ? t.setBadge : unitName(it.unit, lang)}</dd>
             {it.description ? <><dt>{t.details}</dt><dd>{it.description}</dd></> : null}
           </dl>
           {d ? <Link href={`/adc/parts/${d.slug}`} className="adc-ghost dark"><Layers size={18} aria-hidden="true" /> {t.seeEveryPart}</Link> : null}

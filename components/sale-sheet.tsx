@@ -17,7 +17,8 @@ const num = (s: string) => {
 };
 
 /**
- * A spreadsheet for the sale: our cost, today's price and markup, the sale price to type, and the sale markup worked out.
+ * A spreadsheet for the sale: our cost, today's price and markup, then the sale price or the sale markup (type either one;
+ * the other fills itself in).
  * Tick rows to take them off the sale or fill them in one go (a % off today's price, or a markup on cost).
  */
 export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows: SaleRow[]; others: SaleRow[]; costCount: number }) {
@@ -25,6 +26,8 @@ export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows:
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<SaleResult | null>(null);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  // A markup being typed (the sale price follows it); typing a price clears it so the markup is worked out instead.
+  const [mEdits, setMEdits] = useState<Record<string, string>>({});
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [last, setLast] = useState<number | null>(null);
   const [q, setQ] = useState("");
@@ -85,6 +88,7 @@ export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows:
       n++;
     }
     setEdits(next);
+    setMEdits({});
     setMsg({ ok: true, message: `Filled ${n} ${n === 1 ? "price" : "prices"}. Press Save to keep them.` });
   };
   const onCosts = async (file: File | undefined) => {
@@ -234,11 +238,18 @@ export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows:
                         inputMode="decimal"
                         value={bfText(r)}
                         placeholder="-"
-                        onChange={(e) => setEdits({ ...edits, [r.id]: e.target.value })}
+                        onChange={(e) => {
+                          setEdits({ ...edits, [r.id]: e.target.value });
+                          if (r.id in mEdits) {
+                            const next = { ...mEdits };
+                            delete next[r.id];
+                            setMEdits(next);
+                          }
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp") {
                             e.preventDefault();
-                            const el = document.querySelectorAll<HTMLInputElement>(".ss-in input")[i + (e.key === "ArrowUp" ? -1 : 1)];
+                            const el = document.querySelectorAll<HTMLInputElement>(".ss-in:not(.mk) input")[i + (e.key === "ArrowUp" ? -1 : 1)];
                             el?.focus();
                             el?.select();
                           }
@@ -247,7 +258,35 @@ export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows:
                       />
                     </span>
                   </td>
-                  <td className={`n bf${m1 !== null && m1 < 10 ? " low" : ""}`}>{m1 === null ? <span className="faint">-</span> : pct(m1)}</td>
+                  <td className={`n bf${m1 !== null && m1 < 10 ? " low" : ""}`}>
+                    {r.cost === null ? (
+                      <span className="faint">-</span>
+                    ) : (
+                      <span className="ss-in mk">
+                        <input
+                          inputMode="decimal"
+                          value={r.id in mEdits ? mEdits[r.id] : m1 === null ? "" : String(Math.round(m1 * 10) / 10)}
+                          placeholder="-"
+                          onChange={(e) => {
+                            const t = e.target.value;
+                            setMEdits({ ...mEdits, [r.id]: t });
+                            const m = num(t.replace("%", ""));
+                            setEdits({ ...edits, [r.id]: m === null ? "" : (Math.round(r.cost! * (1 + m / 100) * 100) / 100).toFixed(2) });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+                              e.preventDefault();
+                              const el = document.querySelectorAll<HTMLInputElement>(".ss-in.mk input")[i + (e.key === "ArrowUp" ? -1 : 1)];
+                              el?.focus();
+                              el?.select();
+                            }
+                          }}
+                          aria-label={`${settings.name} markup % for ${r.sku}`}
+                        />
+                        <span aria-hidden="true">%</span>
+                      </span>
+                    )}
+                  </td>
                   <td className={`n${b !== null && r.price !== null && b >= r.price ? " warn" : ""}`}>{off === null ? <span className="faint">-</span> : pct(off)}</td>
                 </tr>
               );
@@ -276,12 +315,12 @@ export function SaleSheet({ sale, rows, others, costCount }: { sale: Sale; rows:
 
       <div className={`ss-save${changed.length ? " on" : ""}`}>
         <span>{changed.length ? `${changed.length} unsaved ${changed.length === 1 ? "price" : "prices"}` : `${priced} of ${rows.length} items have a sale price`}</span>
-        {changed.length ? <button type="button" className="b2 quiet sm" onClick={() => setEdits({})}>Undo</button> : null}
+        {changed.length ? <button type="button" className="b2 quiet sm" onClick={() => { setEdits({}); setMEdits({}); }}>Undo</button> : null}
         <button
           type="button"
           className="b2"
           disabled={pending || !changed.length}
-          onClick={() => run(() => saveSalePrices(sale.id, changed.map((r) => ({ product_id: r.id, price: num(edits[r.id]) }))), () => setEdits({}))}
+          onClick={() => run(() => saveSalePrices(sale.id, changed.map((r) => ({ product_id: r.id, price: num(edits[r.id]) }))), () => { setEdits({}); setMEdits({}); })}
         >
           {pending ? "Saving..." : "Save prices"}
         </button>

@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { ADC_CATALOG_TAG } from "@/lib/adc";
 import { requireAdmin } from "@/lib/session";
 
 export type SaleResult = { ok: true; message: string } | { ok: false; message: string };
@@ -9,6 +10,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const done = (message: string): SaleResult => {
   revalidatePath("/admin/sale");
   revalidatePath("/adc", "layout");
+  revalidateTag(ADC_CATALOG_TAG);
   return { ok: true, message };
 };
 

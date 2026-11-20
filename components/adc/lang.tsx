@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { dict, type AdcDict, type Lang } from "@/lib/adc-i18n";
+import { LANGS, dict, type AdcDict, type Lang } from "@/lib/adc-i18n";
 
 const C = createContext<Lang>("en");
 
@@ -15,17 +15,21 @@ export function useAdc(): { lang: Lang; t: AdcDict } {
   return { lang, t: dict(lang) };
 }
 
-/** "Español" / "English" in the header: switches and comes back to the same page. */
+/** EN · ES · 中文 in the header: switches and comes back to the same page. */
 export function AdcLangSwitch() {
-  const { t, lang } = useAdc();
-  const go = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const { lang } = useAdc();
+  const go = (l: Lang) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     const next = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `/adc/lang?l=${lang === "es" ? "en" : "es"}&next=${encodeURIComponent(next)}`;
+    window.location.href = `/adc/lang?l=${l}&next=${encodeURIComponent(next)}`;
   };
   return (
-    <a href={`/adc/lang?l=${lang === "es" ? "en" : "es"}`} onClick={go} className="adc-lang" aria-label={t.langOtherLabel} title={t.langOtherLabel} hrefLang={lang === "es" ? "en" : "es"}>
-      <span aria-hidden="true">{lang === "es" ? "EN" : "ES"}</span> {t.langOther}
-    </a>
+    <span className="adc-langs" role="group" aria-label="Language / Idioma / 语言">
+      {LANGS.map((l) => (
+        <a key={l.id} href={`/adc/lang?l=${l.id}`} onClick={go(l.id)} className={lang === l.id ? "on" : undefined} aria-current={lang === l.id ? "true" : undefined} title={l.name} hrefLang={l.id} lang={l.id}>
+          {l.label}
+        </a>
+      ))}
+    </span>
   );
 }

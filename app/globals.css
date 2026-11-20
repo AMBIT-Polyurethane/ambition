@@ -5419,3 +5419,125 @@ body:has(.adc) { background: #f4f4f2; }
 }
 .ptn .ptn-head .adc-lang > span { background: #fff; color: var(--p-color); }
 .ptn-cust-h > span.ptn-av { flex: none; min-width: 0; width: 56px; flex-direction: row; }
+.ss-in.mk input { width: 56px; }
+/* ---- ADC go-live (0097): accounts, sets, shipping rules, merch, AM-BUCKS ---- */
+.adc .adc-acct { flex: none; height: 46px; padding: 0 14px; border-radius: 23px; background: #1a1a1d; border: 1px solid #2e2e33; color: #f5f5f7; display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 800; }
+.adc .adc-acct:hover { color: #fff; border-color: #4a4a52; }
+.adc .adc-cat-merch { display: inline-flex; align-items: center; gap: 6px; }
+.adc-soon { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: #e33527; color: #fff; font-size: 12px; font-weight: 900; letter-spacing: 0.6px; }
+.adc-soon.sm { padding: 2px 7px; font-size: 10px; letter-spacing: 0.4px; }
+.adc-set { align-self: flex-start; display: inline-flex; padding: 3px 9px; border-radius: 999px; background: #0a0a0b; color: #fff; font-size: 11.5px; font-weight: 800; letter-spacing: 0.3px; }
+.adc-set.big { font-size: 13px; padding: 5px 12px; }
+.adc-ship.pickup, .adc-ship.truckload { border-color: #f1d3a5; background: #fff8ec; }
+.adc-ship.freight { border-color: #d8e3f5; background: #f4f8fe; }
+.adc-shipline { display: flex; justify-content: space-between; align-items: center; font-size: 15px; padding-top: 8px; }
+.adc-shipline span { display: inline-flex; align-items: center; gap: 6px; color: var(--a-ink2); font-weight: 700; }
+.adc-note-b { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 12px; background: #f4f8fe; color: #1e3a6e; font-size: 14px; line-height: 1.45; }
+.adc-note-b svg { flex: none; margin-top: 2px; }
+.adc-note-b.small { font-size: 13px; }
+.adc-thanks .adc-note-b { text-align: left; }
+.adc-me { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #f4f4f2; font-size: 14px; color: var(--a-ink); }
+.adc a.adc-me.link { color: var(--a-ink); border: 1px dashed #d8d8d3; background: #fff; }
+.adc a.adc-me.link:hover { border-color: var(--a-red); }
+.adc-me svg { color: var(--a-red); flex: none; }
+.adc-check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 600; color: var(--a-ink); cursor: pointer; }
+.adc-check input { width: 19px; height: 19px; margin-top: 1px; accent-color: #e33527; flex: none; }
+.adc-truck { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: #fff8ec; border: 1px solid #f1d3a5; font-size: 14px; font-weight: 700; color: #7a4b00; }
+.adc-truck-bar { height: 10px; border-radius: 5px; background: #f3e3c4; overflow: hidden; }
+.adc-truck-bar span { display: block; height: 100%; background: #e08a00; border-radius: 5px; transition: width 0.25s; }
+.adc-ok { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #e9f7ee; color: #14532d; font-size: 14px; font-weight: 700; }
+.adc-linkbtn { align-self: flex-start; background: none; border: 0; padding: 0; font: inherit; font-size: 14px; font-weight: 700; color: var(--a-red); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.adc-acct-box { max-width: 560px; margin: 0 auto; background: var(--a-card); border: 1px solid var(--a-line); border-radius: 20px; padding: 26px; display: flex; flex-direction: column; gap: 16px; }
+.adc-auth { display: flex; flex-direction: column; gap: 16px; }
+.adc-acct-h { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.adc-acct-av { width: 56px; height: 56px; border-radius: 16px; background: #0a0a0b; color: #fff; font-size: 26px; font-weight: 900; display: flex; align-items: center; justify-content: center; flex: none; }
+.adc-acct-t { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px; }
+.adc-bucks { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 18px; background: linear-gradient(135deg, #0a0a0b, #2a1210); color: #fff; }
+.adc-bucks > svg { color: #e33527; flex: none; }
+.adc-bucks-t { display: flex; flex-direction: column; gap: 4px; }
+.adc-bucks-t b { font-size: 22px; font-weight: 900; }
+.adc-bucks .adc-sku { color: #f5a99f; }
+.adc-bucks .adc-muted { color: rgba(255, 255, 255, 0.75); }
+.adc-acct-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.adc-acct-card { background: var(--a-card); border: 1px solid var(--a-line); border-radius: 18px; padding: 18px; }
+.adc-ord { background: var(--a-card); border: 1px solid var(--a-line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.adc-ord-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.adc-ord-h > span:first-child { display: flex; flex-direction: column; gap: 2px; }
+.adc-st { padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 800; background: #ececea; color: var(--a-ink2); }
+.adc-st.new { background: #fff1d6; color: #8a5a00; }
+.adc-st.working { background: #e3eefc; color: #1d4ed8; }
+.adc-st.done { background: #e9f7ee; color: #15803d; }
+.adc-ord-ls { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.adc-ord-ls > span { display: flex; justify-content: space-between; gap: 10px; }
+.adc-ord-f { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid var(--a-line); }
+.adc-ord-f .adc-add { margin: 0; height: 40px; padding: 0 14px; width: auto; display: inline-flex; gap: 6px; align-items: center; }
+.adc-hist { background: var(--a-card); border: 1px solid var(--a-line); border-radius: 14px; padding: 12px 16px; font-size: 14px; }
+.adc-hist summary { cursor: pointer; font-weight: 800; }
+.adc-hist > span { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--a-line); }
+.adc-merch-h { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding: 26px; border-radius: 22px; background: linear-gradient(135deg, #0a0a0b, #2a1210); color: #fff; }
+.adc-merch-h .adc-muted { color: rgba(255, 255, 255, 0.8); }
+.adc-merch-n { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; width: 100%; max-width: 520px; }
+.adc-notify { display: flex; gap: 8px; flex-wrap: wrap; }
+.adc-notify input[type="email"] { flex: 1; min-width: 220px; height: 48px; border-radius: 12px; border: 0; padding: 0 14px; font: inherit; font-size: 16px; }
+.adc-notify .adc-cta { width: auto; }
+.adc-card.merch .adc-add.off { background: #ececea; color: var(--a-ink2); cursor: default; display: flex; align-items: center; justify-content: center; }
+.adc-flag.soon { background: #e33527; color: #fff; }
+.adc-foot-links { display: inline-flex; gap: 16px; flex-wrap: wrap; }
+.adc-policy { max-width: 760px; margin: 0 auto; background: var(--a-card); border: 1px solid var(--a-line); border-radius: 20px; padding: 28px; line-height: 1.6; }
+.adc-policy h2 { font-size: 18px; margin: 22px 0 6px; }
+.adc-policy p { margin: 0; color: var(--a-ink2); }
+@media (max-width: 860px) {
+  .adc-acct-grid { grid-template-columns: minmax(0, 1fr); }
+  .adc .adc-acct span { display: none; }
+  .adc .adc-acct { width: 46px; padding: 0; justify-content: center; }
+}
+.adc-langs { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 46px; padding: 0 5px; border-radius: 23px; background: #1a1a1d; border: 1px solid #2e2e33; }
+.adc .adc-langs a { height: 34px; min-width: 34px; padding: 0 9px; border-radius: 17px; color: #b4b4bc; font-size: 12.5px; font-weight: 900; display: inline-flex; align-items: center; justify-content: center; }
+.adc .adc-langs a:hover { color: #fff; }
+.adc .adc-langs a.on { background: var(--a-red2); color: #fff; }
+.ptn .ptn-head .adc-langs { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.22); }
+.ptn .ptn-head .adc-langs a { color: rgba(255, 255, 255, 0.8); }
+.ptn .ptn-head .adc-langs a.on { background: #fff; color: var(--p-color); }
+@media (max-width: 640px) {
+  .adc .adc-langs a { min-width: 30px; padding: 0 6px; font-size: 11.5px; }
+}
+/* ADC web orders: paid, AM-BUCKS, tests */
+.webo-flags { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--text2); }
+.webo-flags > span { display: inline-flex; align-items: center; gap: 5px; }
+.webo-flags .webo-bucks { color: var(--accent, #c8102e); font-weight: 800; }
+.webo-pay { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; border-radius: 12px; background: var(--s1); border: 1px solid var(--line); }
+.webo-pay-f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text3); font-weight: 700; flex: 0 1 170px; }
+.webo-pay-f.grow { flex: 1 1 220px; }
+.webo-pay > .alert, .webo-pay > .tiny { flex: 1 1 100%; margin: 0; }
+.webo-paid { padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, #1f9d55 12%, transparent); color: var(--text1, inherit); }
+.webo-test-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.webo-test { background: #6d28d9 !important; color: #fff !important; }
+/* Admin → Merch */
+.merch-list { display: flex; flex-direction: column; gap: 10px; }
+.merch-row { display: flex; align-items: center; gap: 14px; padding: 12px; flex-wrap: wrap; }
+.merch-row.off { opacity: 0.6; }
+.merch-ph { width: 72px; height: 72px; border-radius: 12px; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; flex: none; color: var(--text3); }
+.merch-ph img { width: 100%; height: 100%; object-fit: contain; }
+.merch-b { display: flex; flex-direction: column; gap: 2px; flex: 1 1 200px; min-width: 0; }
+.merch-act { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.merch-act form { display: inline-flex; gap: 4px; }
+.merch-ed { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.merch-ed-h { display: flex; justify-content: space-between; align-items: center; }
+.merch-ed-g { display: grid; grid-template-columns: 200px 1fr; gap: 16px; }
+.merch-ed-f { display: flex; flex-direction: column; gap: 12px; }
+.merch-up { position: relative; width: 200px; height: 200px; border-radius: 14px; border: 2px dashed var(--line); background: #fff; display: grid; place-items: center; overflow: hidden; cursor: pointer; color: #666; font-weight: 700; font-size: 14px; }
+.merch-up span { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.merch-up img { width: 100%; height: 100%; object-fit: contain; }
+.merch-up input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.merch-up-busy { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.7); display: grid !important; place-items: center; }
+@media (max-width: 640px) {
+  .merch-ed-g { grid-template-columns: 1fr; }
+  .merch-up { width: 100%; height: 240px; }
+}
+@media (max-width: 640px) {
+  /* phone: logo, language, account and cart on top; search on its own row */
+  .adc .adc-head .adc-bar { height: auto; flex-wrap: wrap; row-gap: 10px; gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+  .adc .adc-head .adc-logo { flex: 1; }
+  .adc .adc-head .adc-search { order: 3; flex: 1 1 100%; }
+  .adc .adc-langs { height: 42px; }
+}

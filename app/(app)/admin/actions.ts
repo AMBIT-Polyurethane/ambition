@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { ADC_CATALOG_TAG } from "@/lib/adc";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { sendEmail, wrapEmail } from "@/lib/email";
@@ -666,5 +667,6 @@ export async function setAdcImages(list: { sku: string; url: string | null }[]):
   }
   revalidatePath("/admin/products");
   revalidatePath("/adc", "layout");
+  revalidateTag(ADC_CATALOG_TAG);
   return { ok: true, message: `Saved ${data ?? clean.length} ADC store ${Number(data) === 1 ? "photo" : "photos"}.` };
 }

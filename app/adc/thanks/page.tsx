@@ -18,6 +18,8 @@ export default async function AdcThanks({ searchParams }: { searchParams: Promis
         <CircleCheck size={54} aria-hidden="true" />
         <h1 className="adc-h1">{t.gotIt(n && n !== "ADC-0" ? n : "")}</h1>
         <p>{t.gotItText}</p>
+        <p className="adc-note-b"><b>{t.contactNote}</b></p>
+        <p className="adc-muted small">{t.shipDisclaimer}</p>
         <Link href="/adc" className="adc-cta">{t.keepShopping}</Link>
       </div>
     </div>

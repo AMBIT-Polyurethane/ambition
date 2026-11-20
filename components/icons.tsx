@@ -2,7 +2,7 @@ import {
   Award, BookOpen, Boxes, Building2, ClipboardList, Cylinder, FileText, GraduationCap, Hammer, Headset,
   Layers, Link as LinkIcon, MapPin, Megaphone, Newspaper, Package, Phone, Plane, CirclePlay, ShieldCheck,
   ShoppingCart, Tag, TriangleAlert, Users, Video, Wrench, Calendar, Mail, CreditCard, ClipboardCheck, Truck, Droplet, Receipt, Ruler, Sparkles,
-  Landmark, HandCoins, ClipboardPaste, Store, MessageSquareWarning, CalendarClock, Blocks, Target, MessagesSquare, FileChartColumn, type LucideIcon,
+  Landmark, HandCoins, ClipboardPaste, Store, MessageSquareWarning, CalendarClock, Blocks, Target, MessagesSquare, FileChartColumn, Shirt, type LucideIcon,
 } from "lucide-react";
 
 export const ICONS: Record<string, LucideIcon> = {
@@ -51,6 +51,7 @@ export const ICONS: Record<string, LucideIcon> = {
   target: Target,
   chat: MessagesSquare,
   report: FileChartColumn,
+  shirt: Shirt,
 };
 
 export const ICON_NAMES = Object.keys(ICONS);

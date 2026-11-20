@@ -57,6 +57,8 @@ export type Profile = {
   /** A distributor's store (0096): their owner or one of their customers. Walled off from AMBIT. */
   partner_id?: string | null;
   partner_role?: "owner" | "customer" | null;
+  /** An ADC store account (0097): anyone can make one; it never gets into AMBIT Intelligence. */
+  web_only?: boolean;
   /** Approves expense reports and sees the expense dashboard (0050, Admin > Expense reports). */
   expense_approver?: boolean;
   /** The language they picked for Academy lessons (0056); null means English. */

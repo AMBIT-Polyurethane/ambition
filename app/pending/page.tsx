@@ -9,6 +9,7 @@ export const metadata = { title: "Account pending" };
 export default async function PendingPage() {
   const s = await getSession();
   if (!s) redirect("/signin");
+  if (s.profile?.web_only) redirect("/adc/account");
   if (s.profile?.partner_id) redirect(`/store/${s.profile.partner_id}${s.profile.partner_role === "owner" ? "/desk" : "/account"}`);
   if (s.profile?.status === "active") redirect("/");
   const disabled = s.profile?.status === "disabled";

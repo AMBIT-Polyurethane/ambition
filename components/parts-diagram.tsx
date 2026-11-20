@@ -17,6 +17,9 @@ const WORDS = {
   es: { quote: "Pida una cotización", confirm: "Precio por confirmar", ask: "Pregunte a AMBIT", every: "Todas las piezas", hide: "Ocultar colores", show: "Mostrar todas las piezas", part: "Parte", added: "Agregado", add: "Agregar al carrito",
     addedCart: "Agregado al carrito", click: "Haga clic para agregarlo al carrito", notYet: "Aún no está en el catálogo. Pregunte a AMBIT.", find: "Nombre, número o # de la pieza", findLabel: "Buscar una pieza", none: "Ninguna pieza coincide.",
     src: (s: string) => `Dibujo: ${s}. Señale cualquier pieza para resaltarla; haga clic para agregarla al carrito.`, area: "Mostrar un área de la pistola", zoom: "Acercar el dibujo", zin: "Acercar", zout: "Alejar" },
+  zh: { quote: "询价", confirm: "价格待确认", ask: "咨询 AMBIT", every: "所有零件", hide: "隐藏零件颜色", show: "显示所有零件", part: "零件", added: "已加入", add: "加入购物车",
+    addedCart: "已加入购物车", click: "点击加入购物车", notYet: "尚未列入我们的目录。请咨询 AMBIT。", find: "零件名称、编号或序号", findLabel: "查找零件", none: "没有匹配的零件。",
+    src: (s: string) => `图纸：${s}。指向任意零件即可高亮显示；点击即可加入购物车。`, area: "显示喷枪的某个区域", zoom: "缩放图纸", zin: "放大", zout: "缩小" },
 };
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -51,10 +54,10 @@ export function PartsDiagram({
   canAddMissing: boolean;
   theme?: "light" | "dark";
   /** ADC store: the shopper's language (part names stay as printed). */
-  lang?: "en" | "es";
+  lang?: "en" | "es" | "zh";
 }) {
   const w = WORDS[lang];
-  const gname = (g: PartGroup) => (lang === "es" ? groupName(PART_GROUPS[g].label, "es") : PART_GROUPS[g].label);
+  const gname = (g: PartGroup) => (lang === "en" ? PART_GROUPS[g].label : groupName(PART_GROUPS[g].label, lang));
   const [hot, setHot] = useState<{ key: string; k: number } | null>(null);
   const [pinned, setPinned] = useState<{ key: string; k: number } | null>(null);
   const [only, setOnly] = useState<PartGroup | null>(null);

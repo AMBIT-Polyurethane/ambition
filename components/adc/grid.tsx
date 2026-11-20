@@ -35,6 +35,7 @@ export function AdcGrid({ items, sale, lang = "en" }: { items: AdcItem[]; sale: 
             <div className="adc-card-b">
               <span className="adc-sku">{i.sku}{i.category ? ` · ${catName(i.category, lang).toUpperCase()}` : ""}</span>
               <Link href={href(i.sku)} className="adc-card-n">{i.name}</Link>
+              {i.is_set ? <span className="adc-set">{t.setBadge}</span> : null}
               <AdcPrice list={i.list_price} sale={i.sale_price} quote={i.quote} />
               {note ? <span className="adc-promo">{note}</span> : null}
               <AdcAddButton id={i.id} sku={i.sku} name={i.name} image={i.image} quote={i.quote} />

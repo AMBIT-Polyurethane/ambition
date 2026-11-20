@@ -52,7 +52,7 @@ export function PCheckout({ items, prefill }: { items: Record<string, PItem>; pr
         po: s("po"),
         notes: s("notes"),
         website: s("website"),
-        lang,
+        lang: lang === "es" ? "es" : "en",
         items: live.map((r) => (r.id ? { item_id: r.id, qty: r.qty } : { sku: r.sku, name: r.name, qty: r.qty })),
       });
       if (!res.ok) {

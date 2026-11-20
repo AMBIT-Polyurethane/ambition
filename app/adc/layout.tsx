@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import { Search, Truck } from "lucide-react";
+import { Search, Truck, UserRound } from "lucide-react";
 import { adcCatalog, adcCategories } from "@/lib/adc";
 import { AdcCartProvider } from "@/components/adc/cart";
 import { AdcCartButton, AdcSaleBanner } from "@/components/adc/bits";
@@ -38,11 +38,13 @@ export default async function AdcLayout({ children }: { children: React.ReactNod
               <input type="search" name="q" placeholder={t.search} aria-label={t.searchLabel} />
             </form>
             <AdcLangSwitch />
+            <Link href="/adc/account" className="adc-acct" aria-label={t.account}><UserRound size={19} aria-hidden="true" /><span>{t.account}</span></Link>
             <AdcCartButton />
           </div>
           {cats.length ? (
             <nav className="adc-cats" aria-label={t.shop}>
               <div className="adc-wrap">
+                <Link href="/adc/merch" className="adc-cat-merch">{t.merch} <span className="adc-soon sm">{t.comingSoon}</span></Link>
                 {cats.map((c) => <Link key={c.id} href={`/adc?c=${encodeURIComponent(c.id)}`}>{catName(c.name, lang)}</Link>)}
               </div>
             </nav>
@@ -55,6 +57,7 @@ export default async function AdcLayout({ children }: { children: React.ReactNod
             <AdcLogo width={64} />
             <span><Truck size={16} aria-hidden="true" /> {t.ships5}</span>
             <span>{t.questions} <a href="mailto:orders@ambitpu.com">orders@ambitpu.com</a></span>
+            <span className="adc-foot-links"><Link href="/adc/account">{t.rewards}</Link><Link href="/adc/merch">{t.merch}</Link><Link href="/adc/policies">{t.policies}</Link></span>
             <span className="adc-fine">{t.division}</span>
           </div>
         </footer>

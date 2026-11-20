@@ -11,7 +11,7 @@ export const metadata = { title: "Admin" };
 export default async function AdminPage() {
   const { supabase } = await requireAdmin();
   const [pending, products, companies, newOrders] = await Promise.all([
-    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "pending").is("partner_id", null),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("status", "pending").is("partner_id", null).eq("web_only", false),
     supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),
     supabase.from("companies").select("id", { count: "exact", head: true }),
     supabase.from("orders").select("id", { count: "exact", head: true }).eq("status", "new"),
@@ -67,8 +67,9 @@ export default async function AdminPage() {
             { key: "promos", href: "/admin/promos", icon: "megaphone", title: "Home banner", sub: "Sale slides and news" },
             { key: "sale", href: "/admin/sale", icon: "tag", title: "Black Friday sale", sub: "Sale prices on the ADC store" },
             { key: "adc", href: "/adc", icon: "cart", title: "ADC web store", sub: "The public store, as guests see it" },
+            { key: "merch", href: "/admin/merch", icon: "shirt", title: "Merch", sub: "Shirts and hats on ADC (Coming soon)" },
             { key: "partners", href: "/admin/partners", icon: "store", title: "Distributor stores", sub: "Contractors Foam Supply's store, owner invite" },
-            { key: "web", href: "/orders/web", icon: "clipboard", title: "ADC web orders", sub: "Guest orders to confirm" },
+            { key: "web", href: "/orders/web", icon: "clipboard", title: "ADC web orders", sub: "Confirm, mark paid, AM-BUCKS" },
           ]}
         />
         <TileSection

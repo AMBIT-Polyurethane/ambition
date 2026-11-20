@@ -20,7 +20,7 @@ export const getSession = cache(async () => {
     .maybeSingle<Profile>();
   // A distributor's people (0096) are not AMBIT logins: every "is this an active AMBIT login?" check says no.
   // (requireActive sends them back to their own store.)
-  if (profile?.partner_id) return { supabase, user, profile: { ...profile, status: "disabled" as Profile["status"], role: "customer" as Profile["role"], perms: [] } };
+  if (profile?.partner_id || profile?.web_only) return { supabase, user, profile: { ...profile, status: "disabled" as Profile["status"], role: "customer" as Profile["role"], perms: [] } };
   return { supabase, user, profile };
 });
 
@@ -29,6 +29,8 @@ export async function requireActive() {
   if (!s) redirect("/signin");
   // A distributor's people (their store owner and their customers) never see AMBIT's side: back to their store.
   if (s.profile?.partner_id) redirect(`/store/${s.profile.partner_id}${s.profile.partner_role === "owner" ? "/desk" : "/account"}`);
+  // An ADC store account (anyone can make one) is not an AMBIT login: back to their store account.
+  if (s.profile?.web_only) redirect("/adc/account");
   if (!s.profile || s.profile.status !== "active") redirect("/pending");
   return { ...s, profile: s.profile as Profile };
 }

@@ -3,23 +3,48 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { CircleAlert, LoaderCircle, Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { CircleAlert, Gift, Info, LoaderCircle, Minus, Plus, ShoppingCart, Trash2, Truck, UserRound } from "lucide-react";
 import { useAdcCart } from "@/components/adc/cart";
 import { placeAdcOrder } from "@/app/adc/actions";
 import { useAdc } from "@/components/adc/lang";
 import { errText } from "@/lib/adc-i18n";
 
-export type CatInfo = { sku: string; name: string; unit: string | null; list_price: number | null; sale_price: number | null; quote: boolean; image: string | null; foam?: boolean };
+export type CatInfo = {
+  sku: string;
+  name: string;
+  unit: string | null;
+  list_price: number | null;
+  sale_price: number | null;
+  quote: boolean;
+  image: string | null;
+  foam?: boolean;
+  ship: "parcel" | "freight" | "pickup" | "truckload";
+  truck_qty: number | null;
+  is_set: boolean;
+};
+/** The signed-in shopper (prefills checkout; their AM-BUCKS can go on the order). */
+export type AdcMe = {
+  email: string;
+  name: string;
+  company: string;
+  phone: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  bucks: number;
+  promo: boolean;
+} | null;
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-/** The cart and a guest checkout on one page. No payment: the order goes to AMBIT, who confirm price, shipping and payment. */
-export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, CatInfo>; branches: { id: string; name: string }[]; foamNote: string | null }) {
+/** The cart and checkout on one page. No payment: the order goes to AMBIT, who confirm price, shipping and payment. */
+export function AdcCheckout({ cat, branches, foamNote, me }: { cat: Record<string, CatInfo>; branches: { id: string; name: string }[]; foamNote: string | null; me: AdcMe }) {
   const { lines, setQty, clear, ready } = useAdcCart();
   const { t, lang } = useAdc();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [delivery, setDelivery] = useState<"ship" | "pickup">("ship");
+  const [delivery, setDelivery] = useState<"ship" | "pickup" | "truckload">("ship");
 
   const rows = lines.map((l) => {
     const c = l.id ? cat[l.id] : undefined;
@@ -30,6 +55,24 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
   const subtotal = live.reduce((s, r) => s + (r.price ?? 0) * r.qty, 0);
   const saved = live.reduce((s, r) => s + (r.c && r.c.sale_price !== null && r.c.list_price !== null && !r.c.quote ? Math.max(0, r.c.list_price - r.c.sale_price) * r.qty : 0), 0);
   const toConfirm = live.some((r) => r.price === null);
+
+  // How it gets there: pick up only items, fiberglass (pick up or a full truck), freight items.
+  const pickupOnly = live.filter((r) => r.c?.ship === "pickup");
+  const truck = live.filter((r) => r.c?.ship === "truckload");
+  const freight = live.filter((r) => r.c?.ship === "freight");
+  const fill = truck.reduce((s, r) => s + (r.c?.truck_qty ? r.qty / r.c.truck_qty : 0), 0);
+  const fillKnown = truck.every((r) => r.c?.truck_qty);
+  const pct = fill > 0 && fill < 0.01 ? "<1" : Math.round(fill * 100);
+  const blocked =
+    delivery !== "pickup" && pickupOnly.length
+      ? t.pickupOnly(pickupOnly.map((r) => r.sku).join(", "))
+      : delivery === "ship" && truck.length
+        ? t.truckOnly(truck.map((r) => r.sku).join(", "))
+        : delivery === "truckload" && !truck.length
+          ? t.shipTruck
+          : delivery === "truckload" && fillKnown && fill < 0.95
+            ? `${t.truckFill(pct)} ${t.truckNeed}`
+            : null;
 
   if (!ready) return <div className="adc-empty"><LoaderCircle className="spin" size={26} /></div>;
   if (!lines.length) {
@@ -44,6 +87,10 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
 
   const submit = (f: FormData) => {
     setError(null);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
     const s = (k: string) => String(f.get(k) ?? "");
     start(async () => {
       const res = await placeAdcOrder({
@@ -57,6 +104,8 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
         notes: s("notes"),
         website: s("website"),
         lang,
+        promo_opt_in: f.get("promo") === "on",
+        use_bucks: f.get("bucks") === "on",
         items: live.map((r) => (r.id ? { product_id: r.id, qty: r.qty } : { sku: r.sku, name: r.name, qty: r.qty })),
       });
       if (!res.ok) {
@@ -77,6 +126,7 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
             <span className="adc-line-b">
               <b>{r.c?.name ?? r.name}</b>
               <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}</span>
+              {r.c?.is_set ? <span className="adc-set">{t.setBadge} · {t.sets(r.qty)}</span> : null}
               {r.c && r.c.sale_price !== null && !r.c.quote ? <span className="adc-line-sale">{t.salePrice}</span> : null}
               {r.c?.quote && r.c.foam && foamNote ? <span className="adc-line-sale">{foamNote}</span> : null}
             </span>
@@ -94,30 +144,48 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
           <span>{toConfirm ? t.subtotalPriced : t.subtotal}</span>
           <b>{usd(subtotal)}</b>
         </div>
-        <p className="adc-muted small">{t.taxNote}{toConfirm ? t.confirmNote : ""}</p>
+        <div className="adc-shipline"><span><Truck size={16} aria-hidden="true" /> {t.shipping}</span><b>{t.shipQuoted}</b></div>
+        <p className="adc-muted small">{t.taxNote}{toConfirm ? t.confirmNote : ""} {t.shipDisclaimer}</p>
+        <p className="adc-note-b small"><Info size={15} aria-hidden="true" /> {t.contactNote}</p>
       </section>
 
       <form action={submit} className="adc-co-form" aria-label={t.checkout}>
         <h2 className="adc-h2">{t.checkout}</h2>
-        <p className="adc-muted small" style={{ margin: 0 }}>{t.noCard}</p>
+        <p className="adc-muted small" style={{ margin: 0 }}>{t.requestNote}</p>
+        {me ? (
+          <div className="adc-me"><UserRound size={18} aria-hidden="true" /><span>{t.signedInAs(me.email)}</span></div>
+        ) : (
+          <Link href="/adc/account?next=/adc/cart" className="adc-me link"><Gift size={18} aria-hidden="true" /><span>{t.earnBucks} <b>{t.createAccount}</b> · {t.signIn}</span></Link>
+        )}
         <div className="adc-f2">
-          <label className="adc-f"><span>{t.name}</span><input name="name" required autoComplete="name" /></label>
-          <label className="adc-f"><span>{t.company}</span><input name="company" autoComplete="organization" /></label>
-          <label className="adc-f"><span>{t.email}</span><input name="email" type="email" required autoComplete="email" /></label>
-          <label className="adc-f"><span>{t.phone}</span><input name="phone" type="tel" required autoComplete="tel" /></label>
+          <label className="adc-f"><span>{t.name}</span><input name="name" required autoComplete="name" defaultValue={me?.name ?? ""} /></label>
+          <label className="adc-f"><span>{t.company}</span><input name="company" autoComplete="organization" defaultValue={me?.company ?? ""} /></label>
+          <label className="adc-f"><span>{t.email}</span><input name="email" type="email" required autoComplete="email" defaultValue={me?.email ?? ""} /></label>
+          <label className="adc-f"><span>{t.phone}</span><input name="phone" type="tel" required autoComplete="tel" defaultValue={me?.phone ?? ""} /></label>
         </div>
         <div className="adc-seg" role="radiogroup" aria-label={t.delivery}>
           <button type="button" role="radio" aria-checked={delivery === "ship"} className={delivery === "ship" ? "on" : undefined} onClick={() => setDelivery("ship")}>{t.shipIt}</button>
           <button type="button" role="radio" aria-checked={delivery === "pickup"} className={delivery === "pickup" ? "on" : undefined} onClick={() => setDelivery("pickup")}>{t.pickUp}</button>
+          {truck.length ? (
+            <button type="button" role="radio" aria-checked={delivery === "truckload"} className={delivery === "truckload" ? "on" : undefined} onClick={() => setDelivery("truckload")}>{t.deliveryTruck}</button>
+          ) : null}
         </div>
-        {delivery === "ship" ? (
+        {truck.length ? (
+          <div className="adc-truck">
+            <div className="adc-truck-bar" aria-hidden="true"><span style={{ width: `${Math.min(100, Math.round(fill * 100))}%` }} /></div>
+            <span>{fillKnown ? (fill >= 0.95 ? t.truckFull : t.truckFill(pct)) : t.truckUnknown}</span>
+          </div>
+        ) : null}
+        {freight.length && delivery !== "pickup" ? <p className="adc-note-b small"><Truck size={15} aria-hidden="true" /> {t.freightNote}</p> : null}
+        {blocked ? <div className="adc-err" role="alert"><CircleAlert size={18} aria-hidden="true" /> {blocked}</div> : null}
+        {delivery !== "pickup" ? (
           <div className="adc-f2">
-            <label className="adc-f wide"><span>{t.street}</span><input name="street" required autoComplete="address-line1" /></label>
+            <label className="adc-f wide"><span>{t.street}</span><input name="street" required autoComplete="address-line1" defaultValue={me?.street ?? ""} /></label>
             <label className="adc-f wide"><span>{t.street2}</span><input name="street2" autoComplete="address-line2" /></label>
-            <label className="adc-f"><span>{t.city}</span><input name="city" required autoComplete="address-level2" /></label>
+            <label className="adc-f"><span>{t.city}</span><input name="city" required autoComplete="address-level2" defaultValue={me?.city ?? ""} /></label>
             <span className="adc-f2 tight">
-              <label className="adc-f"><span>{t.state}</span><input name="state" required maxLength={2} autoComplete="address-level1" placeholder="OK" /></label>
-              <label className="adc-f"><span>{t.zip}</span><input name="zip" required inputMode="numeric" autoComplete="postal-code" /></label>
+              <label className="adc-f"><span>{t.state}</span><input name="state" required maxLength={2} autoComplete="address-level1" placeholder="OK" defaultValue={me?.state ?? ""} /></label>
+              <label className="adc-f"><span>{t.zip}</span><input name="zip" required inputMode="numeric" autoComplete="postal-code" defaultValue={me?.zip ?? ""} /></label>
             </span>
           </div>
         ) : (
@@ -129,11 +197,16 @@ export function AdcCheckout({ cat, branches, foamNote }: { cat: Record<string, C
           </label>
         )}
         <label className="adc-f"><span>{t.notes}</span><textarea name="notes" rows={3} placeholder={t.notesPh} /></label>
+        {me && me.bucks > 0 ? (
+          <label className="adc-check"><input type="checkbox" name="bucks" defaultChecked /> <span>{t.useBucks(usd(me.bucks))}</span></label>
+        ) : null}
+        <label className="adc-check"><input type="checkbox" name="promo" defaultChecked={me ? me.promo : true} /> <span>{t.promoOpt}</span></label>
         <input name="website" tabIndex={-1} autoComplete="off" className="adc-hp" aria-hidden="true" />
         {error ? <div className="adc-err" role="alert"><CircleAlert size={18} aria-hidden="true" /> {error}</div> : null}
-        <button type="submit" className="adc-cta block" disabled={pending || !live.length}>
+        <button type="submit" className="adc-cta block" disabled={pending || !live.length || Boolean(blocked)}>
           {pending ? <><LoaderCircle size={18} className="spin" /> {t.sending}</> : t.placeOrder}
         </button>
+        <p className="adc-muted small center" style={{ margin: 0 }}>{t.contactNote}</p>
       </form>
     </div>
   );
