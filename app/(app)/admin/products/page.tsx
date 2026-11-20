@@ -107,6 +107,7 @@ export default async function ProductsAdminPage({ searchParams }: { searchParams
             <Link href={`${href({})}${href({}).includes("?") ? "&" : "?"}add=1#add`} className="b2 sm"><Plus size={17} /> Add product</Link>
             <MoreMenu label="More: photos, import from Excel or CSV, categories">
               <Link className="menu2-i" href={`${href({})}${href({}).includes("?") ? "&" : "?"}photos=1#photos`}><Images size={18} /> Upload photos</Link>
+              <Link className="menu2-i" href="/admin/products/afcat"><Images size={18} /> Photos from AFCAT</Link>
               <Link className="menu2-i" href={`${href({})}${href({}).includes("?") ? "&" : "?"}import=1#import`}><FileSpreadsheet size={18} /> Import from Excel or CSV</Link>
               <Link className="menu2-i" href={`${href({})}${href({}).includes("?") ? "&" : "?"}cats=1#cats`}><Tags size={18} /> Categories</Link>
             </MoreMenu>

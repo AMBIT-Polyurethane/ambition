@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Search, Truck } from "lucide-react";
+import { Layers, Search, Truck } from "lucide-react";
+import { DIAGRAMS } from "@/lib/diagrams";
 import { adcCatalog, adcCategories } from "@/lib/adc";
 import { AdcGrid, AdcImg } from "@/components/adc/grid";
 import { catName, dict } from "@/lib/adc-i18n";
@@ -43,6 +44,20 @@ export default async function AdcHome({ searchParams }: { searchParams: Promise<
               <Link key={c.id} href={`/adc?c=${encodeURIComponent(c.id)}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className={cat?.id === c.id ? "on" : undefined}>{catName(c.name, lang)}</Link>
             ))}
           </div>
+        ) : null}
+        {cat && /gun/i.test(`${cat.id} ${cat.name}`) && /part/i.test(`${cat.id} ${cat.name}`) && DIAGRAMS.length ? (
+          <section className="adc-diag-banner" aria-label={t.diagramBannerTitle}>
+            <span className="adc-diag-ic" aria-hidden="true"><Layers size={26} /></span>
+            <span className="adc-diag-b">
+              <b>{t.diagramBannerTitle}</b>
+              <span>{t.diagramBannerText}</span>
+            </span>
+            <span className="adc-diag-go">
+              {DIAGRAMS.map((d) => (
+                <Link key={d.slug} href={`/adc/parts/${d.slug}`} className="adc-cta">{t.openDiagram(d.title.split(":")[0].replace(/ gun$/i, ""))}</Link>
+              ))}
+            </span>
+          </section>
         ) : null}
         {shown.length ? <AdcGrid items={shown} sale={sale} lang={lang} /> : (
           <div className="adc-empty"><Search size={28} aria-hidden="true" /><b>{t.nothing}</b><span>{t.nothingText}</span></div>
