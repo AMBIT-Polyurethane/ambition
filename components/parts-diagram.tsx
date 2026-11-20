@@ -149,11 +149,27 @@ export function PartsDiagram({
     const seen = new Set<string>();
     return diagram.parts.filter((p) => (seen.has(p.sku) ? false : (seen.add(p.sku), true)));
   }, [diagram]);
+  // Choices under one number: the drawn part plus the list-only part numbers that share its number (sizes, packs).
+  // Two drawn parts that share a number (the A and B check valves) are separate parts, not choices.
+  const drawn = (p: DiagramPart) => Boolean(p.shapes?.length || p.at?.length || p.tag?.length || p.box?.length);
+  const choicesOf = (p: DiagramPart) => (p.n ? rows.filter((r) => r.n === p.n && (r.sku === p.sku || !drawn(r))) : [p]);
+  const options = (p: DiagramPart) => choicesOf(p).length;
+  /** What the choices have in common ("Round mix chamber"), for the popup. */
+  const choiceName = (p: DiagramPart) => {
+    const names = choicesOf(p).map((r) => r.name);
+    let pre = names[0];
+    for (const n of names) while (pre && !n.startsWith(pre)) pre = pre.slice(0, -1);
+    if (pre.length < names[0].length && !/[\s,(]/.test(names[0][pre.length] ?? " ")) pre = pre.replace(/\S*$/, "");
+    pre = pre.replace(/[\s,(]+$/, "");
+    return pre.length >= 4 ? pre : p.name.split(/[,(]/)[0].trim();
+  };
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const listed = pick
-    ? rows.filter((p) => p.n === pick)
+    ? (() => {
+        const head = rows.find((p) => p.n === pick && drawn(p));
+        return head ? choicesOf(head) : rows.filter((p) => p.n === pick);
+      })()
     : rows.filter((p) => (!only || p.group === only) && words.every((w) => `${p.n} ${p.sku} ${p.name}`.toLowerCase().includes(w)));
-  const options = (p: DiagramPart) => (p.n ? rows.filter((r) => r.n === p.n).length : 1);
   const groups = (Object.keys(PART_GROUPS) as PartGroup[]).filter((g) => rows.some((p) => p.group === g));
 
   const priceText = (sku: string) => {
@@ -264,7 +280,7 @@ export function PartsDiagram({
                   return (
                     <g key={`t${i}-${k}`} className={`pd-part pd-tag${state}`} transform={`translate(${x} ${y})`} style={{ ["--c" as string]: PART_GROUPS[p.group].color } as React.CSSProperties} {...partProps(p, 200 + k, label)}>
                       <circle r={r} />
-                      <text dy="0.36em" fontSize={r * (p.n.length > 1 ? 1.08 : 1.25)}>{p.n}</text>
+                      <text dy="0.36em" fontSize={r * (p.n.length > 2 ? 0.86 : p.n.length > 1 ? 1.08 : 1.25)}>{p.n}</text>
                     </g>
                   );
                 }),
@@ -283,7 +299,7 @@ export function PartsDiagram({
                   <span className="pd-sw" style={{ background: PART_GROUPS[tipPart.group].color }} aria-hidden="true" />
                   {options(tipPart) > 1 ? `#${tipPart.n}` : <>{tipPart.n ? `#${tipPart.n} · ` : ""}{w.part} {tipPart.sku}</>}
                 </span>
-                <b>{options(tipPart) > 1 ? tipPart.name.split(/[,(]/)[0].trim() : tipPart.name}</b>
+                <b>{options(tipPart) > 1 ? choiceName(tipPart) : tipPart.name}</b>
                 {tipPart.note ? <span className="pd-tip-note">{lang === "es" && tipPart.noteEs ? tipPart.noteEs : tipPart.note}</span> : null}
                 <span className="pd-tip-p">{options(tipPart) > 1 ? w.choices(options(tipPart)) : priceText(tipPart.sku)}</span>
                 {options(tipPart) > 1 ? (
