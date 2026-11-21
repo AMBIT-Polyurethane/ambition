@@ -11,7 +11,7 @@ export function DeskTabs({ slug, newOrders }: { slug: string; newOrders: number 
     { href: base, label: "Price sheet", icon: Tags },
     { href: `${base}/orders`, label: "Orders", icon: ClipboardList, n: newOrders },
     { href: `${base}/customers`, label: "Customers", icon: Users },
-    { href: `${base}/store`, label: "Store look & contact", icon: Palette },
+    { href: `${base}/store`, label: "Store & shipping", icon: Palette },
     { href: `${base}/connect`, label: "QuickBooks & email", icon: PlugZap },
   ];
   return (

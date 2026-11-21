@@ -13,6 +13,10 @@ export type PStore = {
   logo: string | null;
   color: string;
   color2: string;
+  /** Shipping the owner set (null: quoted on each order). */
+  shipFlat: number | null;
+  shipFreeOver: number | null;
+  shipNote: string | null;
 };
 export type PWho = { kind: "guest" | "owner" | "customer" | "viewer" | "other"; first: string | null; company: string | null; terms: string | null };
 

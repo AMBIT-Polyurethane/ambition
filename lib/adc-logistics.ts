@@ -59,6 +59,8 @@ type Branch = { id: string; name: string; lat: number; lng: number };
 type Prod = {
   id: string; sku: string; name: string; unit: string | null; category_id: string | null; adc_set: boolean | null; truck_qty: number | null;
   ship_weight: number | null; vendor_name: string | null; vendor_zip: string | null; vendor_lead_days: number | null; adc_ship: string | null; cat_ship: string | null;
+  /** Drop shipped by this partner (0104): never from AMBIT's stock. */
+  drop_ship_partner?: string | null;
 };
 
 /** Where the five locations are, if the database doesn't have their map points yet (update 0100 adds them). */
@@ -167,6 +169,18 @@ async function loadCtx(db: SupabaseClient, ids: string[]): Promise<Ctx> {
   for (const p of (pr.data ?? []) as (Prod & { category?: { adc_ship: string | null } | null })[]) {
     prod.set(p.id, { ...p, cat_ship: p.category?.adc_ship ?? null, truck_qty: p.truck_qty === null ? null : Number(p.truck_qty), ship_weight: p.ship_weight === null || p.ship_weight === undefined ? null : Number(p.ship_weight) });
   }
+  // A drop-ship partner ships from the ZIP they set on their desk (when the product has none of its own).
+  const partners = [...new Set([...prod.values()].map((p) => p.drop_ship_partner).filter((x): x is string => Boolean(x)))];
+  if (partners.length) {
+    const { data: pz } = await db.from("partners").select("id, name, ship_zip").in("id", partners);
+    const by = new Map(((pz ?? []) as { id: string; name: string; ship_zip: string | null }[]).map((x) => [x.id, x]));
+    for (const p of prod.values()) {
+      const pt = p.drop_ship_partner ? by.get(p.drop_ship_partner) : undefined;
+      if (!pt) continue;
+      p.vendor_name ??= pt.name;
+      if (!p.vendor_zip && pt.ship_zip) p.vendor_zip = pt.ship_zip;
+    }
+  }
   const reserved = new Map<string, number>();
   for (const l of (held.data ?? []) as { branch_id: string; product_id: string; qty: number }[]) {
     const k = `${l.branch_id}|${l.product_id}`;
@@ -182,6 +196,8 @@ async function loadCtx(db: SupabaseClient, ids: string[]): Promise<Ctx> {
       vendors.get(r.product_id)!.set(r.branch_id, { vendor: r.vendor.trim(), lead: r.lead_days === null || r.lead_days === undefined ? null : Number(r.lead_days) });
     }
     if (!r.on_sheet || r.on_hand === null) continue;
+    // Drop-ship parts never come out of AMBIT's stock, whatever the sheet says.
+    if (prod.get(r.product_id)?.drop_ship_partner) continue;
     const free = Math.max(0, Number(r.on_hand) - Number(r.sheet_pending ?? 0) - (reserved.get(`${r.branch_id}|${r.product_id}`) ?? 0));
     if (!avail.has(r.branch_id)) avail.set(r.branch_id, new Map());
     avail.get(r.branch_id)!.set(r.product_id, free);
@@ -299,7 +315,11 @@ export async function planOrder(
         kind: "vendor" as const,
         fromName: sup.vendor ? `Vendor: ${sup.vendor}` : "Vendor (no Preferred Vendor on the spreadsheet)",
         days: lead ? `${lead} days for the vendor + ${s.days === "To confirm" ? "shipping" : s.days}` : s.days,
-        note: input.delivery === "pickup" ? "Have the vendor ship to the pickup location." : p.vendor_zip ? "Vendor ships straight to the customer (drop ship)." : "Freight from the vendor: get a quote (or add the vendor's ship-from ZIP on the product).",
+        note: p.drop_ship_partner
+          ? input.delivery === "pickup"
+            ? `${sup.vendor ?? "The vendor"} ships these to the pickup location. They go to them automatically when the order is released at the credit check.`
+            : `${sup.vendor ?? "The vendor"} ships these straight to the customer (drop ship). They go to them automatically when the order is released at the credit check.`
+          : input.delivery === "pickup" ? "Have the vendor ship to the pickup location." : p.vendor_zip ? "Vendor ships straight to the customer (drop ship)." : "Freight from the vendor: get a quote (or add the vendor's ship-from ZIP on the product).",
       };
     });
   };
@@ -345,15 +365,20 @@ export async function planOrder(
     const stocked = known.filter((k) => inStock(k) > 0);
     const v = vendorShipments();
 
+    // Nothing comes from our locations (all drop ship / vendor): one option, the vendor ships it.
+    if (!stocked.length && v.length) {
+      const names = [...new Set(v.map((x) => x.fromName.replace(/^Vendor: /, "")))];
+      options.push({ key: "one", title: `${names.join(" and ")} ${names.length > 1 ? "ship" : "ships"} everything (drop ship)`, ok: true, shipments: v, transfers: [], total: sum(v), days: slowest(v) });
+    }
     // 1. Everything from one location.
     let bestOne: PlanOption | null = null;
-    for (const b of ctx.branches) {
+    for (const b of (stocked.length ? ctx.branches : [])) {
       if (!stocked.every((k) => free(b.id, k.p.id) >= inStock(k))) continue;
       const s = stocked.length ? [ship(b, stocked.map((k) => ({ k, qty: inStock(k) })))] : [];
       const o: PlanOption = { key: "one", title: `Ship everything from ${b.name}`, ok: true, shipments: [...s, ...v], transfers: [], total: sum([...s, ...v]), days: slowest([...s, ...v]) };
       if (!bestOne || knownSum(o.shipments) < knownSum(bestOne.shipments)) bestOne = o;
     }
-    options.push(bestOne ?? { key: "one", title: "Ship everything from one location", ok: false, why: "No single location has every item in stock.", shipments: [], transfers: [], total: null, days: "" });
+    if (stocked.length) options.push(bestOne ?? { key: "one", title: "Ship everything from one location", ok: false, why: "No single location has every item in stock.", shipments: [], transfers: [], total: null, days: "" });
 
     // 2. The closest stock for each item (may be several shipments).
     const byBranch = new Map<string, { k: L; qty: number }[]>();
@@ -410,9 +435,6 @@ export async function planOrder(
         }
         options.push({ key: "gather", title: `Move stock to ${hub.name} first, then ship once`, ok: true, shipments: [...s, ...v], transfers, transferCost: r2(transferCost), total: sum([...s, ...v]), days: slowest([...s, ...v], "4-7 days for the transfer") });
       }
-    }
-    if (!stocked.length && v.length) {
-      options.push({ key: "split", title: "Vendor ships everything", ok: true, shipments: v, transfers: [], total: sum(v), days: slowest(v) });
     }
   }
 

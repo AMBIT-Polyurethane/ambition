@@ -23,6 +23,11 @@ export type PartnerRow = {
   hero_title_es: string | null;
   hero_text_es: string | null;
   active: boolean;
+  /** Shipping the owner set (0104); undefined before that update. */
+  ship_flat?: number | null;
+  ship_free_over?: number | null;
+  ship_zip?: string | null;
+  ship_note?: string | null;
 };
 
 /** One item as a shopper sees it: no purchase price, no other customer's price. */

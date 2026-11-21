@@ -33,7 +33,12 @@ export default async function PartnerLayout({ params, children }: { params: Prom
   const color2 = /^#[0-9a-f]{6}$/i.test(partner.color2) ? partner.color2 : color;
   return (
     <PartnerProvider
-      store={{ slug, name: partner.name, short: partner.short, phone: partner.phone ?? "", email: partner.email ?? "", logo: partner.logo_url, color, color2 }}
+      store={{
+        slug, name: partner.name, short: partner.short, phone: partner.phone ?? "", email: partner.email ?? "", logo: partner.logo_url, color, color2,
+        shipFlat: partner.ship_flat === null || partner.ship_flat === undefined ? null : Number(partner.ship_flat),
+        shipFreeOver: partner.ship_free_over === null || partner.ship_free_over === undefined ? null : Number(partner.ship_free_over),
+        shipNote: partner.ship_note ?? null,
+      }}
       lang={lang}
       who={who}
     >

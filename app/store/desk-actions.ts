@@ -8,6 +8,7 @@ import { currentOrigin } from "@/lib/origin";
 import { hashToken } from "@/lib/invites";
 import { getPartner, orderNo, partnerMe } from "@/lib/partner-store";
 import { partnerInviteEmail, partnerShippedEmail } from "@/lib/partner-email";
+import { ORDERS_EMAIL } from "@/lib/env";
 
 // The store owner's desk: price sheet, orders, customers, store look. Only the owner can change anything
 // (the database checks too). AMBIT's partner viewer can look but every action here says no.
@@ -124,19 +125,48 @@ export async function applyMarkup(slug: string, pct: number, onlyEmpty: boolean)
 
 // ------------------------------------------------------------------ orders
 
-export async function setOrderStatus(slug: string, id: number, status: "new" | "shipped" | "done" | "cancelled", tracking: string, notify: boolean): Promise<DeskResult> {
+export async function setOrderStatus(
+  slug: string,
+  id: number,
+  status: "new" | "shipped" | "done" | "cancelled",
+  tracking: string,
+  notify: boolean,
+  shipCost: string | null = null,
+): Promise<DeskResult> {
   const o = await owner(slug);
   if (!o) return NOT_OWNER;
   if (!["new", "shipped", "done", "cancelled"].includes(status)) return { ok: false, error: "Unknown status." };
   const tr = clean(tracking, 80) || null;
+  const sc = shipCost === null ? undefined : money(shipCost);
+  if (Number.isNaN(sc)) return { ok: false, error: "Type the shipping as a number, like 18.50." };
   const { data, error } = await o.supabase
     .from("partner_orders")
-    .update({ status, tracking: tr, updated_at: new Date().toISOString() })
+    .update({ status, tracking: tr, updated_at: new Date().toISOString(), ...(sc !== undefined && sc !== null ? { ship_cost: sc } : {}) })
     .eq("id", id)
     .eq("partner_id", slug)
-    .select("id, name, email, lang")
-    .single<{ id: number; name: string; email: string; lang: string }>();
+    .select("id, name, email, lang, source, subtotal, ship_cost, ambit_ref, has_quote")
+    .single<{ id: number; name: string; email: string; lang: string; source?: string; subtotal: number; ship_cost: number | null; ambit_ref: string | null; has_quote: boolean }>();
   if (error) return { ok: false, error: msg(error) };
+  // A drop ship for AMBIT: AMBIT is told it shipped, with the tracking and what they'll be billed.
+  if (data.source === "ambit") {
+    if (status === "shipped" && notify) {
+      const p = await getPartner(slug);
+      const no = orderNo(p?.short ?? "", data.id);
+      const usd = (v: number) => Number(v).toLocaleString("en-US", { style: "currency", currency: "USD" });
+      const parts = `${usd(data.subtotal)}${data.has_quote ? " + items to price" : ""}`;
+      const ship = data.ship_cost === null ? "shipping to follow" : `${usd(data.ship_cost)} shipping`;
+      const sent = await sendEmail({
+        to: [ORDERS_EMAIL],
+        fromName: p?.name ?? "Drop ship",
+        replyTo: p?.email ?? undefined,
+        subject: `Drop ship ${no} shipped${data.ambit_ref ? ` (${data.ambit_ref})` : ""}`,
+        html: `<p style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;">${p?.name ?? "Your drop-ship partner"} shipped drop-ship order <b>${no}</b>${data.ambit_ref ? ` for ${data.ambit_ref}` : ""}.${tr ? ` Tracking: <b>${tr.replace(/[<>&]/g, "")}</b>.` : ""}<br>They'll bill AMBIT ${parts} + ${ship}.</p>`,
+        text: `${p?.name ?? "Your drop-ship partner"} shipped ${no}${data.ambit_ref ? ` for ${data.ambit_ref}` : ""}.${tr ? ` Tracking: ${tr}.` : ""} Billing AMBIT ${parts} + ${ship}.`,
+      });
+      return { ok: true, message: sent.status === "sent" ? "Marked shipped. AMBIT was emailed the tracking and the shipping." : "Marked shipped. AMBIT sees it on their side." };
+    }
+    return { ok: true };
+  }
   if (status === "shipped" && notify && canEmailCustomers()) {
     const p = await getPartner(slug);
     if (p) {
@@ -279,6 +309,11 @@ export type StoreInput = {
   tagline_es: string;
   hero_title_es: string;
   hero_text_es: string;
+  /** Shipping (0104): a flat amount per shipped order, free over an amount, where it ships from, a note at checkout. */
+  ship_flat: string;
+  ship_free_over: string;
+  ship_zip: string;
+  ship_note: string;
 };
 
 export async function saveStore(slug: string, s: StoreInput): Promise<DeskResult> {
@@ -290,6 +325,11 @@ export async function saveStore(slug: string, s: StoreInput): Promise<DeskResult
   if (clean(s.name, 120).length < 2) return { ok: false, error: "Type the store's name." };
   const logo = s.logo_url ? clean(s.logo_url, 500) : null;
   if (logo && !/^(https:\/\/|\/partners\/)/.test(logo) && !logo.startsWith("http://127.0.0.1")) return { ok: false, error: "That logo address doesn't look right." };
+  const shipFlat = money(s.ship_flat);
+  const shipFree = money(s.ship_free_over);
+  if (Number.isNaN(shipFlat) || Number.isNaN(shipFree)) return { ok: false, error: "Type shipping amounts as numbers, like 25 or 18.50." };
+  const zip = clean(s.ship_zip, 10).replace(/[^\d-]/g, "");
+  if (zip && !/^\d{5}(-\d{4})?$/.test(zip)) return { ok: false, error: "The ship-from ZIP should be 5 digits." };
   const { error } = await o.supabase
     .from("partners")
     .update({
@@ -307,6 +347,10 @@ export async function saveStore(slug: string, s: StoreInput): Promise<DeskResult
       tagline_es: clean(s.tagline_es, 160) || null,
       hero_title_es: clean(s.hero_title_es, 160) || null,
       hero_text_es: clean(s.hero_text_es, 400) || null,
+      ship_flat: shipFlat,
+      ship_free_over: shipFree,
+      ship_zip: zip || null,
+      ship_note: clean(s.ship_note, 300) || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", slug);

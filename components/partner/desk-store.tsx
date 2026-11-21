@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, CircleAlert, ImagePlus, LoaderCircle, Palette, Phone, Type } from "lucide-react";
+import { Check, CircleAlert, ImagePlus, LoaderCircle, Palette, Phone, Truck, Type } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toBannerImage } from "@/lib/images";
 import { saveStore, type StoreInput } from "@/app/store/desk-actions";
@@ -45,8 +45,8 @@ export function DeskStore({ slug, s: start, readOnly }: { slug: string; s: Store
     <div className="adc-stack-s">
       <div className="ptn-desk-h">
         <span>
-          <h1 className="adc-h1">Store look &amp; contact</h1>
-          <span className="adc-muted">Your phone and email show on every page of your store and on every email it sends.</span>
+          <h1 className="adc-h1">Store look, contact &amp; shipping</h1>
+          <span className="adc-muted">Your phone and email show on every page of your store and on every email it sends. Shipping shows at checkout.</span>
         </span>
       </div>
       <fieldset className="ptn-fs ptn-look" disabled={readOnly || pending}>
@@ -70,6 +70,16 @@ export function DeskStore({ slug, s: start, readOnly }: { slug: string; s: Store
           <div className="ptn-swatches">
             {SWATCHES.map((c) => <button key={c} type="button" className={s.color === c ? "on" : undefined} style={{ background: c }} onClick={() => setS({ ...s, color: c, color2: c })} aria-label={`Use ${c}`} />)}
             <label className="ptn-pick">Your own <input type="color" value={s.color} onChange={(e) => setS({ ...s, color: e.target.value, color2: e.target.value })} /></label>
+          </div>
+        </section>
+        <section className="ptn-card wide">
+          <span className="ptn-card-h"><Truck size={18} aria-hidden="true" /><b>Shipping</b></span>
+          <span className="adc-muted small">Shoppers see this at checkout and it&apos;s added to their order. Leave the flat amount empty to quote shipping on each order yourself. Pickup is always free.</span>
+          <div className="adc-f2">
+            <label className="adc-f"><span>Shipping per order ($)</span><input inputMode="decimal" value={s.ship_flat} onChange={set("ship_flat")} placeholder="e.g. 25" maxLength={12} /></label>
+            <label className="adc-f"><span>Free shipping on orders over ($)</span><input inputMode="decimal" value={s.ship_free_over} onChange={set("ship_free_over")} placeholder="e.g. 500 (empty: never free)" maxLength={12} /></label>
+            <label className="adc-f"><span>Ship-from ZIP (for shipping estimates)</span><input inputMode="numeric" value={s.ship_zip} onChange={set("ship_zip")} placeholder="e.g. 65301" maxLength={10} /></label>
+            <label className="adc-f"><span>Note at checkout (optional)</span><input value={s.ship_note} onChange={set("ship_note")} placeholder="e.g. Ships UPS Ground in 1-2 business days" maxLength={300} /></label>
           </div>
         </section>
         <section className="ptn-card wide">

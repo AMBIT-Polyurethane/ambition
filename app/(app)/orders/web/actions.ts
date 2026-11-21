@@ -115,9 +115,13 @@ export async function acceptAdcOrder(f: FormData) {
     branch = [...byWeight.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   }
 
-  // Items: the web lines, plus one ISO (A-side) drum for every spray foam set.
+  // Items: the web lines, plus one ISO (A-side) drum for every spray foam set. Gun parts are drop shipped (0104).
+  const pids = o.items.map((l) => l.product_id).filter((x): x is string => Boolean(x));
+  const { data: ds } = pids.length ? await supabase.from("products").select("id, drop_ship_partner, vendor_name").in("id", pids) : { data: [] };
+  const dropShip = new Map(((ds ?? []) as { id: string; drop_ship_partner?: string | null; vendor_name: string | null }[]).filter((x) => x.drop_ship_partner).map((x) => [x.id, x.vendor_name ?? "the vendor"]));
   const items: { raw: string; product_id: string | null; qty: number; confidence: number; note: string | null }[] = o.items.map((l) => ({
-    raw: `${l.sku} ${l.name}`, product_id: l.product_id ?? null, qty: Number(l.qty), confidence: l.product_id ? 1 : 0, note: l.product_id ? null : "Not in the catalog: price and add by hand",
+    raw: `${l.sku} ${l.name}`, product_id: l.product_id ?? null, qty: Number(l.qty), confidence: l.product_id ? 1 : 0,
+    note: !l.product_id ? "Not in the catalog: price and add by hand" : dropShip.has(l.product_id) ? `Drop ship from ${dropShip.get(l.product_id)}: don't pick. It goes to them when credit is released.` : null,
   }));
   const sets = o.items.filter((l) => l.set).reduce((n, l) => n + Number(l.qty), 0);
   if (sets > 0) {

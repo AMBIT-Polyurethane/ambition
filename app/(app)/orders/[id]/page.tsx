@@ -63,6 +63,7 @@ import { FileChips, ScheduleForm, UpNow } from "@/components/order2/up-now";
 import { MoreMenu } from "@/components/order2/menu";
 import { ChatCard } from "@/components/order2/chat-card";
 import { AddFiles } from "@/components/order2/add-files";
+import { DropShipCard } from "@/components/drop-ship-card";
 
 export const metadata = { title: "Order" };
 // Adding signed paperwork waits for the AI to read it (up to 35 seconds).
@@ -742,6 +743,7 @@ export default async function OrderDetailPage({
                 />
               ) : null}
               {itemsCard}
+              {emp ? <DropShipCard orderId={order.id} canSend={admin || can(profile, "order_desk")} open={isOpen} /> : null}
               {detailsCard}
               {historyCard}
             </div>

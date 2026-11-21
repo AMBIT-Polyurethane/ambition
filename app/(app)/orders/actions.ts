@@ -15,6 +15,7 @@ import { money } from "@/lib/format";
 import { changesText, detailsText, type DetailChange, type OrderChange } from "@/lib/order-edit";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { bolCheckReady, checkOrderBol, checkOrderBolNow, orderFileVerdicts } from "@/lib/order-doc/bol-check";
+import { sendDropShips } from "@/lib/drop-ship";
 
 const STATUSES = ["new", "processing", "completed", "cancelled"];
 
@@ -494,8 +495,22 @@ export async function creditDecision(form: FormData) {
   const { error } = await s.supabase.rpc("order_credit_decision", { p_order: id, p_approve: approve, p_note: note || null, p_charge_tax: chargeTax, ...pay });
   if (error) back(id, "err", error.message);
   await sendDeskNotice(s.supabase, id, approve ? "ready_to_schedule" : "credit_hold");
+  // Released: its gun parts go to Contractors Foam Supply as a drop-ship order (0104).
+  const drop = approve ? await sendDropShips(id) : { made: [] as string[] };
+  const dropText = drop.made.length ? ` Gun parts sent to Contractors Foam Supply as ${drop.made.join(", ")} (they ship them to the customer).` : "";
   const flags = pay.p_prepaid ? "customer has already paid" : [pay.p_cod ? "COD only" : "", pay.p_no_checks ? "no checks" : ""].filter(Boolean).join(", ");
-  back(id, "msg", approve ? `Released${flags ? ` (${flags})` : ""}. The order desk can schedule it now.` : "Put on credit hold. The rep and the order desk were told.");
+  back(id, "msg", approve ? `Released${flags ? ` (${flags})` : ""}. The order desk can schedule it now.${dropText}` : "Put on credit hold. The rep and the order desk were told.");
+}
+
+/** Order desk or admin: send the order's drop-ship lines (gun parts) to the partner now, without waiting for the credit check. */
+export async function sendDropShipNow(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  if (!(s.profile.role === "admin" || can(s.profile, "order_desk"))) back(id, "err", "Only the order desk or an admin can send drop-ship orders.");
+  const r = await sendDropShips(id);
+  if (r.error) back(id, "err", `The drop-ship order didn't go: ${r.error}`);
+  back(id, "msg", r.made.length ? `Sent to Contractors Foam Supply as ${r.made.join(", ")}.` : "Nothing new to send: those parts were already sent.");
 }
 
 /** Accounting, at the credit check: waiting on the customer's payment before releasing (0064). */

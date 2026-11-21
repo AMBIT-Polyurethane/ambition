@@ -58,7 +58,8 @@ export async function placePartnerOrder(slug: string, o: POrderInput): Promise<P
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("partner_place_order", { p_partner: slug, p: input });
   if (error) return { ok: false, error: perrText(error.message.replace(/^.*?:\s*/, "") || "That didn't go through. Please try again.", lang) };
-  const res = data as { id: number; order_no: string; subtotal: number; has_quote: boolean; items: PEmailLine[]; customer_id: string | null };
+  const res = data as { id: number; order_no: string; subtotal: number; shipping?: number | null; has_quote: boolean; items: PEmailLine[]; customer_id: string | null };
+  const shipping = res.shipping === null || res.shipping === undefined ? null : Number(res.shipping);
 
   const partner = await getPartner(slug);
   if (partner?.email) {
@@ -72,7 +73,7 @@ export async function placePartnerOrder(slug: string, o: POrderInput): Promise<P
       fromName: `${partner.name} Web Store`,
       replyTo: input.email,
       subject: `Store order ${res.order_no}: ${input.company || input.name}${res.has_quote ? " (some prices to confirm)" : ""}`,
-      html: partnerOrderEmail(partner, origin, res.order_no, mail, lines, sub, res.has_quote, false),
+      html: partnerOrderEmail(partner, origin, res.order_no, mail, lines, sub, res.has_quote, false, shipping),
       text: `New store order ${res.order_no} from ${input.name} (${input.email}${input.phone ? `, ${input.phone}` : ""}). ${lines.map((l) => `${l.qty} x ${l.sku} ${l.name}`).join("; ")}. Subtotal ${usd(sub)}.`,
     });
     if (canEmailCustomers()) {
@@ -81,7 +82,7 @@ export async function placePartnerOrder(slug: string, o: POrderInput): Promise<P
         fromName: partner.name,
         replyTo: partner.email,
         subject: lang === "es" ? `Recibimos su pedido ${res.order_no}` : `We got your order ${res.order_no}`,
-        html: partnerOrderEmail(partner, origin, res.order_no, mail, lines, sub, res.has_quote, true),
+        html: partnerOrderEmail(partner, origin, res.order_no, mail, lines, sub, res.has_quote, true, shipping),
         text:
           lang === "es"
             ? `Gracias. Recibimos su pedido ${res.order_no}. Le llamaremos o le escribiremos para confirmar el total y el envío. ${partner.name}, ${partner.phone ?? ""}`

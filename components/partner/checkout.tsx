@@ -26,6 +26,8 @@ export function PCheckout({ items, prefill }: { items: Record<string, PItem>; pr
   const live = rows.filter((r) => !r.gone);
   const subtotal = live.reduce((s, r) => s + (r.price ?? 0) * r.qty, 0);
   const toConfirm = live.some((r) => r.price === null);
+  // Shipping the store owner set: a flat amount per order, free over an amount; pickup is free.
+  const ship = delivery === "pickup" ? 0 : store.shipFlat === null ? null : store.shipFreeOver !== null && subtotal >= store.shipFreeOver ? 0 : store.shipFlat;
 
   if (!ready) return <div className="adc-empty"><LoaderCircle className="spin" size={26} /></div>;
   if (!lines.length) {
@@ -97,7 +99,22 @@ export function PCheckout({ items, prefill }: { items: Record<string, PItem>; pr
           <span>{toConfirm ? t.subtotalPriced : t.subtotal}</span>
           <b>{usd(subtotal)}</b>
         </div>
-        <p className="adc-muted small">{t.taxNote}{toConfirm ? t.confirmNote : ""}</p>
+        <div className="adc-tot ptn-ship-tot">
+          <span>{t.shipping}</span>
+          <b>{delivery === "pickup" ? t.shipPickup : ship === null ? t.shipQuoted : ship === 0 ? t.shipFree : usd(ship)}</b>
+        </div>
+        {ship !== null && ship > 0 ? (
+          <div className="adc-tot">
+            <span>{t.total}</span>
+            <b>{usd(subtotal + ship)}</b>
+          </div>
+        ) : null}
+        <p className="adc-muted small">
+          {ship === null ? t.taxNote : t.taxOnly}
+          {delivery !== "pickup" && store.shipFlat !== null && store.shipFreeOver !== null && ship !== 0 ? ` ${t.freeOver(usd(store.shipFreeOver))}` : ""}
+          {delivery !== "pickup" && store.shipNote ? ` ${store.shipNote}` : ""}
+          {toConfirm ? t.confirmNote : ""}
+        </p>
       </section>
 
       <form action={submit} className="adc-co-form" aria-label={t.checkout}>

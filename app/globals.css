@@ -5373,6 +5373,8 @@ body:has(.adc) { background: #f4f4f2; }
 .ptn-st.cancelled { background: #fde8e8; color: #b91c1c; }
 .ptn-order-who { display: flex; gap: 10px 28px; flex-wrap: wrap; font-size: 14px; padding: 12px; border-radius: 12px; background: #f6f6f3; }
 .ptn-order-who > span { display: flex; flex-direction: column; gap: 3px; }
+.ptn-order-who > span.ptn-shipto { flex-direction: row; gap: 8px; align-items: flex-start; }
+.ptn-shipto > span { display: flex; flex-direction: column; gap: 2px; }
 .ptn-order-who > span:not(:first-child) { flex-direction: row; align-items: center; gap: 6px; }
 .ptn-order-who a { display: inline-flex; align-items: center; gap: 5px; }
 .ptn-order-l2 { display: grid; grid-template-columns: 110px minmax(0, 1fr) 110px 100px; gap: 10px; align-items: center; font-size: 14px; padding: 6px 0; border-bottom: 1px solid var(--a-line); }

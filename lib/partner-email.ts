@@ -39,7 +39,7 @@ export function partnerWrap(p: PartnerRow, origin: string, right: string, inner:
 </table></td></tr></table></body></html>`;
 }
 
-export function partnerOrderEmail(p: PartnerRow, origin: string, no: string, o: POrderMail, lines: PEmailLine[], subtotal: number, hasQuote: boolean, forCustomer: boolean) {
+export function partnerOrderEmail(p: PartnerRow, origin: string, no: string, o: POrderMail, lines: PEmailLine[], subtotal: number, hasQuote: boolean, forCustomer: boolean, shipping: number | null = null) {
   const es = forCustomer && o.lang === "es";
   const color = hex(p.color, "#2d694b");
   const L = es
@@ -71,7 +71,7 @@ export function partnerOrderEmail(p: PartnerRow, origin: string, no: string, o: 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
 <tr style="background:#f4f4f2;"><th align="left" style="padding:8px 6px;font-size:12px;">${L.part}</th><th align="left" style="padding:8px 6px;font-size:12px;">${L.item}</th><th align="right" style="padding:8px 6px;font-size:12px;">${L.qty}</th><th align="right" style="padding:8px 6px;font-size:12px;">${L.each}</th><th align="right" style="padding:8px 6px;font-size:12px;">${L.total}</th></tr>
 ${rows}
-<tr><td colspan="4" style="padding:10px 6px;text-align:right;font-weight:700;">${L.sub}${hasQuote ? L.subQ : ""}</td><td style="padding:10px 6px;text-align:right;font-weight:800;font-size:16px;">${usd(subtotal)}</td></tr>
+<tr><td colspan="4" style="padding:10px 6px;text-align:right;font-weight:700;">${L.sub}${hasQuote ? L.subQ : ""}</td><td style="padding:10px 6px;text-align:right;font-weight:800;font-size:16px;">${usd(subtotal)}</td></tr>${shipping !== null && o.delivery === "ship" ? `<tr><td colspan="4" style="padding:4px 6px;text-align:right;font-weight:700;">${o.lang === "es" ? "Envío" : "Shipping"}</td><td style="padding:4px 6px;text-align:right;font-weight:700;">${shipping === 0 ? (o.lang === "es" ? "Gratis" : "Free") : usd(shipping)}</td></tr>` : ""}
 </table>
 ${hasQuote ? `<p style="margin:12px 0 0;font-size:13px;color:#55555c;">${L.toConf}</p>` : ""}
 ${o.po ? `<p style="margin:12px 0 0;font-size:14px;"><b>${L.po}</b> ${esc(o.po)}</p>` : ""}

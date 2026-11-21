@@ -42,6 +42,10 @@ export default async function AdcOrdersPage({ searchParams }: { searchParams: Pr
   const orders = (data ?? []) as WebOrder[];
   const { data: br } = await supabase.from("branches").select("id, name");
   const bname = new Map(((br ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]));
+  // Gun parts are drop shipped by Contractors Foam Supply (0104): marked on each line.
+  const skus = [...new Set(orders.flatMap((o) => o.items.map((l) => l.sku)).filter(Boolean))];
+  const { data: dsRows } = skus.length ? await supabase.from("products").select("sku, drop_ship_partner").in("sku", skus.slice(0, 900)).not("drop_ship_partner", "is", null) : { data: [] };
+  const dropShip = new Set(((dsRows ?? []) as { sku: string }[]).map((x) => x.sku.toUpperCase()));
   const canEdit = profile.role === "admin" || can(profile, "order_desk");
   const isAdmin = profile.role === "admin";
   const where = (o: WebOrder) =>
@@ -137,7 +141,7 @@ export default async function AdcOrdersPage({ searchParams }: { searchParams: Pr
                         {o.items.map((l, k) => (
                           <tr key={k}>
                             <td className="sku">{l.sku}</td>
-                            <td>{l.name}{l.set ? <span className="pill2 sm" style={{ marginLeft: 6 }}>Set: 1 A + 1 B</span> : null}{l.ship === "pickup" ? <span className="pill2 warn sm" style={{ marginLeft: 6 }}>Pick up only</span> : l.ship === "truckload" ? <span className="pill2 warn sm" style={{ marginLeft: 6 }}>Truckload</span> : l.ship === "freight" ? <span className="pill2 sm" style={{ marginLeft: 6 }}>Freight</span> : null}{l.on_sale ? <span className="pill2 err sm" style={{ marginLeft: 6 }}>Sale</span> : null}{l.promo ? <div className="tiny red">{l.promo}</div> : null}</td>
+                            <td>{l.name}{l.set ? <span className="pill2 sm" style={{ marginLeft: 6 }}>Set: 1 A + 1 B</span> : null}{l.ship === "pickup" ? <span className="pill2 warn sm" style={{ marginLeft: 6 }}>Pick up only</span> : l.ship === "truckload" ? <span className="pill2 warn sm" style={{ marginLeft: 6 }}>Truckload</span> : l.ship === "freight" ? <span className="pill2 sm" style={{ marginLeft: 6 }}>Freight</span> : null}{l.on_sale ? <span className="pill2 err sm" style={{ marginLeft: 6 }}>Sale</span> : null}{dropShip.has(l.sku.toUpperCase()) ? <span className="pill2 info sm" style={{ marginLeft: 6 }} title="Contractors Foam Supply ships it straight to the customer after the credit check">Drop ship: CFS</span> : null}{l.promo ? <div className="tiny red">{l.promo}</div> : null}</td>
                             <td className="n">{l.qty}</td>
                             <td className="n">{l.price === null ? <span className="faint">To price</span> : money(l.price)}</td>
                             <td className="n">{l.price === null ? "-" : money(l.price * l.qty)}</td>
