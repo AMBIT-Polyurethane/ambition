@@ -72,7 +72,7 @@ export default async function AdcOrdersPage({ searchParams }: { searchParams: Pr
             {orders.map((o, i) => {
               const [label, pill] = STATUS[o.status];
               return (
-                <details key={o.id} className="acc-item" open={i === 0 && o.status === "new"}>
+                <details key={o.id} id={`web-${o.id}`} className="acc-item" open={sp.open ? sp.open === String(o.id) : i === 0 && o.status === "new"}>
                   <summary className="acc-sum">
                     <span className="acc-who">
                       <b>ADC-{1000 + o.id} · {o.company || o.name}</b>

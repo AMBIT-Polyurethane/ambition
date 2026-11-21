@@ -4561,6 +4561,16 @@ a.ord-row:hover { background: var(--s2); color: var(--text); }
 .desk-chat { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #cf2e20; color: #fff; font-size: 11.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
 .desk-more { text-align: center; font-size: 13px; font-weight: 750; color: var(--red-text); padding: 6px; }
 .ord-loc svg:first-child { color: var(--text3); }
+.desk-web { margin: 0 0 14px; padding: 12px; background: var(--s1); border: 1.5px dashed var(--line-hover); border-radius: 16px; }
+.desk-web-h { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 2px 4px 10px; }
+.desk-web-t { display: inline-flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none; font-size: 15px; }
+.desk-web-t:hover b { color: var(--red-text); }
+.desk-web-h .desk-who { flex: 1 1 260px; }
+.desk-web-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 250px); gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.desk-card.web { border-style: dashed; }
+.desk-more.web { align-self: center; }
+.stk-n.hot { background: #cf2e20; color: #fff; }
+.acc-item[id] { scroll-margin-top: 90px; }
 @media (max-width: 760px) { .desk-board { grid-template-columns: none !important; grid-auto-columns: 78%; scroll-snap-type: x mandatory; } .desk-col { scroll-snap-align: start; } }
 
 /* ---------- Inventory dashboard (v2): what needs you, four numbers, two charts ---------- */

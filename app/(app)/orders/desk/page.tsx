@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { orderBoardCounts } from "@/lib/chat";
 import { OrderChatButton } from "@/components/chat/order-button";
-import { ChevronDown, ChevronLeft, Clock, List, OctagonAlert } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Clock, Globe, List, OctagonAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireActive } from "@/lib/session";
 import { can } from "@/lib/access";
-import { monthDay, orderNo } from "@/lib/format";
+import { money, monthDay, orderNo } from "@/lib/format";
 import { STAGES, deskAccess, waitingSince } from "@/lib/order-desk";
 import { todayCentral } from "@/lib/sale";
 import { duration } from "@/lib/desk-stats";
@@ -43,6 +43,15 @@ const BOARD: { stage: OrderStage; who: string }[] = [
   { stage: "scheduled", who: "Warehouse" },
 ];
 const PER_COL = 8;
+
+// ADC web orders waiting at the top of the desk. They aren't orders yet: staff confirm with the customer, then Accept
+// turns one into an A.I. order that joins the board.
+type WebCard = {
+  id: number; created_at: string; status: "new" | "working"; name: string; company: string | null; delivery: "ship" | "pickup" | "truckload";
+  pickup_branch: string | null; address: { city: string; state: string } | null; subtotal: number; has_quote: boolean;
+  match?: string | null; paid_at?: string | null; is_test?: boolean | null; alerts?: string[] | null;
+};
+const WEB_SHOW = 8;
 
 export default async function OrderDeskPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
@@ -108,6 +117,16 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
     q.set("from_desk", "1");
     return `/orders?${q.toString()}`;
   };
+  // ADC web orders: everyone who can confirm them (admins, order desk / CRM, ordering), not the "my orders" view.
+  const webOk = !mine && (profile.role === "admin" || can(profile, "order_desk") || can(profile, "ordering"));
+  let web: WebCard[] = [];
+  if (webOk) {
+    const { data: w, error: we } = await supabase.from("adc_orders").select("*").in("status", ["new", "working"]).order("created_at", { ascending: true }).limit(60);
+    web = we ? [] : ((w ?? []) as WebCard[]);
+  }
+  const webNew = web.filter((o) => o.status === "new").length;
+  const webWhere = (o: WebCard) =>
+    o.delivery === "pickup" ? `Pickup · ${shortB(o.pickup_branch) || "AMBIT"}` : o.delivery === "truckload" ? "Full truck" : o.address ? `Ship to ${o.address.city}, ${o.address.state}` : "Ship";
   const locLabel = branchId === "dropship" ? "Drop ship" : branchId ? shortB(branchId) : "All";
   const rangeLabel = RANGES.find((r) => r.key === range)!.label;
   void tabs;
@@ -142,6 +161,51 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
             <Link href={mine ? "/orders?status=mine" : "/orders"} className="b2 quiet sm"><List size={16} /> All orders</Link>
           </div>
         </div>
+
+        {webOk ? (
+          <section className="desk-web" aria-label={`ADC web orders: ${web.length} waiting`}>
+            <div className="desk-web-h">
+              <Link href="/orders/web" className="desk-web-t">
+                <Globe size={18} aria-hidden="true" /><b>ADC web orders</b>
+                <span className={`stk-n${webNew ? " hot" : ""}`}>{web.length}</span>
+              </Link>
+              <span className="desk-who">From the ADC store. Not on the board yet: call or email the customer (within 4 business hours), then Accept it to make it an order.</span>
+              <Link href="/orders/web" className="b2 quiet sm">Open web orders <ChevronRight size={16} aria-hidden="true" /></Link>
+            </div>
+            {web.length === 0 ? (
+              <div className="desk-none">No ADC web orders waiting</div>
+            ) : (
+              <div className="desk-web-row" role="list">
+                {web.slice(0, WEB_SHOW).map((o) => {
+                  const hours = (Date.now() - new Date(o.created_at).getTime()) / 3600_000;
+                  const newCo = o.match === "new" || o.match === "added" || o.match === "unverified";
+                  return (
+                    <Link key={o.id} href={`/orders/web?open=${o.id}#web-${o.id}`} className="desk-card web" role="listitem">
+                      <span className="row between" style={{ gap: 8 }}>
+                        <b>ADC-{1000 + o.id}</b>
+                        <span className={o.status === "new" ? "pill2 warn sm" : "pill2 sm"}>{o.status === "new" ? "New" : "Working"}</span>
+                      </span>
+                      <span className="desk-co">{o.company || o.name}</span>
+                      <span className="desk-where">{webWhere(o)} · {money(o.subtotal)}{o.has_quote ? " + to price" : ""}</span>
+                      {o.status === "new" && hours >= 2 ? (
+                        <span className={`ord-wait ${hours >= 4 ? "crit" : "warn"}`}>{hours >= 4 ? <OctagonAlert size={12} aria-hidden="true" /> : <Clock size={12} aria-hidden="true" />}Waiting {duration(hours)}</span>
+                      ) : null}
+                      {o.is_test || newCo || o.paid_at || (o.alerts?.length && !o.paid_at) ? (
+                        <span className="desk-tags">
+                          {o.is_test ? <span className="pill2 sm">Test</span> : null}
+                          {newCo ? <span className="pill2 err sm">{o.match === "unverified" ? "Not verified" : "New customer"}</span> : null}
+                          {o.paid_at ? <span className="pill2 ok sm">Paid</span> : null}
+                          {o.alerts?.length && !o.paid_at ? <span className="pill2 err sm">Action needed</span> : null}
+                        </span>
+                      ) : null}
+                    </Link>
+                  );
+                })}
+                {web.length > WEB_SHOW ? <Link href="/orders/web" className="desk-more web">+ {web.length - WEB_SHOW} more</Link> : null}
+              </div>
+            )}
+          </section>
+        ) : null}
 
         {setupMissing ? (
           <div className="alert warn">The order desk needs the database update for roles and the order desk (0011). Ask an admin to run it in Supabase.</div>
