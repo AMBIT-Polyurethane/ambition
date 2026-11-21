@@ -5,7 +5,8 @@ import { SeasonChip } from "@/components/adc/season";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { BadgeCheck, CircleAlert, Gift, Info, LoaderCircle, Minus, Plus, ShoppingCart, Trash2, Truck, UserRound } from "lucide-react";
+import { BadgeCheck, CircleAlert, Cog, Gift, Info, LoaderCircle, Minus, Plus, ShoppingCart, Trash2, Truck, UserRound } from "lucide-react";
+import { diagramThumb } from "@/lib/diagram-thumbs";
 import { useAdcCart } from "@/components/adc/cart";
 import { adcShipEstimate, placeAdcOrder, type ShipQuote } from "@/app/adc/actions";
 import { useAdc } from "@/components/adc/lang";
@@ -177,7 +178,11 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
       <section className="adc-co-cart" aria-label={t.yourCart}>
         {rows.map((r) => (
           <div key={r.key} className={`adc-line${r.gone ? " gone" : ""}`}>
-            {r.image || r.c?.image ? <img src={(r.c?.image ?? r.image)!} alt="" className="adc-line-ph" /> : <span className="adc-line-ph empty" aria-hidden="true" />}
+            {r.c?.image || r.image || diagramThumb(r.sku) ? (
+              <img src={(r.c?.image || r.image || diagramThumb(r.sku))!} alt="" className="adc-line-ph" />
+            ) : (
+              <span className="adc-line-ph empty" aria-hidden="true"><Cog size={28} strokeWidth={1.6} /></span>
+            )}
             <span className="adc-line-b">
               <b>{r.c?.name ?? r.name}</b>
               <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}</span>

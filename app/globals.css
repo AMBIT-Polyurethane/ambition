@@ -4946,7 +4946,7 @@ body:has(.adc) { background: #f4f4f2; }
 .adc-line { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto 96px 36px; gap: 12px; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--a-line); }
 .adc-line.gone { opacity: 0.5; }
 .adc-line-ph { width: 72px; height: 72px; border-radius: 12px; object-fit: contain; background: #fff; border: 1px solid var(--a-line); }
-.adc-line-ph.empty { background: #fafaf8; }
+.adc-line-ph.empty { background: #fafaf8; display: grid; place-items: center; padding: 0; color: #b9b9bf; }
 .adc-line-b { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .adc-line-b b { font-size: 15px; line-height: 1.25; }
 .adc-line-b > span { font-size: 13px; color: var(--a-ink2); }
