@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
+import { recordSmsConsent } from "@/lib/sms-consent";
+import { APP_SMS_TEXT, SMS_PHONE_NEEDED, usPhone } from "@/lib/sms-text";
 import type { FormState } from "@/app/(auth)/actions";
 
 export async function updateProfile(_prev: FormState, form: FormData): Promise<FormState> {
@@ -12,11 +14,21 @@ export async function updateProfile(_prev: FormState, form: FormData): Promise<F
     const v = String(form.get(k) ?? "").trim();
     return v ? v.slice(0, 200) : null;
   };
+  if (form.get("sms") === "on" && !usPhone(val("phone"))) return { error: SMS_PHONE_NEEDED };
   const { error } = await s.supabase
     .from("profiles")
     .update({ full_name: val("full_name"), phone: val("phone"), title: val("title"), branch_id: val("branch_id") })
     .eq("id", s.profile.id);
   if (error) return { error: error.message };
+  // The "text me" box: a dated record whenever it changes (or an opted-in number changes).
+  const smsNow = form.get("sms") === "on";
+  const smsWas = form.get("sms_was") === "1";
+  if (smsNow !== smsWas || (smsNow && (val("phone") ?? "") !== String(form.get("phone_was") ?? "").trim())) {
+    await recordSmsConsent({
+      phone: val("phone"), optedIn: smsNow, source: "app_profile", userId: s.profile.id, name: val("full_name"), text: APP_SMS_TEXT, lang: "en",
+      flags: [{ table: "profiles", column: "id", value: s.profile.id }],
+    });
+  }
   revalidatePath("/", "layout");
   return { ok: "Saved." };
 }

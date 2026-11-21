@@ -20,6 +20,7 @@ type WebOrder = {
   user_id?: string | null; promo_opt_in?: boolean | null; bucks_requested?: number | null; paid_total?: number | null; paid_at?: string | null;
   points_earned?: number | null; bucks_used?: number | null; is_test?: boolean | null;
   match?: string | null; ship_est?: number | null; alerts?: string[] | null; company_id?: string | null;
+  sms_opt_in?: boolean | null;
 };
 const MATCH: Record<string, [string, string]> = {
   verified: ["AMBIT customer (by name)", "pill2 ok sm"],
@@ -83,6 +84,7 @@ export default async function AdcOrdersPage({ searchParams }: { searchParams: Pr
                       {o.alerts?.length && !o.paid_at && o.status !== "done" && o.status !== "cancelled" ? <span className="pill2 err sm">Action needed</span> : null}
                       {o.match && MATCH[o.match] ? <span className={MATCH[o.match][1]}>{MATCH[o.match][0]}</span> : null}
                       {o.user_id ? <span className="pill2 sm" title="Has an ADC account">Account</span> : null}
+                      {o.sms_opt_in ? <span className="pill2 ok sm" title="Ticked: text me order updates">Texts OK</span> : null}
                       {o.delivery === "truckload" ? <span className="pill2 warn sm">Full truck</span> : null}
                       {o.paid_at ? <span className="pill2 ok sm">Paid</span> : null}
                       {o.sale_slug ? <span className="pill2 err sm">Sale</span> : null}

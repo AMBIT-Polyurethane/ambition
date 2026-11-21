@@ -5,6 +5,7 @@ import { updateProfile } from "@/app/(app)/profile/actions";
 import { FormMessage, Submit } from "@/components/forms";
 import type { FormState } from "@/app/(auth)/actions";
 import type { Branch, Profile } from "@/lib/types";
+import { APP_SMS_TEXT } from "@/lib/sms-text";
 
 export function ProfileForm({ profile, branches, employee }: { profile: Profile; branches: Pick<Branch, "id" | "name" | "state">[]; employee: boolean }) {
   const [state, action] = useActionState<FormState, FormData>(updateProfile, null);
@@ -27,6 +28,12 @@ export function ProfileForm({ profile, branches, employee }: { profile: Profile;
           </select>
         </label>
       </div>
+      <label className="check sms-check">
+        <input type="checkbox" name="sms" defaultChecked={Boolean(profile.sms_opt_in)} />
+        <span>{APP_SMS_TEXT} <a href="/adc/policies#sms" target="_blank" rel="noopener">Text terms &amp; privacy</a></span>
+      </label>
+      <input type="hidden" name="sms_was" value={profile.sms_opt_in ? "1" : "0"} />
+      <input type="hidden" name="phone_was" value={profile.phone ?? ""} />
       {employee ? (
         <label className="field">
           <span className="label">Job title</span>

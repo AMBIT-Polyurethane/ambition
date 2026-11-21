@@ -6,6 +6,8 @@ import { canEmailCustomers, sendEmail } from "@/lib/email";
 import { ORDERS_EMAIL, siteUrl } from "@/lib/env";
 import { estimateFor, intakeAdcOrder, priceForCustomer, type Intake } from "@/lib/adc-intake";
 import type { Strategy } from "@/lib/adc-logistics";
+import { recordSmsConsent } from "@/lib/sms-consent";
+import { dict as adcDict } from "@/lib/adc-i18n";
 
 export type AdcOrderInput = {
   name: string;
@@ -21,6 +23,7 @@ export type AdcOrderInput = {
   lang?: "en" | "es" | "zh";
   /** Email me deals (checked unless they untick it). */
   promo_opt_in?: boolean;
+  sms_opt_in?: boolean;
   /** Signed in: use their AM-BUCKS on this order (AMBIT takes them off when it confirms the total). */
   use_bucks?: boolean;
   items: { product_id?: string | null; sku?: string; name?: string; qty: number }[];
@@ -206,6 +209,14 @@ export async function placeAdcOrder(o: AdcOrderInput): Promise<AdcOrderResult> {
     branchName = (b as { name: string } | null)?.name ?? null;
   }
   const { data: auth } = await supabase.auth.getUser();
+  // "Text me order updates": keep the dated consent record, and mark the order (and their ADC account) as texts OK.
+  if (o.sms_opt_in) {
+    await recordSmsConsent({
+      phone: input.phone, optedIn: true, source: "adc_checkout", userId: auth.user?.id ?? null, name: input.name, company: input.company,
+      ref: res.order_no, text: adcDict(input.lang === "es" ? "es" : input.lang === "zh" ? "zh" : "en").smsOpt, lang: input.lang,
+      flags: [{ table: "adc_orders", column: "id", value: res.id }, ...(auth.user ? [{ table: "adc_accounts" as const, column: "user_id" as const, value: auth.user.id }] : [])],
+    });
+  }
   const mail = { ...input, account: auth.user?.email ?? null, bucks: res.bucks === null ? null : Number(res.bucks) };
 
   // Who the customer is, the Best Strategy and the alerts (never stops the order: the email still goes out).

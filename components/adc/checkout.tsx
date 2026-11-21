@@ -8,6 +8,8 @@ import { useEffect, useState, useTransition } from "react";
 import { BadgeCheck, CircleAlert, Cog, Gift, Info, LoaderCircle, Minus, Plus, ShoppingCart, Trash2, Truck, UserRound } from "lucide-react";
 import { diagramThumb } from "@/lib/diagram-thumbs";
 import { useAdcCart } from "@/components/adc/cart";
+import { AdcSmsCheck } from "@/components/adc/sms";
+import { usPhone } from "@/lib/sms-text";
 import { adcShipEstimate, placeAdcOrder, type ShipQuote } from "@/app/adc/actions";
 import { useAdc } from "@/components/adc/lang";
 import { errText } from "@/lib/adc-i18n";
@@ -138,6 +140,10 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
       return;
     }
     const s = (k: string) => String(f.get(k) ?? "");
+    if (f.get("sms") === "on" && !usPhone(s("phone"))) {
+      setError(t.smsPhone);
+      return;
+    }
     start(async () => {
       const res = await placeAdcOrder({
         name: s("name"),
@@ -151,6 +157,7 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
         website: s("website"),
         lang,
         promo_opt_in: f.get("promo") === "on",
+        sms_opt_in: f.get("sms") === "on",
         use_bucks: f.get("bucks") === "on",
         customer: {
           kind,
@@ -245,6 +252,7 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
           <label className="adc-f"><span>{t.email}</span><input name="email" type="email" required autoComplete="email" defaultValue={me?.email ?? ""} /></label>
           <label className="adc-f"><span>{t.phone}</span><input name="phone" type="tel" required autoComplete="tel" defaultValue={me?.phone ?? ""} /></label>
         </div>
+        <AdcSmsCheck />
         <div className="adc-cust">
           <span className="adc-q">{t.custQ}</span>
           <div className="adc-seg" role="radiogroup" aria-label={t.custQ}>

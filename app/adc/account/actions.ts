@@ -9,6 +9,8 @@ import { sendEmail } from "@/lib/email";
 import { currentOrigin } from "@/lib/origin";
 import { dict, errText } from "@/lib/adc-i18n";
 import { adcLang } from "@/lib/adc-lang";
+import { recordSmsConsent } from "@/lib/sms-consent";
+import { usPhone } from "@/lib/sms-text";
 
 // ADC customer accounts. Anyone can make one; it only opens their own ADC account (never AMBIT Intelligence).
 // Our own emails confirm the address and reset passwords (from orders@, through the app's mail), not Supabase's sender.
@@ -79,6 +81,7 @@ export async function adcSignUp(_p: AdcFormState, f: FormData): Promise<AdcFormS
   if (name.length < 2) return { error: errText("Please add your name.", lang) };
   if (!okEmail(email)) return { error: errText("Please add a good email address.", lang) };
   if (!pwOk(password)) return { error: t.pwShort };
+  if (f.get("sms") === "on" && !usPhone(f.get("phone"))) return { error: t.smsPhone };
   if (!serviceReady()) return { error: "Accounts aren't switched on yet. Please check out as a guest." };
   if (await throttled("signup", email)) return { error: t.tooMany };
   const meta = {
@@ -99,6 +102,12 @@ export async function adcSignUp(_p: AdcFormState, f: FormData): Promise<AdcFormS
   const m = linkEmail(lang === "es", "confirm", link, name);
   const sent = await sendEmail({ to: [email], fromName: "ADC · AMBIT Distribution Centers", subject: m.subject, html: m.html, text: m.text });
   if (sent.status !== "sent") return { error: "We couldn't send the confirmation email just now. Please try again in a minute, or check out as a guest." };
+  if (f.get("sms") === "on" && data.user?.id) {
+    await recordSmsConsent({
+      phone: meta.phone, optedIn: true, source: "adc_signup", userId: data.user.id, name, company: meta.company, text: t.smsOpt, lang,
+      flags: [{ table: "adc_accounts", column: "user_id", value: data.user.id }],
+    });
+  }
   return { sent: email, ok: t.checkEmail(email) };
 }
 
@@ -179,10 +188,24 @@ export async function adcSaveAccount(_p: AdcFormState, f: FormData): Promise<Adc
   const t = dict(await adcLang());
   const supabase = await createClient();
   const g = (k: string, n: number) => clean(f.get(k), n);
+  if (f.get("sms") === "on" && !usPhone(g("phone", 40))) return { error: t.smsPhone };
   const { error } = await supabase.rpc("adc_account_save", {
     p: { name: g("name", 120), company: g("company", 160), phone: g("phone", 40), street: g("street", 160), city: g("city", 80), state: g("state", 2), zip: g("zip", 10), promo_opt_in: f.get("promo") === "on" },
   });
   if (error) return { error: error.message.replace(/^.*?:\s*/, "") };
+  // The "text me" box: a dated record whenever it changes (or a new number is opted in).
+  const smsNow = f.get("sms") === "on";
+  if (smsNow || f.get("sms_was") === "1") {
+    const { data: c } = await supabase.auth.getClaims();
+    const uid = c?.claims?.sub as string | undefined;
+    const changed = smsNow !== (f.get("sms_was") === "1") || (smsNow && g("phone", 40) !== clean(f.get("phone_was"), 40));
+    if (uid && changed) {
+      await recordSmsConsent({
+        phone: g("phone", 40), optedIn: smsNow, source: "adc_account", userId: uid, name: g("name", 120), company: g("company", 160),
+        text: t.smsOpt, lang: await adcLang(), flags: [{ table: "adc_accounts", column: "user_id", value: uid }],
+      });
+    }
+  }
   return { ok: t.saved };
 }
 

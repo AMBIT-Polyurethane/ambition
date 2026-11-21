@@ -31,6 +31,8 @@ export type Profile = {
   email: string;
   full_name: string | null;
   phone: string | null;
+  /** Ticked "Text me order updates" (database update 0103). */
+  sms_opt_in?: boolean | null;
   title: string | null;
   role: Role;
   status: Status;

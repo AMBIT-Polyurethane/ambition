@@ -8,6 +8,7 @@ import { adcForgot, adcNotifyMe, adcResendConfirm, adcResetPassword, adcSaveAcco
 import { useAdc } from "@/components/adc/lang";
 import { useAdcCart } from "@/components/adc/cart";
 import { PwRules } from "@/components/pw-rules";
+import { AdcSmsCheck } from "@/components/adc/sms";
 
 function Go({ children }: { children: React.ReactNode }) {
   const { pending } = useFormStatus();
@@ -79,6 +80,7 @@ export function AdcAuth({ next }: { next: string }) {
             </div>
             <PwRules lang={lang} />
             <label className="adc-check"><input type="checkbox" name="promo" defaultChecked /> <span>{t.promoOpt}</span></label>
+            <AdcSmsCheck />
             <input name="website" tabIndex={-1} autoComplete="off" className="adc-hp" aria-hidden="true" />
             <Note s={upS} />
             <Go>{t.createBtn}</Go>
@@ -113,7 +115,7 @@ export function AdcResetForm() {
   );
 }
 
-export type AcctDetails = { name: string; company: string; phone: string; street: string; city: string; state: string; zip: string; promo: boolean };
+export type AcctDetails = { name: string; company: string; phone: string; street: string; city: string; state: string; zip: string; promo: boolean; sms: boolean };
 
 export function AdcDetailsForm({ d }: { d: AcctDetails }) {
   const { t } = useAdc();
@@ -132,6 +134,9 @@ export function AdcDetailsForm({ d }: { d: AcctDetails }) {
         </span>
       </div>
       <label className="adc-check"><input type="checkbox" name="promo" defaultChecked={d.promo} /> <span>{t.promoOpt}</span></label>
+      <AdcSmsCheck defaultChecked={d.sms} />
+      <input type="hidden" name="sms_was" value={d.sms ? "1" : "0"} />
+      <input type="hidden" name="phone_was" value={d.phone} />
       <Note s={s} />
       <Go>{t.saveDetails}</Go>
     </form>

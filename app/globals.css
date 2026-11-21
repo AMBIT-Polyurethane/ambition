@@ -344,6 +344,10 @@ a.tile:hover { background: var(--s2); color: var(--text); border-color: var(--li
 .input:focus, .select:focus, .textarea:focus { border-color: var(--red); outline: none; }
 .check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text2); cursor: pointer; }
 .check input { width: 20px; height: 20px; flex: none; accent-color: var(--red); }
+.check.sms-check { align-items: flex-start; font-size: 13px; line-height: 1.45; }
+.check.sms-check input { margin-top: 1px; }
+.check.sms-check a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.adc .adc-sms a { text-decoration: underline; text-underline-offset: 2px; }
 
 .btn {
   height: 54px; padding: 0 22px;
@@ -5451,7 +5455,8 @@ body:has(.adc) { background: #f4f4f2; }
 .adc a.adc-me.link:hover { border-color: var(--a-red); }
 .adc-me svg { color: var(--a-red); flex: none; }
 .adc-check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 600; color: var(--a-ink); cursor: pointer; }
-.adc-check input { width: 19px; height: 19px; margin-top: 1px; accent-color: #e33527; flex: none; }
+.adc-check input { width: 19px; height: 19px; margin-top: 1px; accent-color: #e33527; flex: none; color-scheme: light; }
+.adc-check.adc-sms span { font-weight: 500; font-size: 13px; line-height: 1.45; color: var(--a-ink2, #4b4b52); }
 .adc-truck { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: #fff8ec; border: 1px solid #f1d3a5; font-size: 14px; font-weight: 700; color: #7a4b00; }
 .adc-truck-bar { height: 10px; border-radius: 5px; background: #f3e3c4; overflow: hidden; }
 .adc-truck-bar span { display: block; height: 100%; background: #e08a00; border-radius: 5px; transition: width 0.25s; }
@@ -5495,6 +5500,8 @@ body:has(.adc) { background: #f4f4f2; }
 .adc-foot-links { display: inline-flex; gap: 16px; flex-wrap: wrap; }
 .adc-policy { max-width: 760px; margin: 0 auto; background: var(--a-card); border: 1px solid var(--a-line); border-radius: 20px; padding: 28px; line-height: 1.6; }
 .adc-policy h2 { font-size: 18px; margin: 22px 0 6px; }
+.adc-policy h2[id] { scroll-margin-top: 180px; }
+.adc-policy p + p { margin-top: 10px; }
 .adc-policy p { margin: 0; color: var(--a-ink2); }
 @media (max-width: 860px) {
   .adc-acct-grid { grid-template-columns: minmax(0, 1fr); }

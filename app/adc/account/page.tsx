@@ -40,6 +40,11 @@ export default async function AdcAccountPage({ searchParams }: { searchParams: P
       </div>
     );
   }
+  // Their "text me" box (database update 0103; off until then).
+  const supa = await createClient();
+  const { data: me } = await supa.auth.getClaims();
+  const { data: smsRow } = me?.claims?.sub ? await supa.from("adc_accounts").select("sms_opt_in").eq("user_id", me.claims.sub).maybeSingle() : { data: null };
+  const smsOn = Boolean((smsRow as { sms_opt_in?: boolean } | null)?.sms_opt_in);
   const a = acct.account;
   const worth = usd(acct.points * acct.point_value);
   const locale = lang === "es" ? "es-US" : "en-US";
@@ -96,7 +101,7 @@ export default async function AdcAccountPage({ searchParams }: { searchParams: P
           ) : null}
         </section>
         <section className="adc-acct-card" aria-label={t.saveDetails}>
-          <AdcDetailsForm d={{ name: a?.name ?? "", company: a?.company ?? "", phone: a?.phone ?? "", street: a?.street ?? "", city: a?.city ?? "", state: a?.state ?? "", zip: a?.zip ?? "", promo: a?.promo_opt_in ?? true }} />
+          <AdcDetailsForm d={{ name: a?.name ?? "", company: a?.company ?? "", phone: a?.phone ?? "", street: a?.street ?? "", city: a?.city ?? "", state: a?.state ?? "", zip: a?.zip ?? "", promo: a?.promo_opt_in ?? true, sms: smsOn }} />
         </section>
       </div>
     </div>
