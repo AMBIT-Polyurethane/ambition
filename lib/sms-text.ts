@@ -10,3 +10,7 @@ export function usPhone(raw: unknown): string | null {
 }
 
 export const SMS_PHONE_NEEDED = "To get texts, add a 10-digit US mobile number.";
+
+/** AMBIT's Privacy Policy and Terms & Conditions: carriers require a direct link to both wherever people opt in to texts. */
+export const SMS_PRIVACY_URL = "https://ambitpu.com/privacy/";
+export const SMS_TERMS_URL = "https://ambitpu.com/terms/";
