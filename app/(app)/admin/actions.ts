@@ -354,14 +354,22 @@ export async function saveProduct(form: FormData) {
     return m !== null && m >= 0 && m < 1000000 ? m : null;
   })();
   const hasMsrp = form.has("msrp");
+  // Pounds per drum (update 0106), saved on its own too.
+  const drum_lbs = (() => {
+    const l = num(form.get("drum_lbs"));
+    return l !== null && l > 0 && l < 100000 ? l : null;
+  })();
+  const hasLbs = form.has("drum_lbs");
   if (id) {
     await supabase.from("products").update(row).eq("id", id);
     if (hasShip) await supabase.from("products").update(ship).eq("id", id);
     if (hasMsrp) await supabase.from("products").update({ msrp }).eq("id", id);
+    if (hasLbs) await supabase.from("products").update({ drum_lbs }).eq("id", id);
   } else {
     const { data: made } = await supabase.from("products").insert(row).select("id").maybeSingle();
     if (hasShip && made) await supabase.from("products").update(ship).eq("id", (made as { id: string }).id);
     if (hasMsrp && made) await supabase.from("products").update({ msrp }).eq("id", (made as { id: string }).id);
+    if (hasLbs && made) await supabase.from("products").update({ drum_lbs }).eq("id", (made as { id: string }).id);
   }
   revalidatePath("/admin/products");
   revalidatePath("/order");

@@ -205,9 +205,10 @@ export function priceLines(items: PriceItem[], opts: { last?: LastPrices | null;
     if (foamSide(it) === "iso" && pair !== undefined && pair !== null) return last.iso[skuKey(byId.get(pair)?.sku ?? "")];
     return last.sku[skuKey(it.sku)];
   };
-  // Not priced yet: start from the last price (when there is one) instead of empty or list price.
+  // Not priced yet: the price list's price filled in when the order was placed (0106) comes first; with none, start
+  // from the customer's last price (when there is one) instead of empty.
   const start = (saved: number | null, last: LastPrice | undefined) =>
-    opts.prefill && last ? { price: last.price, fromLast: true } : { price: saved };
+    opts.prefill && last && saved === null ? { price: last.price, fromLast: true } : { price: saved };
   const out: PriceLine[] = [];
   for (const g of groups) {
     for (const r of g.rows) {

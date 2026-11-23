@@ -97,6 +97,8 @@ export type Product = {
   sale_ends?: string | null;
   /** The maker's MSRP (0105): what ADC shows for guns & parts (Graco and Binks require it). */
   msrp?: number | null;
+  /** Spray foam: pounds in one drum or tote (0106), so a $/lb price becomes a drum price. */
+  drum_lbs?: number | null;
   /** Private label (Alpha): only admins ever see it. */
   admin_only?: boolean;
   /** Receiving asks for the Lot / Batch # and expiration (0041). */

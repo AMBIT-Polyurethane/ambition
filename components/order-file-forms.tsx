@@ -187,7 +187,7 @@ export function NumbersForm({ orderId, po, invoice, lines = [], fix = false }: {
               invoice amount for that line divided by its drums (for example $13,020 ÷ 12 drums = $1,085.00).
             </span>
           ) : null}
-          <span className="tiny faint">{fix ? "Change the prices that were wrong. Every line needs a price. These prices count toward sales goals and AM-BUCKS." : "Spray foam, fiberglass and other customer-priced items need their price. The others start at list price: change any to match the invoice. These prices count toward sales goals."}</span>
+          <span className="tiny faint">{fix ? "Change the prices that were wrong. Every line needs a price. These prices count toward sales goals and AM-BUCKS." : "Prices start from the customer's price list (their own prices, else the base prices). Check each against the invoice and change any that differ. Every line needs a price. These prices count toward sales goals."}</span>
         </div>
       ) : null}
       {fix ? (

@@ -48,6 +48,10 @@ function ProductFields({ p, cats }: { p?: Product; cats: Category[] }) {
         <span className="label">Sq ft per bag</span>
         <input className="input sm" name="sqft_per_unit" inputMode="decimal" defaultValue={p?.sqft_per_unit ?? ""} placeholder="Batts only" />
       </label>
+      <label className="field" title="Spray foam: pounds in one drum or tote, so a $/lb price becomes a drum price (ISO 500, HFO resin 475, 5.0 resin 450).">
+        <span className="label">Lbs per drum</span>
+        <input className="input sm" name="drum_lbs" inputMode="decimal" defaultValue={p?.drum_lbs ?? ""} placeholder="Foam only" />
+      </label>
       <label className="field"><span className="label">Sort</span><input className="input sm" name="sort" type="number" defaultValue={p?.sort ?? 0} /></label>
       <label className="field">
         <span className="label">Shelf life (months)</span>

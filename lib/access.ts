@@ -20,6 +20,7 @@ export const PERMS = [
   { key: "transfers", label: "Transfers", hint: "Send stock to another AMBIT location" },
   { key: "inv_reports", label: "Inventory dashboard", hint: "Inventory Hub KPIs, charts and reports (stock value, aging, expiring lots)" },
   { key: "add_customers", label: "Add new customers", hint: "Create customer accounts after credit vetting. Everyone else sends a request" },
+  { key: "prices", label: "Customer prices", hint: "Change customer prices, base prices and the pricing dashboard" },
 ] as const;
 
 export type Perm = (typeof PERMS)[number]["key"];
@@ -27,7 +28,7 @@ export const PERM_KEYS = PERMS.map((p) => p.key) as Perm[];
 
 export const ROLES = [
   { key: "admin", label: "Admin", perms: PERM_KEYS },
-  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance" && k !== "add_customers") },
+  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance" && k !== "add_customers" && k !== "prices") },
   { key: "sales_rep", label: "Sales rep", perms: ["ordering", "price_requests", "time_off", "travel", "takeoff"] as Perm[] },
   { key: "tech", label: "Tech", perms: ["time_off", "travel", "spray_log", "complaints"] as Perm[] },
   { key: "warehouse", label: "Warehouse manager", perms: ["inventory", "receiving", "transfers", "inv_reports", "ordering", "time_off", "travel"] as Perm[] },
@@ -46,7 +47,7 @@ export function can(p: Who | null | undefined, perm: Perm): boolean {
   if (p.role === "admin") return true;
   if (p.role !== "employee") return false;
   // Before the roles update (0011) is run there are no perms yet: staff keep what they had.
-  if (p.perms == null) return perm !== "prf_approve";
+  if (p.perms == null) return perm !== "prf_approve" && perm !== "prices";
   return p.perms.includes(perm);
 }
 

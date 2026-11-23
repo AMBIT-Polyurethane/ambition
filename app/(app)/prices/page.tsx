@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FileSpreadsheet, LayoutDashboard, Tags } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { allRows, canPrice, type Basis, type PriceItem } from "@/lib/prices";
 import { TopBar } from "@/components/ui";
@@ -28,7 +30,17 @@ export default async function PricesPage({ searchParams }: { searchParams: Promi
   const customers: GridCust[] = custs.map((c) => ({ id: c.id, name: c.name, account_no: c.account_no, qb_name: c.qb_name, rep: c.sales_rep_id ? rep.get(c.sales_rep_id) ?? null : null }));
   return (
     <main className="shell full">
-      <TopBar title="Customer prices" back="/customers" />
+      <TopBar
+        title="Customer prices"
+        back="/customers"
+        right={
+          <div className="row" style={{ gap: 8 }}>
+            <Link href="/prices/base" className="btn sm ghost"><Tags size={15} /> Base prices</Link>
+            <Link href="/prices/import" className="btn sm ghost"><FileSpreadsheet size={15} /> Import foam sheet</Link>
+            <Link href="/prices/dashboard" className="btn sm dark"><LayoutDashboard size={15} /> Pricing dashboard</Link>
+          </div>
+        }
+      />
       <p className="small muted" style={{ margin: 0 }}>
         Every customer&apos;s price on every item. Pick a product group, then type, paste a block from Excel, or <b>Import a spreadsheet</b> (Customer, SKU, Price, and optionally Per: lb / sq ft / unit; or one column per SKU).
         Foam is per lb, fiberglass per sq ft. Approved price requests land here by themselves, and NetSuite will fill it later.

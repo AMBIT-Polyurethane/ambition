@@ -552,7 +552,7 @@ export default async function OrderDetailPage({
       <div className="item2" style={{ justifyContent: "space-between" }}>
         <span className="up2-sub row" style={{ gap: 8 }}>
           {order.priced_at ? "Subtotal" : "Estimated subtotal"}
-          <Help>{order.priced_at ? "From the invoice prices." : "List prices."} Final pricing, tax and freight are on the invoice.</Help>
+          <Help>{order.priced_at ? "From the invoice prices." : "From the customer's price list (their own prices, else the base prices)."} Final pricing, tax and freight are on the invoice.</Help>
         </span>
         <b>{money(order.est_subtotal)}</b>
       </div>
