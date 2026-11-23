@@ -348,15 +348,24 @@ export async function saveProduct(form: FormData) {
     })(),
   };
   const hasShip = form.has("vendor_name");
+  // The maker's MSRP (update 0105): saved on its own so a product still saves before that update is run.
+  const msrp = (() => {
+    const m = num(form.get("msrp"));
+    return m !== null && m >= 0 && m < 1000000 ? m : null;
+  })();
+  const hasMsrp = form.has("msrp");
   if (id) {
     await supabase.from("products").update(row).eq("id", id);
     if (hasShip) await supabase.from("products").update(ship).eq("id", id);
+    if (hasMsrp) await supabase.from("products").update({ msrp }).eq("id", id);
   } else {
     const { data: made } = await supabase.from("products").insert(row).select("id").maybeSingle();
     if (hasShip && made) await supabase.from("products").update(ship).eq("id", (made as { id: string }).id);
+    if (hasMsrp && made) await supabase.from("products").update({ msrp }).eq("id", (made as { id: string }).id);
   }
   revalidatePath("/admin/products");
   revalidatePath("/order");
+  revalidateTag(ADC_CATALOG_TAG);
 }
 
 export async function importProducts(rows: Record<string, string>[], hideMissing: boolean): Promise<ImportResult> {

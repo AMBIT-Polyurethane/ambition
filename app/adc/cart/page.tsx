@@ -17,7 +17,7 @@ export default async function AdcCartPage() {
   const { data: branches } = await supabase.from("branches").select("id, name").eq("active", true).order("sort");
   const cat: Record<string, CatInfo> = {};
   for (const i of items) {
-    cat[i.id] = { sku: i.sku, name: i.name, unit: i.unit, list_price: i.list_price, sale_price: i.sale_price, quote: i.quote, image: i.image, foam: i.category_id === "ambit-foam", ship: i.ship, truck_qty: i.truck_qty, is_set: i.is_set };
+    cat[i.id] = { sku: i.sku, name: i.name, unit: i.unit, list_price: i.list_price, sale_price: i.sale_price, quote: i.quote, image: i.image, foam: i.category_id === "ambit-foam", ship: i.ship, truck_qty: i.truck_qty, is_set: i.is_set, msrp: i.msrp };
   }
   const a = acct?.account;
   const me: AdcMe = acct

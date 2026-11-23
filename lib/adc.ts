@@ -26,6 +26,8 @@ export type AdcItem = {
   truck_qty: number | null;
   /** Spray foam sold as a set: 1 ISO A-side + 1 of this B-side. */
   is_set: boolean;
+  /** Guns & parts (0105): list_price is the maker's MSRP (shown with an "MSRP" tag), never a sale price. */
+  msrp: boolean;
 };
 export type AdcSale = { slug: string; name: string; starts_on: string; ends_on: string; foam_off_per_lb: number | null };
 
@@ -43,11 +45,11 @@ const loadCatalog = unstable_cache(
     if (cat.error) throw new Error(cat.error.message);
     const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
     const items = ((cat.data ?? []) as AdcItem[])
-      .map((i) => ({ ...i, list_price: n(i.list_price), sale_price: n(i.sale_price), truck_qty: n(i.truck_qty), ship: (i.ship ?? "parcel") as ShipMode, is_set: Boolean(i.is_set) }))
+      .map((i) => ({ ...i, list_price: n(i.list_price), sale_price: n(i.sale_price), truck_qty: n(i.truck_qty), ship: (i.ship ?? "parcel") as ShipMode, is_set: Boolean(i.is_set), msrp: Boolean(i.msrp) }))
       .sort((a, b) => a.cat_sort - b.cat_sort || a.sort - b.sort || a.name.localeCompare(b.name));
     return { items, sale: ((sale.data ?? []) as AdcSale[])[0] ?? null, ready: true };
   },
-  ["adc-catalog-v2"],
+  ["adc-catalog-v3"],
   { revalidate: 60, tags: [ADC_CATALOG_TAG] },
 );
 

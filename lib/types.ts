@@ -95,6 +95,8 @@ export type Product = {
   /** On sale: charged this instead of the list price, through sale_ends (blank = until it's removed). */
   sale_price?: number | null;
   sale_ends?: string | null;
+  /** The maker's MSRP (0105): what ADC shows for guns & parts (Graco and Binks require it). */
+  msrp?: number | null;
   /** Private label (Alpha): only admins ever see it. */
   admin_only?: boolean;
   /** Receiving asks for the Lot / Batch # and expiration (0041). */

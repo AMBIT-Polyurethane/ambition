@@ -104,6 +104,18 @@ export default async function CustomerPage({ params, searchParams }: { params: P
   const q = (o: Record<string, string>) => `/customers/${id}?${new URLSearchParams(o).toString()}`;
   // Material set aside for this customer (or its locations) at the branches (0071).
   const held = (await holdsAt(supabase, null)).filter((h) => where.has(h.company_id) && h.held_left > 0);
+  // AM-BUCKS (0105): finished orders earn 3 points per $100 of invoice prices; distributors never earn.
+  const [bucksBal, bucksRows, bucksSet] = await Promise.all([
+    supabase.rpc("am_bucks_company_balance", { p_company: id }),
+    supabase.from("am_bucks_ledger").select("id, points, kind, note, created_by_name, created_at, order_id").eq("company_id", id).order("created_at", { ascending: false }).limit(12),
+    supabase.from("app_settings").select("value").eq("key", "am_bucks").maybeSingle<{ value: { point_value?: number; orders_from?: string } }>(),
+  ]);
+  const bucks = bucksBal.error || bucksRows.error || !bucksSet.data?.value?.orders_from ? null : {
+    balance: Number(bucksBal.data ?? 0),
+    pv: Number(bucksSet.data.value.point_value ?? 0.01),
+    since: bucksSet.data.value.orders_from,
+    rows: (bucksRows.data ?? []) as { id: number; points: number; kind: string; note: string | null; created_by_name: string | null; created_at: string; order_id: string | null }[],
+  };
   const holder = canHold(profile);
 
   return (
@@ -212,6 +224,31 @@ export default async function CustomerPage({ params, searchParams }: { params: P
             ))}
           </ul>
           <span className="tiny faint">Their orders from that location take these drums first. Nobody else&apos;s orders get them.</span>
+        </section>
+      ) : null}
+
+      {bucks ? (
+        <section className="card col" style={{ gap: 6 }} aria-label="AM-BUCKS">
+          <div className="row between" style={{ gap: 8, flexWrap: "wrap" }}>
+            <b className="small">AM-BUCKS</b>
+            {co.distributor ? (
+              <span className="small faint">Distributor: doesn&apos;t earn AM-BUCKS</span>
+            ) : (
+              <span className="small"><b>{bucks.balance} points</b> ({money(Math.round(bucks.balance * bucks.pv * 100) / 100)})</span>
+            )}
+          </div>
+          {bucks.rows.length ? (
+            <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+              {bucks.rows.map((r) => (
+                <li key={r.id}>
+                  <b className={r.points < 0 ? "red" : undefined}>{r.points > 0 ? "+" : ""}{r.points}</b> · {r.order_id ? <Link href={`/orders/${r.order_id}`}>{r.note ?? "Order"}</Link> : r.note ?? r.kind} · {dateShort(r.created_at.slice(0, 10))}
+                  {r.kind === "redeem" && r.created_by_name ? <span className="faint"> · used by {r.created_by_name}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : !co.distributor ? (
+            <span className="tiny faint">No points yet. Orders picked up or shipped out since {dateShort(bucks.since)} earn 3 points per $100 of invoice prices.</span>
+          ) : null}
         </section>
       ) : null}
 

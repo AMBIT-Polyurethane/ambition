@@ -4918,6 +4918,9 @@ body:has(.adc) { background: #f4f4f2; }
 .adc-price.quote { font-size: 16px; font-weight: 800; color: var(--a-ink2); }
 .adc-price.big { font-size: 34px; }
 .adc-price.big.quote { font-size: 22px; }
+.adc-msrp { align-self: center; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-decoration: none; color: var(--a-ink2); border: 1px solid currentColor; border-radius: 5px; padding: 1px 6px; line-height: 1.4; cursor: help; }
+.adc-price.big .adc-msrp { font-size: 13px; padding: 2px 8px; }
+.adc-msrp.sm { font-size: 10px; padding: 0 5px; vertical-align: 1px; }
 .adc-promo { align-self: flex-start; font-size: 12.5px; font-weight: 800; color: var(--a-red); background: #fdecea; border-radius: 8px; padding: 4px 8px; }
 .adc-promo.big { font-size: 14px; padding: 6px 10px; }
 

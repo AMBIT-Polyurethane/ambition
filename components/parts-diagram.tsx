@@ -6,7 +6,7 @@ import { PART_GROUPS, type Diagram, type DiagramPart, type PartGroup } from "@/l
 import { groupName } from "@/lib/adc-i18n";
 
 /** What the store knows about a part: its price (or none), and whether it can go on an order. */
-export type PartInfo = { id: string | null; price: number | null; sale: number | null; quote: boolean };
+export type PartInfo = { id: string | null; price: number | null; sale: number | null; quote: boolean; /** ADC guns & parts: the price is the maker's MSRP (0105). */ msrp?: boolean };
 
 /** One entry on the drawing: a part can be drawn under more than one item number (a housing that only comes in its assembly). */
 const pk = (p: DiagramPart) => `${p.sku}#${p.n}`;
@@ -176,6 +176,7 @@ export function PartsDiagram({
     const i = info[sku];
     if (!i) return canAddMissing ? w.confirm : w.ask;
     if (i.quote || i.price === null) return w.quote;
+    if (i.msrp) return `${usd(i.price)} MSRP`;
     return usd(i.sale ?? i.price);
   };
   const addable = (sku: string) => Boolean(info[sku]) || canAddMissing;

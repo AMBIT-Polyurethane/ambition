@@ -27,7 +27,7 @@ export default async function AdcParts({ params }: { params: Promise<{ slug: str
   for (const s of diagramSkus(d)) {
     const x = bySku.get(s.toLowerCase());
     if (x) {
-      info[s] = { id: x.id, price: x.list_price, sale: x.sale_price, quote: x.quote };
+      info[s] = { id: x.id, price: x.list_price, sale: x.sale_price, quote: x.quote, msrp: x.msrp };
       images[s] = x.image;
     }
   }

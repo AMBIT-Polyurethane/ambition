@@ -10,8 +10,17 @@ import { longDay } from "@/lib/adc-i18n";
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Price line: the sale price with the old one crossed out, the list price, or "Request a quote". */
-export function AdcPrice({ list, sale, quote, big = false }: { list: number | null; sale: number | null; quote: boolean; big?: boolean }) {
+export function AdcPrice({ list, sale, quote, big = false, msrp = false }: { list: number | null; sale: number | null; quote: boolean; big?: boolean; msrp?: boolean }) {
   const { t } = useAdc();
+  // Guns & parts (0105): the maker's MSRP, tagged, never a sale price.
+  if (msrp && !quote && list !== null) {
+    return (
+      <span className={`adc-price${big ? " big" : ""}`}>
+        <b>{usd(list)}</b>
+        <abbr className="adc-msrp" title={t.msrpTitle}>{t.msrp}</abbr>
+      </span>
+    );
+  }
   // On sale with no everyday list price (fiberglass, blow hoses): the sale price is the price.
   if (!quote && list === null && sale !== null) {
     return (

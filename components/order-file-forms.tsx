@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Camera, FileUp, LoaderCircle, X } from "lucide-react";
-import { completeOrder, setOrderPo } from "@/app/(app)/orders/actions";
+import { completeOrder, fixOrderPrices, setOrderPo } from "@/app/(app)/orders/actions";
 import { LotPickupCheck, type LotLine } from "@/components/lot-check";
 import { uploadOrderFiles } from "@/lib/order-file-upload";
 import { dateShort, orderNo, qtyText } from "@/lib/format";
@@ -62,7 +62,7 @@ const priceNum = (v: string) => Number(v.replace(/[$,\s]/g, ""));
  * rest and can be changed to match the invoice). No invoice file: the invoices live in QuickBooks. ISO that goes with more than
  * one foam set (closed cell and open cell, say) has a price box for each set, since each set has its own price.
  */
-export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: string; po: string | null; invoice: string | null; lines?: PriceLine[] }) {
+export function NumbersForm({ orderId, po, invoice, lines = [], fix = false }: { orderId: string; po: string | null; invoice: string | null; lines?: PriceLine[]; fix?: boolean }) {
   const [prices, setPrices] = useState<Record<string, string>>(() => Object.fromEntries(lines.map((l) => [l.key, l.price === null ? "" : l.price.toFixed(2)])));
   const { busy, setBusy, error, setError } = useSend();
   const amount = (l: PriceLine) => Math.round(priceNum(prices[l.key]) * l.qty * 100) / 100;
@@ -73,8 +73,8 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    if (!String(fd.get("po") ?? "").trim()) return setError("Enter the Sales Order #.");
-    if (!String(fd.get("invoice") ?? "").trim()) return setError("Enter the Invoice # too.");
+    if (!fix && !String(fd.get("po") ?? "").trim()) return setError("Enter the Sales Order #.");
+    if (!fix && !String(fd.get("invoice") ?? "").trim()) return setError("Enter the Invoice # too.");
     if (missing.length) {
       const what = missing.map((l) => (l.with === undefined ? l.sku : `${l.sku} ${l.withName ? `with ${l.withName}` : "(extra)"}`));
       return setError(`Enter the price for ${[...new Set(what)].join(", ")} (from the invoice).`);
@@ -94,7 +94,7 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
     }
     fd.set("prices", JSON.stringify([...out.values()]));
     try {
-      await setOrderPo(fd);
+      await (fix ? fixOrderPrices(fd) : setOrderPo(fd));
     } finally {
       setBusy(false);
     }
@@ -102,20 +102,27 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
   return (
     <form onSubmit={submit} className="col" style={{ gap: 10 }}>
       <input type="hidden" name="id" value={orderId} />
-      <div className="grid2">
-        <label className="field">
-          <span className="label">Add Sales Order #</span>
-          <input className="input sm" name="po" required defaultValue={po ?? ""} placeholder="Sales Order #" />
-        </label>
-        <label className="field">
-          <span className="label">Add Invoice #</span>
-          <input className="input sm" name="invoice" required defaultValue={invoice ?? ""} placeholder="Invoice #" />
-        </label>
-      </div>
+      {fix ? (
+        <div className="price-note small">
+          This order is finished (Sales Order # {po ?? "-"} · Invoice # {invoice ?? "-"}). Saving sends it back to the order desk to update the
+          invoice in QuickBooks. When they save it, the credit team is emailed to collect or credit the difference.
+        </div>
+      ) : (
+        <div className="grid2">
+          <label className="field">
+            <span className="label">Add Sales Order #</span>
+            <input className="input sm" name="po" required defaultValue={po ?? ""} placeholder="Sales Order #" />
+          </label>
+          <label className="field">
+            <span className="label">Add Invoice #</span>
+            <input className="input sm" name="invoice" required defaultValue={invoice ?? ""} placeholder="Invoice #" />
+          </label>
+        </div>
+      )}
       {lines.length ? (
         <div className="price-box">
           <div className="row between" style={{ gap: 8 }}>
-            <span className="label">Prices from the invoice (each)</span>
+            <span className="label">{fix ? "Prices (each)" : "Prices from the invoice (each)"}</span>
             <span className="small">Total <b>{money2(total)}</b></span>
           </div>
           {filled.length ? (
@@ -180,13 +187,19 @@ export function NumbersForm({ orderId, po, invoice, lines = [] }: { orderId: str
               invoice amount for that line divided by its drums (for example $13,020 ÷ 12 drums = $1,085.00).
             </span>
           ) : null}
-          <span className="tiny faint">Spray foam, fiberglass and other customer-priced items need their price. The others start at list price: change any to match the invoice. These prices count toward sales goals.</span>
+          <span className="tiny faint">{fix ? "Change the prices that were wrong. Every line needs a price. These prices count toward sales goals and AM-BUCKS." : "Spray foam, fiberglass and other customer-priced items need their price. The others start at list price: change any to match the invoice. These prices count toward sales goals."}</span>
         </div>
+      ) : null}
+      {fix ? (
+        <label className="field">
+          <span className="label">Why (goes to the order desk and the credit team)</span>
+          <textarea className="input sm" name="note" rows={2} maxLength={500} placeholder="For example: quoted price on PRF-1042 wasn't used" />
+        </label>
       ) : null}
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="submit" className="btn sm" disabled={busy} style={{ alignSelf: "flex-start", gap: 8 }}>
         {busy ? <LoaderCircle size={16} className="spin" /> : null}
-        {busy ? "Saving…" : po ? "Save changes" : "Save Sales Order #, Invoice # & prices"}
+        {busy ? "Saving…" : fix ? "Save the new prices" : po ? "Save changes" : "Save Sales Order #, Invoice # & prices"}
       </button>
     </form>
   );

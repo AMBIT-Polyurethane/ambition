@@ -513,6 +513,57 @@ export async function sendDropShipNow(form: FormData) {
   back(id, "msg", r.made.length ? `Sent to Contractors Foam Supply as ${r.made.join(", ")}.` : "Nothing new to send: those parts were already sent.");
 }
 
+/**
+ * Admin: change the prices on a finished order (0105). It goes back to the order desk to update the QuickBooks
+ * invoice (they're emailed); once they save the new Invoice #, the credit team is emailed to settle the difference.
+ */
+export async function fixOrderPrices(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  if (s.profile.role !== "admin") back(id, "err", "Only an admin can change prices on a finished order.");
+  let prices: unknown = null;
+  try {
+    prices = JSON.parse(String(form.get("prices") ?? "null"));
+  } catch {
+    prices = null;
+  }
+  if (!Array.isArray(prices) || !prices.length) back(id, "err", "Prices are missing. Reload the page and try again.");
+  const note = String(form.get("note") ?? "").trim().slice(0, 500);
+  const { data, error } = await s.supabase.rpc("order_fix_prices", { p_order: id, p_prices: prices, p_note: note || null });
+  if (error) back(id, "err", /order_fix_prices/.test(error.message) ? "Changing prices on a finished order needs the 0105 database update first (Supabase > SQL Editor)." : error.message);
+  const r = (data ?? {}) as { revision?: number; before?: number; after?: number; changes?: OrderChange[] };
+  const changes = [`Total ${money(Number(r.before ?? 0))} → ${money(Number(r.after ?? 0))}`, ...changesText(r.changes)];
+  const sent = await sendDeskNotice(s.supabase, id, "invoice_update", note ? [...changes, `Why: ${note}`] : changes);
+  await kickForOrder(s.supabase, id, "prices fixed");
+  back(
+    id,
+    "msg",
+    `New prices saved (revision ${r.revision ?? ""}). Total ${money(Number(r.before ?? 0))} → ${money(Number(r.after ?? 0))}. The order desk ${
+      sent.status === "sent" ? "was emailed to" : "needs to"
+    } update the invoice in QuickBooks; when they save it, the credit team is emailed to ${Number(r.after) > Number(r.before) ? "collect" : "credit the customer"} the difference.`,
+  );
+}
+
+/** Order desk: put the customer's AM-BUCKS on this order (they come off the invoice), or take them back off (0105). */
+export async function applyOrderBucks(form: FormData) {
+  const s = await getSession();
+  if (!s?.profile) return;
+  const id = String(form.get("id") ?? "");
+  if (!(s.profile.role === "admin" || can(s.profile, "order_desk"))) back(id, "err", "Only the order desk can use AM-BUCKS on an order.");
+  if (form.get("undo") === "1") {
+    const { error } = await s.supabase.rpc("order_bucks_undo", { p_order: id });
+    if (error) back(id, "err", error.message);
+    back(id, "msg", "AM-BUCKS taken off this order and back on the customer's balance. If they were already on the invoice, take the discount off it in QuickBooks.");
+  }
+  const amount = Number(String(form.get("amount") ?? "").replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) back(id, "err", "Type the dollar amount to use, like 25.00.");
+  const { data, error } = await s.supabase.rpc("order_bucks_use", { p_order: id, p_amount: amount });
+  if (error) back(id, "err", /order_bucks_use/.test(error.message) ? "AM-BUCKS on orders need the 0105 database update first (Supabase > SQL Editor)." : error.message);
+  const r = (data ?? {}) as { amount?: number; left_amount?: number };
+  back(id, "msg", `${money(Number(r.amount ?? amount))} in AM-BUCKS is on this order: take it off the invoice in QuickBooks as a discount. ${money(Number(r.left_amount ?? 0))} left on their balance.`);
+}
+
 /** Accounting, at the credit check: waiting on the customer's payment before releasing (0064). */
 export async function payWaiting(form: FormData) {
   const s = await getSession();

@@ -26,6 +26,8 @@ export type CatInfo = {
   ship: "parcel" | "freight" | "pickup" | "truckload";
   truck_qty: number | null;
   is_set: boolean;
+  /** Guns & parts: the price is the maker's MSRP (0105). */
+  msrp?: boolean;
 };
 /** The signed-in shopper (prefills checkout; their AM-BUCKS can go on the order). */
 export type AdcMe = {
@@ -192,7 +194,7 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
             )}
             <span className="adc-line-b">
               <b>{r.c?.name ?? r.name}</b>
-              <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}</span>
+              <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}{r.c?.msrp && r.price !== null ? <> <abbr className="adc-msrp sm" title={t.msrpTitle}>{t.msrp}</abbr></> : null}</span>
               {r.c?.is_set ? <span className="adc-set">{t.setBadge} · {t.sets(r.qty)}</span> : null}
               {seasonOf({ sku: r.sku, name: r.c?.name ?? r.name, category_id: r.c ? (r.c.foam ? "ambit-foam" : "other") : null }) ? (
                 <span className="adc-line-season"><SeasonChip season={seasonOf({ sku: r.sku, name: r.c?.name ?? r.name, category_id: r.c ? (r.c.foam ? "ambit-foam" : "other") : null })} lang={lang} /></span>

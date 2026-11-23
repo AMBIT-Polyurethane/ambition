@@ -30,6 +30,10 @@ function ProductFields({ p, cats }: { p?: Product; cats: Category[] }) {
       </label>
       <label className="field"><span className="label">Unit</span><input className="input sm" name="unit" defaultValue={p?.unit ?? "each"} /></label>
       <label className="field"><span className="label">List price</span><input className="input sm" name="list_price" inputMode="decimal" defaultValue={p?.list_price ?? ""} placeholder="blank = on invoice" /></label>
+      <label className="field" title="Guns & parts: ADC shows this, never a lower price (Graco and Binks require it). Orders in the app still use the list price.">
+        <span className="label">MSRP (ADC shows)</span>
+        <input className="input sm" name="msrp" inputMode="decimal" defaultValue={p?.msrp ?? ""} placeholder="Guns & parts" />
+      </label>
       <label className="field">
         <span className="label">Customer pricing</span>
         <select className="select sm" name="customer_priced" defaultValue={p?.customer_priced === true ? "yes" : p?.customer_priced === false ? "no" : ""}>

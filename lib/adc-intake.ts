@@ -200,9 +200,16 @@ export async function priceForCustomer(o: { id: number; lines: PricedLine[]; amb
   const db = serviceClient();
   const ids = [...new Set(o.lines.map((l) => l.product_id).filter((x): x is string => Boolean(x)))];
   if (!ids.length) return null;
-  const [{ data: saleRows }, { data: prods }] = await Promise.all([db.rpc("adc_sale"), db.from("products").select("id, category_id").in("id", ids)]);
+  const [{ data: saleRows }, { data: prods }, { data: msrpCats }] = await Promise.all([
+    db.rpc("adc_sale"),
+    db.from("products").select("id, category_id").in("id", ids),
+    db.from("categories").select("id").eq("adc_msrp", true),
+  ]);
   const sale = ((saleRows ?? []) as { slug: string; name: string }[])[0] ?? null;
   const foam = new Set(((prods ?? []) as { id: string; category_id: string | null }[]).filter((p) => p.category_id === "ambit-foam").map((p) => p.id));
+  // Guns & parts stay at MSRP on the web order (Graco and Binks): the order desk sets the real price in A.I. (0105).
+  const mc = new Set(((msrpCats ?? []) as { id: string }[]).map((c) => c.id));
+  const msrp = new Set(((prods ?? []) as { id: string; category_id: string | null }[]).filter((p) => p.category_id && mc.has(p.category_id)).map((p) => p.id));
   const full = new Map<string, number>();
   if (sale && o.ambitCustomer) {
     const { data: s } = await db.from("web_sales").select("id").eq("slug", sale.slug).maybeSingle();
@@ -219,6 +226,7 @@ export async function priceForCustomer(o: { id: number; lines: PricedLine[]; amb
       changed = true;
       return o.ambitCustomer ? { ...l, promo: `AMBIT customer ${l.promo}` } : { ...l, promo: null };
     }
+    if (msrp.has(l.product_id)) return l;
     const f = full.get(l.product_id);
     if (f === undefined || (l.price !== null && f >= l.price)) return l;
     changed = true;

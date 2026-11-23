@@ -2,7 +2,8 @@ import { qtyText } from "@/lib/format";
 
 // Editing an order (0041): what changed, in words, for the order page, the order desk and the emails.
 
-export type OrderChange = { sku: string; name: string; unit: string; from: number; to: number };
+/** A quantity change, or (kind "price", 0105) an admin's price change on a finished order: from/to are prices each. */
+export type OrderChange = { sku: string; name: string; unit: string; from: number | null; to: number | null; kind?: "price" };
 
 export type OrderEdit = {
   id: number;
@@ -31,6 +32,10 @@ export const changeWaiting = (e: Pick<OrderEdit, "admin_needed" | "admin_approve
 
 /** "Added 4 drums AMBI-SEAL 5.0", "AMBI-TITE 204: 10 drums → 12 drums", "Removed B7700 (was 20 bags)". */
 export function changeText(c: OrderChange): string {
+  if (c.kind === "price") {
+    const usd = (v: number | null) => (v === null || v === undefined ? "no price" : Number(v).toLocaleString("en-US", { style: "currency", currency: "USD" }));
+    return `${c.name}: ${usd(c.from)} → ${usd(c.to)} each`;
+  }
   const from = Number(c.from);
   const to = Number(c.to);
   if (from === 0) return `Added ${qtyText(to, c.unit)} ${c.name}`;
