@@ -5717,3 +5717,31 @@ body:has(.adc) { background: #f4f4f2; }
 .pm-amt .input { font-size: 18px; font-weight: 700; }
 .pm-preview { display: flex; flex-direction: column; gap: 12px; }
 .pm-up { color: var(--ok-text); }
+
+/* ---------------------------------------------------------------- estimates (0108) */
+.est-pop { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; display: flex; flex-direction: column; max-height: 340px; overflow-y: auto; background: var(--s1); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.28); padding: 4px; }
+.est-pop button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: var(--text); cursor: pointer; font: inherit; }
+.est-pop button:hover, .est-pop button:focus-visible { background: var(--s2); outline: none; }
+.est-addr { display: grid; grid-template-columns: minmax(0, 1fr) 80px 110px; gap: 10px; align-items: end; }
+.est-qty { width: 84px; text-align: right; margin-left: auto; }
+.est-lines td { vertical-align: top; }
+.est-lines tfoot td { border-top: 2px solid var(--line); }
+.est-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.est-tot { display: flex; flex-direction: column; gap: 6px; font-variant-numeric: tabular-nums; }
+.est-tot > div { display: flex; justify-content: space-between; gap: 12px; }
+.est-tot .grand { border-top: 2px solid var(--line); padding-top: 8px; margin-top: 2px; font-size: 18px; font-weight: 800; }
+.est-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.est-steps > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--s2); color: var(--text3); font-size: 12px; font-weight: 700; }
+.est-steps > div.done { color: var(--ok-text); }
+.est-steps > div.now { background: var(--red); color: #fff; }
+.est-steps > div span { font-weight: 500; font-size: 11px; opacity: .85; }
+@media (max-width: 860px) {
+  .est-layout { grid-template-columns: minmax(0, 1fr); }
+  .est-addr { grid-template-columns: minmax(0, 1fr) 70px 100px; }
+  .est-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .est-addr { grid-template-columns: 1fr 1fr; }
+  .est-addr .field:first-child { grid-column: 1 / -1; }
+}
+.est-need { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }

@@ -2,7 +2,7 @@ import { TabBar } from "@/components/tabbar";
 import { colorsCss, readColors } from "@/lib/theme-colors";
 import { Sidebar, type SideEntry, type SideGroup, type SideItem } from "@/components/sidebar";
 import { requireActive, isEmployee } from "@/lib/session";
-import { can, roleLabel, seesInventory } from "@/lib/access";
+import { can, canEstimate, canFreight, roleLabel, seesInventory } from "@/lib/access";
 import { deskAccess } from "@/lib/order-desk";
 import { assistantAccess } from "@/lib/assistant/settings";
 import { opsCan, opsMember, opsRoleLabel } from "@/lib/ops/roles";
@@ -26,6 +26,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const formsWaiting = emp ? await supabase.from("form_submissions").select("id", { count: "exact", head: true }).eq("status", "submitted").not("form_key", "like", "pulse_%").neq("submitted_by", profile.id)
     .then((r) => r.count ?? 0, () => 0) : 0;
   const credit = can(profile, "credit_check") || can(profile, "order_desk") || profile.role === "admin";
+  // Estimates waiting for a CRM to add the freight (0108).
+  const needFreight = emp && canFreight(profile)
+    ? await supabase.from("estimates").select("id", { count: "exact", head: true }).eq("status", "needs_freight").then((r) => r.count ?? 0, () => 0)
+    : 0;
   const dept = (profile as { pulse_dept?: string | null }).pulse_dept ?? null;
   // The computer menu, grouped: hover a group and its pages fly out (Orders → Place an order, Order desk, Inventory…).
   const G = (group: string, label: string, icon: SideGroup["icon"], list: (SideItem | false)[]): SideGroup => ({ group, label, icon, items: list.filter(Boolean) as SideItem[] });
@@ -36,6 +40,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/chat", label: "Chat", icon: "chat", badge: chatUnread || undefined },
         G("orders", "Orders", "orders", [
           can(profile, "ordering") && { href: "/order", label: "Place an order", icon: "cart", sub: "Order for a customer" },
+          canEstimate(profile) && { href: "/estimates", label: "Estimates", icon: "quotes", sub: "Unofficial estimates for customers", badge: needFreight || undefined },
           !!deskAccess(profile) && { href: "/orders/desk", label: "Order desk", icon: "desk", sub: "Every open order, by stage" },
           !!deskAccess(profile) && { href: "/orders", label: "All orders", icon: "orders", exact: true },
           seesInventory(profile) && { href: "/inventory", label: "Inventory", icon: "inventory" },
