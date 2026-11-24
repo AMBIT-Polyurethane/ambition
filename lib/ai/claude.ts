@@ -8,8 +8,8 @@ import { shrinkImage } from "@/lib/image-shrink";
 
 export const claudeReady = () => Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 
-export function claude(): Anthropic {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 2, timeout: 100_000 });
+export function claude(opts?: { timeout?: number; maxRetries?: number }): Anthropic {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: opts?.maxRetries ?? 2, timeout: opts?.timeout ?? 100_000 });
 }
 
 type UsageLike = {
@@ -74,8 +74,10 @@ export async function fillForm<T>(opts: {
   name: string;
   description: string;
   schema: Record<string, unknown>;
+  /** How long one try may take (ms). Long answers (a full page of lines) need more than the default. */
+  timeout?: number;
 }): Promise<{ data: T; usage: Anthropic.Messages.Usage }> {
-  const api = claude();
+  const api = claude({ timeout: opts.timeout, maxRetries: opts.timeout ? 1 : undefined });
   const messages: Anthropic.Messages.MessageParam[] = [{ role: "user", content: opts.content }];
   try {
     const res = await api.messages.create({

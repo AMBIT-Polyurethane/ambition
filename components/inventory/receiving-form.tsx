@@ -84,6 +84,9 @@ export function expFrom(mfg: string, months: number | null | undefined): string 
   return d.toISOString().slice(0, 10);
 }
 
+/** Photos / PDFs read at once (each page is read side by side on the server). */
+const MAX_READ = 6;
+
 export function ReceivingForm({
   branch,
   branchName,
@@ -140,6 +143,8 @@ export function ReceivingForm({
   const [busy, setBusy] = useState<null | "upload" | "read" | "save">(null);
   const [busyKind, setBusyKind] = useState<Kind>("bol");
   const [error, setError] = useState<string | null>(null);
+  // How the last read of each document went, shown right under its photos (not at the bottom of the page).
+  const [readMsg, setReadMsg] = useState<Partial<Record<Kind, { ok: boolean; text: string; retry?: boolean }>>>({});
   // The BOL # is already on another report here: same truck sent twice, or a new load on the same ticket?
   const [matches, setMatches] = useState<BolMatch[]>([]);
   const [newLoad, setNewLoad] = useState(false);
@@ -246,18 +251,65 @@ export function ReceivingForm({
     });
   };
 
+  /** Read a document's photos / PDFs and fill in the report. Any problem shows under that document, with "Read it again". */
+  const readKind = async (kind: Kind, paths: string[]) => {
+    const doc = kind === "packing" ? "packing list" : "BOL";
+    setBusyKind(kind);
+    setBusy("read");
+    setReadMsg((m) => ({ ...m, [kind]: undefined }));
+    let r: Awaited<ReturnType<typeof readBolAction>>;
+    try {
+      r = await readBolAction({ branch, paths: paths.slice(0, MAX_READ), kind });
+    } catch (e) {
+      setBusy(null);
+      const stale = /server action|was not found|failed-to-find/i.test(String((e as Error)?.message ?? e));
+      setReadMsg((m) => ({
+        ...m,
+        [kind]: {
+          ok: false,
+          retry: !stale,
+          text: stale
+            ? "The app was updated while this page was open. Reload the page (pull down or press F5), then add the photos again."
+            : `Couldn't reach the app to read the ${doc} (check the Wi-Fi or signal), then tap Read it again.`,
+        },
+      }));
+      return;
+    }
+    setBusy(null);
+    if (!r.ok) return setReadMsg((m) => ({ ...m, [kind]: { ok: false, retry: true, text: r.error } }));
+    apply(r.read, kind);
+    const n = r.read.lines.length;
+    const matched = r.read.lines.filter((l) => l.product_id).length;
+    const pages = r.read.pages > 1 ? `${r.read.pages} pages` : "it";
+    setReadMsg((m) => ({
+      ...m,
+      [kind]: !n
+        ? { ok: false, retry: true, text: `Read ${pages} but found no items on it. Make sure each photo shows the whole page, flat and in focus, or add the lines by hand.` }
+        : {
+            ok: r.read.failed === 0,
+            retry: r.read.failed > 0,
+            text:
+              `Read ${pages}: ${n} ${n === 1 ? "line" : "lines"}, ${matched === n ? "all" : matched} matched to items here.` +
+              (matched < n ? ` ${n - matched} to pick by hand (marked below).` : "") +
+              (r.read.failed ? ` ${r.read.failed} ${r.read.failed === 1 ? "photo" : "photos"} couldn't be read: tap Read it again, or check those lines by hand.` : ""),
+          },
+    }));
+  };
+
   const addFiles = async (list: FileList | null, kind: Kind) => {
     if (!list?.length) return;
     setError(null);
+    setReadMsg((m) => ({ ...m, [kind]: undefined }));
     setBusyKind(kind);
     setBusy("upload");
     const supabase = createClient();
     const added: ReportFile[] = [];
-    for (const f of Array.from(list).slice(0, 4)) {
+    const picked = Array.from(list);
+    for (const f of picked.slice(0, MAX_READ)) {
       const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
       const isImg = f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
       if (!isPdf && !isImg) {
-        setError(`${f.name}: use a photo or a PDF.`);
+        setReadMsg((m) => ({ ...m, [kind]: { ok: false, text: `${f.name}: use a photo or a PDF.` } }));
         continue;
       }
       let body: Blob = f;
@@ -267,14 +319,14 @@ export function ReceivingForm({
         if (body !== f) type = "image/jpeg";
       }
       if (body.size > 25 * 1024 * 1024) {
-        setError(`${f.name} is over 25 MB.`);
+        setReadMsg((m) => ({ ...m, [kind]: { ok: false, text: `${f.name} is over 25 MB.` } }));
         continue;
       }
       const ext = isPdf ? "pdf" : type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
       const path = `${branch}/${kind === "packing" ? "pack" : "bol"}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
       const up = await supabase.storage.from("inventory-files").upload(path, body, { contentType: type, upsert: false });
       if (up.error) {
-        setError(`${f.name}: couldn't upload (${up.error.message}).`);
+        setReadMsg((m) => ({ ...m, [kind]: { ok: false, text: `${f.name}: couldn't upload (${up.error.message}). Try again.` } }));
         continue;
       }
       added.push({ path, name: f.name.slice(0, 120) || (kind === "packing" ? "Packing list" : "BOL"), kind });
@@ -282,11 +334,8 @@ export function ReceivingForm({
     if (!added.length) return setBusy(null);
     setFiles((fs) => [...fs, ...added]);
     if (!aiReady) return setBusy(null);
-    setBusy("read");
-    const r = await readBolAction({ branch, paths: added.map((a) => a.path), kind });
-    setBusy(null);
-    if (!r.ok) return setError(r.error);
-    apply(r.read, kind);
+    if (picked.length > MAX_READ) setError(`Only ${MAX_READ} photos are read at a time: add the rest of the pages next.`);
+    await readKind(kind, added.map((a) => a.path));
   };
   const pick = (kind: Kind, camera: boolean) => {
     pickKind.current = kind;
@@ -391,7 +440,7 @@ export function ReceivingForm({
                 </div>
                 {(busy === "upload" || busy === "read") && busyKind === k ? (
                   <div className="row small muted" style={{ gap: 8 }} role="status">
-                    <LoaderCircle size={16} className="spin" /> {busy === "upload" ? "Uploading…" : `Reading the ${k === "packing" ? "packing list" : "BOL"}… (about 20 seconds)`}
+                    <LoaderCircle size={16} className="spin" /> {busy === "upload" ? "Uploading…" : `Reading the ${k === "packing" ? "packing list" : "BOL"}… (about 30 seconds, even for several pages)`}
                   </div>
                 ) : null}
                 {mine.length ? (
@@ -399,6 +448,17 @@ export function ReceivingForm({
                     {mine.map((f) => (
                       <span key={f.path} className="pill grey"><FileText size={12} /> {f.name}{have.includes(f) ? " · on the report" : ""}</span>
                     ))}
+                  </div>
+                ) : null}
+                {readMsg[k] && busy === null ? (
+                  <div className={`alert ${readMsg[k]!.ok ? "ok" : "err"} small`} role={readMsg[k]!.ok ? "status" : "alert"}>
+                    {readMsg[k]!.ok ? <CircleCheck size={16} style={{ flex: "none", marginTop: 2 }} /> : <CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} />}
+                    <span className="grow">{readMsg[k]!.text}</span>
+                    {readMsg[k]!.retry && aiReady && mine.length ? (
+                      <button type="button" className="btn sm dark" style={{ flex: "none" }} onClick={() => void readKind(k, mine.map((f) => f.path))}>
+                        <Sparkles size={15} /> Read it again
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

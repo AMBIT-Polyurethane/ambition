@@ -6,7 +6,7 @@ import { getSession } from "@/lib/session";
 import { HUB_LOCKED_MSG, can, hubAllows } from "@/lib/access";
 import { claudeReady, friendlyClaudeError } from "@/lib/ai/claude";
 import { paperwork, readFiles, sameBol, stockItems, type BolMatch, type ReportFile } from "@/lib/incoming";
-import { readBol, type BolRead } from "@/lib/inventory/bol";
+import { MAX_FILES, readBol, type BolRead } from "@/lib/inventory/bol";
 import { kickSync } from "@/lib/inventory/sync";
 import { emailAdminsReportWaiting, emailReceiverSentBack } from "@/lib/receiving-notify";
 
@@ -26,7 +26,7 @@ export async function readBolAction(input: { branch: string; paths: string[]; ki
   if (!s) return { ok: false, error: "You don't have access to receiving." };
   const branch = String(input.branch ?? "");
   if (!hubAllows(s.profile, branch)) return { ok: false, error: HUB_LOCKED_MSG };
-  const paths = (input.paths ?? []).filter((p) => typeof p === "string" && FILE.test(p) && p.startsWith(`${branch}/`)).slice(0, 4);
+  const paths = (input.paths ?? []).filter((p) => typeof p === "string" && FILE.test(p) && p.startsWith(`${branch}/`)).slice(0, MAX_FILES);
   if (!paths.length) return { ok: false, error: "Add a photo or PDF of the BOL first." };
   if (!claudeReady()) return { ok: false, error: "Reading BOLs needs the Claude connection (ANTHROPIC_API_KEY in Vercel). Fill the report in by hand for now." };
   const { data: b } = await s.supabase.from("branches").select("name, state").eq("id", branch).maybeSingle<{ name: string; state: string }>();
