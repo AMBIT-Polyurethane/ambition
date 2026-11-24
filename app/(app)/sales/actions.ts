@@ -7,6 +7,7 @@ import { claudeReady, friendlyClaudeError } from "@/lib/ai/claude";
 import { crmActivities, crmCustomers, crmLeads, crmTasks, todayCentral } from "@/lib/crm";
 import { writeBrief, writeCustomerRead, type Brief, type CustomerRead } from "@/lib/crm-ai";
 import type { LeadStage } from "@/lib/crm-shared";
+import type { CallList, Outcome } from "@/lib/calls-shared";
 
 // Sales CRM (0109). Everything goes through the database's crm_* functions with the person's own login, so the
 // database decides whose customers and leads they can touch.
@@ -162,4 +163,51 @@ export async function importHistory(rows: HistoryRow[], first: boolean, from: st
 
 export async function importFinished(): Promise<void> {
   done();
+}
+
+// ---- Call lists (0113) ----
+
+/** Log one call on a Win-back or Cold-lead row. */
+export async function saveCall(input: { id: number; outcome: Outcome; note?: string; next_on?: string | null }): Promise<R<{ lead_id: string | null }>> {
+  const s = await hub();
+  if (!s) return { ok: false, error: "You don't have access to the sales hub." };
+  const next = input.next_on && DAY.test(input.next_on) ? input.next_on : null;
+  const { data, error } = await s.supabase.rpc("crm_call_save", { p_id: input.id, p_outcome: input.outcome, p_note: (input.note ?? "").slice(0, 4000) || null, p_next: next });
+  if (error) return { ok: false, error: /crm_call_save/.test(error.message) ? "Call lists need database update 0113 first." : error.message };
+  revalidatePath("/sales", "layout");
+  return { ok: true, lead_id: ((data ?? {}) as { lead_id?: string | null }).lead_id ?? null };
+}
+
+export type CallLoadRow = {
+  list: CallList; rep_id: string; name: string; company_name?: string; contact_name?: string; phone?: string; email?: string; street?: string;
+  city?: string; state?: string; zip?: string; source?: string; kind_guess?: string; priority?: string; last_invoice?: string; sales_12mo?: number | null;
+  prev_rep?: string; sheet_note?: string;
+};
+/** Admins: load reviewed call lists (rows already on a list are skipped). */
+export async function loadCalls(rows: CallLoadRow[], batch: string): Promise<R<{ added: number; skipped: number }>> {
+  const s = await hub();
+  if (!s || s.profile.role !== "admin") return { ok: false, error: "Only admins load call lists." };
+  let added = 0, skipped = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const part = rows.slice(i, i + 500).filter((r) => UUID.test(r.rep_id) && (r.list === "winback" || r.list === "cold"));
+    skipped += rows.slice(i, i + 500).length - part.length;
+    const { data, error } = await s.supabase.rpc("crm_calls_load", { p_rows: part, p_batch: batch.slice(0, 60) });
+    if (error) return { ok: false, error: /crm_calls_load/.test(error.message) ? "Call lists need database update 0113 first." : error.message };
+    const r = (data ?? {}) as { added?: number; skipped?: number };
+    added += Number(r.added ?? 0);
+    skipped += Number(r.skipped ?? 0);
+  }
+  revalidatePath("/sales", "layout");
+  return { ok: true, added, skipped };
+}
+
+/** Admins and sales managers: give calls to another rep. */
+export async function assignCalls(ids: number[], rep: string): Promise<R<{ n: number }>> {
+  const s = await hub();
+  if (!s || !canSalesAll(s.profile)) return { ok: false, error: "Only admins and sales managers move calls." };
+  if (!UUID.test(rep)) return { ok: false, error: "Pick the rep." };
+  const { data, error } = await s.supabase.rpc("crm_calls_assign", { p_ids: ids.filter((n) => Number.isInteger(n)), p_rep: rep });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/sales", "layout");
+  return { ok: true, n: Number(data ?? 0) };
 }

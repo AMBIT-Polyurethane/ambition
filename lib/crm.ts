@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Activity, CrmCustomer, Lead, Task } from "@/lib/crm-shared";
+import { CALL_COLS, type Call } from "@/lib/calls-shared";
 
 // Sales CRM (0109): reading with the person's own login. The database decides whose customers they see
 // (a rep: their own; admins and "Sales dashboard": everyone).
@@ -122,3 +123,25 @@ function stageLabel(s: string) {
 }
 
 export const todayCentral = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+
+/** Call lists (0113): one rep's (null = everyone's). Empty when the database update isn't in yet. */
+export async function crmCalls(db: SupabaseClient, rep: string | null): Promise<{ rows: Call[]; ready: boolean }> {
+  const rows: Call[] = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    let q = db.from("crm_calls").select(CALL_COLS).order("id").range(from, from + 999);
+    if (rep) q = q.eq("rep_id", rep);
+    const { data, error } = await q;
+    if (error) return { rows: [], ready: !/crm_calls/.test(error.message) };
+    rows.push(...((data ?? []) as Call[]).map((c) => ({ ...c, sales_12mo: c.sales_12mo === null ? null : Number(c.sales_12mo), touches: num(c.touches) })));
+    if ((data ?? []).length < 1000) break;
+  }
+  return { rows, ready: true };
+}
+
+/** How many calls were logged since a day (for "this month"), by rep. */
+export async function callsLoggedSince(db: SupabaseClient, since: string, rep: string | null): Promise<number> {
+  let q = db.from("crm_call_log").select("id, crm_calls!inner(rep_id)", { count: "exact", head: true }).gte("at", `${since}T06:00:00Z`);
+  if (rep) q = q.eq("crm_calls.rep_id", rep);
+  const { count } = await q;
+  return count ?? 0;
+}

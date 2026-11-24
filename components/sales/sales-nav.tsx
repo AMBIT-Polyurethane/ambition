@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 /** The tabs across the top of every Sales page. */
-export function SalesNav({ on, all, admin }: { on: "hub" | "pipeline" | "dashboard" | "import"; all: boolean; admin: boolean }) {
+export function SalesNav({ on, all, admin }: { on: "hub" | "calls" | "pipeline" | "dashboard" | "import"; all: boolean; admin: boolean }) {
   const tabs = [
     { key: "hub", href: "/sales", label: "My hub" },
+    { key: "calls", href: "/sales/calls", label: "My calls" },
     { key: "pipeline", href: "/sales/pipeline", label: "New-customer pipeline" },
     all && { key: "dashboard", href: "/sales/dashboard", label: "Sales dashboard" },
     admin && { key: "import", href: "/sales/import", label: "Import history" },

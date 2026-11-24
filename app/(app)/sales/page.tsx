@@ -4,7 +4,8 @@ import { ArrowRight, BellRing, CalendarClock, Info, KanbanSquare } from "lucide-
 import { requireEmployee } from "@/lib/session";
 import { canSalesAll, canSalesHub } from "@/lib/access";
 import { claudeReady } from "@/lib/ai/claude";
-import { buildAlerts, crmCustomers, crmLeads, crmTasks, historyMeta, repList, todayCentral } from "@/lib/crm";
+import { buildAlerts, crmCalls, crmCustomers, crmLeads, crmTasks, historyMeta, repList, todayCentral } from "@/lib/crm";
+import { isDone, isDue } from "@/lib/calls-shared";
 import { readNote, type Brief } from "@/lib/crm-ai";
 import { STAGES, kmoney, monthLabels } from "@/lib/crm-shared";
 import { dateShort } from "@/lib/format";
@@ -33,7 +34,7 @@ export default async function SalesHubPage({ searchParams }: { searchParams: Pro
   const who = pick === "all" ? null : pick;
   const today = todayCentral();
 
-  const [{ rows, error }, tasks, leads, meta, brief, goals, est] = await Promise.all([
+  const [{ rows, error }, tasks, leads, meta, brief, goals, est, calls] = await Promise.all([
     crmCustomers(supabase, who),
     crmTasks(supabase, who),
     crmLeads(supabase, who),
@@ -45,6 +46,7 @@ export default async function SalesHubPage({ searchParams }: { searchParams: Pro
       if (who) q = q.eq("created_by", who);
       return q;
     })(),
+    crmCalls(supabase, who),
   ]);
   const name = who ? reps.find((r) => r.id === who)?.name ?? (who === profile.id ? profile.full_name : "Rep") : "Everyone";
 
@@ -58,7 +60,12 @@ export default async function SalesHubPage({ searchParams }: { searchParams: Pro
   const estN = est.count ?? 0;
   const estTotal = ((est.data ?? []) as { total: number | null }[]).reduce((s, e) => s + Number(e.total ?? 0), 0);
   const openLeads = leads.filter((l) => l.stage !== "lost" && l.stage !== "repeat");
-  const alerts = buildAlerts(rows, tasks, leads, today);
+  const callsDue = calls.rows.filter((c) => isDue(c, today));
+  const callsOpen = calls.rows.filter((c) => !isDone(c));
+  const alerts = [
+    ...callsDue.slice(0, 6).map((c) => ({ kind: "task" as const, title: `Call back ${c.name}`, detail: `${c.list === "winback" ? "Win-back" : "Cold lead"} · ${c.next_on && c.next_on < today ? `was due ${c.next_on}` : "due today"}${c.last_note ? ` · ${c.last_note.replace(/^Call back [A-Z][a-z]{2} \d{1,2}: ?/, "")}` : ""}`, href: `/sales/calls/${c.id}`, tone: (c.next_on && c.next_on < today ? "red" : "warn") as "red" | "warn" })),
+    ...buildAlerts(rows, tasks, leads, today),
+  ];
   const names = Object.fromEntries(rows.map((c) => [c.id, c.name]));
   const labels = monthLabels();
   const months = labels.map((label, i) => ({ label, values: [rows.reduce((s, c) => s + (c.monthly[i] ?? 0), 0)] }));
@@ -94,6 +101,7 @@ export default async function SalesHubPage({ searchParams }: { searchParams: Pro
         {tile("New customers", String(fresh), "First order in the last 60 days")}
         {tile("Follow-ups due", String(due), `${tasks.length} open in all`, due ? "warn" : "")}
         {tile("Open estimates", String(estN), estN ? `${kmoney(estTotal)} waiting to turn into orders` : "None open", "", "/estimates")}
+        {calls.rows.length ? tile("Calls to make", String(callsOpen.length), `${callsOpen.filter((c) => c.list === "winback").length} win-back · ${callsOpen.filter((c) => c.list === "cold").length} cold leads${callsDue.length ? ` · ${callsDue.length} call-back${callsDue.length === 1 ? "" : "s"} due` : ""}`, callsDue.length ? "warn" : "", `/sales/calls${who && who !== profile.id ? `?rep=${who}` : !who ? "?rep=all" : ""}`) : null}
         {tile("New-customer pipeline", String(openLeads.length), openLeads.length ? `${openLeads.filter((l) => l.stage === "approved").length} approved, ready for a first order` : "Add your first lead", "", "/sales/pipeline")}
         {tile("12 months", kmoney(rows.reduce((s, c) => s + c.sales_12m, 0)), meta?.through_date ? `QuickBooks through ${dateShort(meta.through_date)}, then A.I.` : "A.I. orders only")}
       </div>
