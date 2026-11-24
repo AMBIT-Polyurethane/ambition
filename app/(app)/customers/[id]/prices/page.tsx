@@ -31,6 +31,20 @@ export default async function CustomerPricesPage({ params }: { params: Promise<{
     supabase.from("price_changes").select("batch_id, company_id, product_id, new_price, basis, effective_on").eq("company_id", id).is("applied_at", null).is("cancelled_at", null).order("effective_on"),
   ]);
   if (!co) notFound();
+  // Admins only (0091 / 0112): what we pay for each item, and the markups set for this customer by group.
+  const admin = profile.role === "admin";
+  const [costRows, markRes] = admin
+    ? await Promise.all([
+        allRows<{ product_id: string; cost: number }>((f, t) => supabase.from("product_costs").select("product_id, cost").range(f, t)),
+        supabase.from("customer_category_markups").select("category_id, markup_pct, items, set_by_name, set_at").eq("company_id", id),
+      ])
+    : [[], { data: [], error: null }];
+  const costs: Record<string, number> = {};
+  for (const c of costRows) costs[c.product_id] = Number(c.cost);
+  const markups: Record<string, { pct: number; items: number | null; by: string | null; at: string }> = {};
+  for (const m of ((markRes.error ? [] : markRes.data ?? []) as { category_id: string; markup_pct: number; items: number | null; set_by_name: string | null; set_at: string }[])) {
+    markups[m.category_id] = { pct: Number(m.markup_pct), items: m.items, by: m.set_by_name, at: m.set_at };
+  }
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
   // The base price each item falls back to: foam per lb and batts per sq ft from the base price list, else the list price.
   const baseOf = new Map(baseRows.map((b) => [b.product_id, { price: Number(b.price), basis: b.basis }]));
@@ -58,7 +72,7 @@ export default async function CustomerPricesPage({ params }: { params: Promise<{
         These prices fill in by themselves when an order is placed for them.{editable ? null : " Only people who can change customer prices change these."}
       </p>
       <PriceNote company={id} note={company.price_note ?? ""} editable={editable} />
-      <CustomerPrices company={id} items={items} cats={((cats ?? []) as { id: string; name: string }[])} prices={(prices ?? []) as CustPrice[]} editable={editable} today={today} base={base} pending={(pendRes.error ? [] : pendRes.data ?? []) as PendingChange[]} />
+      <CustomerPrices admin={admin} costs={costs} markups={markups} company={id} items={items} cats={((cats ?? []) as { id: string; name: string }[])} prices={(prices ?? []) as CustPrice[]} editable={editable} today={today} base={base} pending={(pendRes.error ? [] : pendRes.data ?? []) as PendingChange[]} />
     </main>
   );
 }

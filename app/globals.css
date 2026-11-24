@@ -5834,3 +5834,10 @@ body:has(.adc) { background: #f4f4f2; }
   .crm-follow .b2 { grid-column: 1 / -1; }
   .crm-funnel-r { grid-template-columns: 110px minmax(0, 1fr) 24px; }
 }
+
+/* Customer price sheet, admins only (0112): our cost, sell price and margin, and a markup for a whole group. */
+.cp-markup { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; }
+.cp-markup b { display: inline-flex; align-items: center; gap: 6px; }
+.cp-table th.cp-adm, .cp-table td.cp-adm { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; background: rgba(57, 135, 229, 0.06); }
+.cp-table th.cp-adm { color: #9cc4f5; }
+:root[data-theme="light"] .cp-table th.cp-adm { color: #1d4ed8; }

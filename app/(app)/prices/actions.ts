@@ -141,3 +141,23 @@ export async function importRun(): Promise<{ ok: true; rows: number; prices: num
   revalidatePath("/customers", "layout");
   return { ok: true, rows: Number(d.rows), prices: Number(d.prices) };
 }
+
+// ---------------------------------------------------------------- markup on cost by group (0112)
+
+/** Admins: remember the markup % used for one customer's product group (the prices themselves save with savePrices). */
+export async function saveCategoryMarkup(company: string, category: string, pct: number, items: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s?.profile || s.profile.role !== "admin" || s.profile.status !== "active") return { ok: false, error: "Only admins set markups." };
+  if (!/^[0-9a-f-]{36}$/i.test(company) || !/^[a-z0-9_-]{1,80}$/i.test(category) || !Number.isFinite(pct) || pct <= -100 || pct >= 10000) return { ok: false, error: "Check the markup %." };
+  const { error } = await s.supabase.from("customer_category_markups").upsert({
+    company_id: company,
+    category_id: category,
+    markup_pct: Math.round(pct * 100) / 100,
+    items,
+    set_by_name: s.profile.full_name ?? s.profile.email,
+    set_at: new Date().toISOString(),
+  });
+  if (error) return { ok: false, error: /customer_category_markups|schema cache/i.test(error.message) ? "The prices saved, but remembering the markup needs database update 0112." : error.message };
+  revalidatePath(`/customers/${company}/prices`);
+  return { ok: true };
+}
