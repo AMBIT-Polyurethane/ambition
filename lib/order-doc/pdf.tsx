@@ -463,11 +463,11 @@ function OrderPdf({ doc, approveUrl, qr, audience }: { doc: OrderDoc; approveUrl
             <Text style={s.fine}>
               {o.priced_at
                 ? `Prices are from AMBIT invoice ${o.invoice_no ?? ""}. Tax and freight are on the invoice.`
-                : "Prices are AMBIT list prices when the order was placed. Spray foam and fiberglass are billed at the account's contract price. Final pricing, tax and freight are confirmed on the AMBIT invoice."}
+                : "Prices are from this customer's AMBIT price list when the order was placed (spray foam: the set's $/lb x each drum's weight). Final pricing, tax and freight are confirmed on the AMBIT invoice."}
             </Text>
           </View>
           <View style={s.totals}>
-            <View style={s.totRow}><Text>{o.priced_at ? "Invoice-priced items" : "List-price items"} ({listed.length})</Text><Text style={s.b}>{money(subtotal)}</Text></View>
+            <View style={s.totRow}><Text>{o.priced_at ? "Invoice-priced items" : "Priced items"} ({listed.length})</Text><Text style={s.b}>{money(subtotal)}</Text></View>
             {acct.length ? (
               <View style={s.totRow}><Text style={s.sub}>Account-priced items ({acct.length})</Text><Text style={s.sub}>Account pricing</Text></View>
             ) : null}
