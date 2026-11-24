@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { can, type Perm, seesInventory } from "@/lib/access";
+import { can, canSalesHub, type Perm, seesInventory } from "@/lib/access";
 import { deskAccess } from "@/lib/order-desk";
 import { isEmployee } from "@/lib/session";
 import { linkHref } from "@/lib/links";
@@ -39,6 +39,9 @@ export async function homeApps(
     ? [
         ask,
         can(profile, "ordering") && { key: "order", label: "Order", href: "/order", icon: "cart", color: APP_COLOR.red },
+        // Sales CRM (0109 / 0113): the rep's hub and their call lists, right on the phone's home screen.
+        canSalesHub(profile) && { key: "sales", label: "Sales hub", href: "/sales", icon: "sales", color: APP_COLOR.amber },
+        canSalesHub(profile) && { key: "calls", label: "My calls", href: "/sales/calls", icon: "phone", color: APP_COLOR.green, badge: badges.calls || undefined },
         // Team Chat (0063), with unread direct messages and @mentions.
         { key: "chat", label: "Chat", href: "/chat", icon: "chat", color: APP_COLOR.blue, badge: badges.chat || undefined },
         // Walkthrough videos of the app: AMBIT employees only (contractors never get this app).

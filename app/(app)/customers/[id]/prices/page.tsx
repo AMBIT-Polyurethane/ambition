@@ -33,14 +33,23 @@ export default async function CustomerPricesPage({ params }: { params: Promise<{
   if (!co) notFound();
   // Admins only (0091 / 0112): what we pay for each item, and the markups set for this customer by group.
   const admin = profile.role === "admin";
-  const [costRows, markRes] = admin
+  const [costRows, markRes, vendRes] = admin
     ? await Promise.all([
         allRows<{ product_id: string; cost: number }>((f, t) => supabase.from("product_costs").select("product_id, cost").range(f, t)),
         supabase.from("customer_category_markups").select("category_id, markup_pct, items, set_by_name, set_at").eq("company_id", id),
+        supabase.from("vendor_costs").select("product_id, cost").limit(5000),
       ])
-    : [[], { data: [], error: null }];
+    : [[], { data: [], error: null }, { data: [], error: null }];
   const costs: Record<string, number> = {};
   for (const c of costRows) costs[c.product_id] = Number(c.cost);
+  // Drop-shipped parts (CFS's gun parts): what we pay is the vendor's price to AMBIT (0114 keeps it admins-only).
+  if (admin) {
+    const vend = new Map(((vendRes.error ? [] : vendRes.data ?? []) as { product_id: string; cost: number }[]).map((v) => [v.product_id, Number(v.cost)]));
+    for (const p of items as unknown as { id: string; drop_ship_partner?: string | null; vendor_cost?: number | null }[]) {
+      const v = vend.get(p.id) ?? (p.vendor_cost === null || p.vendor_cost === undefined ? undefined : Number(p.vendor_cost));
+      if (v !== undefined && (p.drop_ship_partner || costs[p.id] === undefined)) costs[p.id] = v;
+    }
+  }
   const markups: Record<string, { pct: number; items: number | null; by: string | null; at: string }> = {};
   for (const m of ((markRes.error ? [] : markRes.data ?? []) as { category_id: string; markup_pct: number; items: number | null; set_by_name: string | null; set_at: string }[])) {
     markups[m.category_id] = { pct: Number(m.markup_pct), items: m.items, by: m.set_by_name, at: m.set_at };

@@ -21,6 +21,8 @@ export type PItem = {
   per_customer: boolean;
   basis: "unit" | "lb";
   in_stock: boolean | null;
+  /** The maker's MSRP is the public price (Graco / Binks); signed-in customers see their own. */
+  msrp?: boolean;
 };
 
 /** Spray foam (per lb) and items with no price are added to the order and priced before it ships. */
@@ -66,7 +68,7 @@ export function PPrice({ item, big = false }: { item: PItem; big?: boolean }) {
       </span>
     );
   }
-  return <span className={cls}><b>{usd(list)}</b></span>;
+  return <span className={cls}><b>{usd(list)}</b>{item.msrp ? <span className="off ptn-msrp">{t.msrp}</span> : null}</span>;
 }
 
 function useDone(ms: number): [boolean, () => void] {

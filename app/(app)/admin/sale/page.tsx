@@ -29,6 +29,9 @@ export default async function SalePage({ searchParams }: { searchParams: Promise
     supabase.from("product_costs").select("product_id, cost").limit(5000),
   ]);
   const cost = new Map(((costs ?? []) as { product_id: string; cost: number }[]).map((c) => [c.product_id, Number(c.cost)]));
+  // Drop-shipped parts: the vendor's price to AMBIT (admins only, 0114) is what we pay.
+  const { data: vend } = await supabase.from("vendor_costs").select("product_id, cost").limit(5000);
+  for (const v of (vend ?? []) as { product_id: string; cost: number }[]) cost.set(v.product_id, Number(v.cost));
   const onSale = new Map(((items ?? []) as { product_id: string; price: number | null }[]).map((i) => [i.product_id, i.price === null ? null : Number(i.price)]));
   const all = ((prods ?? []) as unknown as P[]).filter((p) => !p.admin_only && !p.category?.admin_only);
   const row = (p: P): SaleRow => ({

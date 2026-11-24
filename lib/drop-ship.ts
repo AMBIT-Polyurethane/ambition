@@ -36,12 +36,17 @@ export async function dropShipLines(orderId: string): Promise<DropLine[]> {
     .eq("order_id", orderId)
     .order("id");
   type Row = { id: number; product_id: string | null; sku: string; name: string; unit: string | null; qty: number; product: { drop_ship_partner: string | null; vendor_cost: number | null } | null };
-  return ((data ?? []) as unknown as Row[])
-    .filter((r) => r.product_id && r.product?.drop_ship_partner && Number(r.qty) > 0)
-    .map((r) => ({
-      item_id: r.id, product_id: r.product_id!, sku: r.sku, name: r.name, unit: r.unit ?? "each", qty: Number(r.qty),
-      cost: r.product!.vendor_cost === null ? null : Number(r.product!.vendor_cost), partner: r.product!.drop_ship_partner!,
-    }));
+  const rows = ((data ?? []) as unknown as Row[]).filter((r) => r.product_id && r.product?.drop_ship_partner && Number(r.qty) > 0);
+  // The partner's price to AMBIT lives in vendor_costs (admins only, 0114); before that update it was on the product.
+  const cost = new Map<string, number>();
+  if (rows.length) {
+    const { data: vc, error } = await db.from("vendor_costs").select("product_id, cost").in("product_id", rows.map((r) => r.product_id!));
+    if (!error) for (const v of (vc ?? []) as { product_id: string; cost: number }[]) cost.set(v.product_id, Number(v.cost));
+  }
+  return rows.map((r) => ({
+    item_id: r.id, product_id: r.product_id!, sku: r.sku, name: r.name, unit: r.unit ?? "each", qty: Number(r.qty),
+    cost: cost.get(r.product_id!) ?? (r.product!.vendor_cost === null ? null : Number(r.product!.vendor_cost)), partner: r.product!.drop_ship_partner!,
+  }));
 }
 
 /** What's been sent to partners for this order so far. */

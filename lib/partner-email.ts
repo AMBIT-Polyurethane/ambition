@@ -105,3 +105,27 @@ export function partnerShippedEmail(p: PartnerRow, origin: string, no: string, n
       : `<div style="font-size:22px;font-weight:800;margin-bottom:12px;">Your order ${no} is on the way.</div><p style="margin:0;font-size:15px;line-height:1.5;">Hi ${first}, your order shipped.${tracking ? ` Tracking number: <b>${esc(tracking)}</b>.` : ""} Questions? Reply to this email or call us at ${esc(p.phone ?? "")}.</p>`;
   return partnerWrap(p, origin, `${lang === "es" ? "Pedido" : "Order"} ${no}`, inner);
 }
+
+/** "Make your password" / "Reset your password" for a store login (sent by the app, so it reaches any inbox). */
+export function partnerPasswordEmail(p: PartnerRow, origin: string, link: string, kind: "reset" | "handover", name: string | null, lang: "en" | "es" = "en") {
+  const color = hex(p.color, "#2d694b");
+  const first = name ? esc(name.split(/\s+/)[0]) : null;
+  const es = lang === "es";
+  const head =
+    kind === "handover"
+      ? `${first ? `${first}, your` : "Your"} ${esc(p.name)} store is ready for you.`
+      : es
+        ? `${first ? `${first}, r` : "R"}establezca su contraseña de ${esc(p.name)}.`
+        : `${first ? `${first}, r` : "R"}eset your ${esc(p.name)} password.`;
+  const body =
+    kind === "handover"
+      ? `<p style="margin:0 0 14px;font-size:15px;line-height:1.5;">Tap the button to make your own password. Only you will know it. Then you'll land on your store desk: your price sheet, your customers and their logins, and every order.</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.5;">Your prices, customers and orders are private to you. AMBIT staff can't see them. Only Jeremiah Bryant can look (he can't change anything), so he can help you get set up.</p>`
+      : es
+        ? `<p style="margin:0 0 14px;font-size:15px;line-height:1.5;">Toque el botón para elegir una nueva contraseña. Si usted no lo pidió, ignore este correo.</p>`
+        : `<p style="margin:0 0 14px;font-size:15px;line-height:1.5;">Tap the button to choose a new password. If you didn't ask for this, you can ignore this email.</p>`;
+  const label = kind === "handover" ? "MAKE MY PASSWORD" : es ? "NUEVA CONTRASEÑA" : "CHOOSE A NEW PASSWORD";
+  const button = `<p style="margin:20px 0 6px;"><a href="${esc(link)}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:13px 20px;border-radius:8px;">${label}</a></p>
+<p style="margin:12px 0 0;font-size:12px;color:#71717a;">${es ? "El enlace funciona por 1 hora; si se vence, use Olvidé mi contraseña en la página para entrar." : "The link works for 1 hour. If it runs out, tap Forgot password on your store's sign-in page."} ${es ? "Si el botón no funciona, copie esto en su navegador:" : "If the button doesn't work, copy this into your browser:"}<br><span style="word-break:break-all;">${esc(link)}</span></p>`;
+  return partnerWrap(p, origin, kind === "handover" ? "Your store login" : es ? "Contraseña" : "Password", `<div style="font-size:22px;font-weight:800;margin-bottom:12px;">${head}</div>${body}${button}`);
+}

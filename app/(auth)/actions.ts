@@ -3,6 +3,7 @@
 import { PW_RULE_EN, pwOk } from "@/lib/password";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { currentOrigin, safeNext } from "@/lib/origin";
 import { ADMIN_NOTIFY_EMAIL, MICROSOFT_SIGNIN } from "@/lib/env";
 import { sendEmail, wrapEmail } from "@/lib/email";
@@ -99,10 +100,29 @@ export async function requestAccess(_prev: FormState, form: FormData): Promise<F
 export async function forgotPassword(_prev: FormState, form: FormData): Promise<FormState> {
   const email = str(form, "email").toLowerCase();
   if (!email) return { error: "Enter your email." };
-  const supabase = await createClient();
   const origin = await currentOrigin();
+  const done: FormState = { ok: "If that email has an account, a reset link is on its way. Check your inbox." };
+  // Sent by the app itself (Supabase's built-in mailer only reaches a few addresses and 2 an hour).
+  if (serviceReady()) {
+    const db = serviceClient();
+    const { data: prof } = await db.from("profiles").select("full_name, partner_id, web_only").eq("email", email).maybeSingle<{ full_name: string | null; partner_id: string | null; web_only: boolean | null }>();
+    if (!prof) return done;
+    const { data } = await db.auth.admin.generateLink({ type: "recovery", email });
+    if (data?.properties?.hashed_token) {
+      const link = `${origin}/auth/callback?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=${data.properties.verification_type || "recovery"}&next=/reset-password`;
+      const first = h((prof.full_name ?? "").split(/\s+/)[0] ?? "");
+      await sendEmail({
+        to: [email],
+        subject: "Reset your AMBIT Intelligence password",
+        html: wrapEmail("Reset your password", `<p style="margin:0 0 12px;font-size:16px;">${first ? `Hi ${first},` : "Hi,"}</p><p style="margin:0 0 16px;">Tap the button to choose a new password for AMBIT Intelligence. The link works for 1 hour. If you didn't ask for this, you can ignore this email.</p><p><a href="${h(link)}" style="background:#E33527;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:700;">Choose a new password</a></p>`),
+        text: `Choose a new password for AMBIT Intelligence (works for 1 hour): ${link}`,
+      }).catch(() => null);
+    }
+    return done;
+  }
+  const supabase = await createClient();
   await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=/reset-password` });
-  return { ok: "If that email has an account, a reset link is on its way. Check your inbox." };
+  return done;
 }
 
 export async function updatePassword(_prev: FormState, form: FormData): Promise<FormState> {

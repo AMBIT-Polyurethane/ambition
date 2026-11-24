@@ -114,13 +114,26 @@ export async function setItemActive(slug: string, id: string, active: boolean): 
   return { ok: true };
 }
 
-export async function applyMarkup(slug: string, pct: number, onlyEmpty: boolean): Promise<DeskResult> {
+export async function applyMarkup(slug: string, pct: number, onlyEmpty: boolean, category: string | null = null): Promise<DeskResult> {
   const o = await owner(slug);
   if (!o) return NOT_OWNER;
-  const { data, error } = await o.supabase.rpc("partner_apply_markup", { p_partner: slug, p_pct: pct, p_only_empty: onlyEmpty });
+  const args: Record<string, unknown> = { p_partner: slug, p_pct: pct, p_only_empty: onlyEmpty };
+  if (category) args.p_category = category.slice(0, 80);
+  const { data, error } = await o.supabase.rpc("partner_apply_markup", args);
   if (error) return { ok: false, error: msg(error) };
   if (!data) return { ok: true, message: onlyEmpty ? "Nothing to set: every item that has a purchase price already has a sell price." : "Nothing to set: type purchase prices first." };
   return { ok: true, message: `Set ${data} sell ${data === 1 ? "price" : "prices"}.` };
+}
+
+/** Fill purchase prices from what AMBIT charges this store (0114): foam per lb, everything else per unit. */
+export async function fillAmbitCosts(slug: string, onlyEmpty: boolean): Promise<DeskResult> {
+  const o = await owner(slug);
+  if (!o) return NOT_OWNER;
+  const { data, error } = await o.supabase.rpc("partner_ambit_costs", { p_partner: slug, p_only_empty: onlyEmpty });
+  if (error) return { ok: false, error: /partner_ambit_costs/.test(error.message) ? "This needs AMBIT's database update 0114 first." : msg(error) };
+  if (!data) return { ok: true, message: onlyEmpty ? "Nothing to fill: every AMBIT item already has a purchase price." : "No AMBIT prices found for your items." };
+  revalidatePath(`/store/${slug}/desk`);
+  return { ok: true, message: `Filled ${data} purchase ${data === 1 ? "price" : "prices"} from your AMBIT prices.` };
 }
 
 // ------------------------------------------------------------------ orders

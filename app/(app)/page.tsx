@@ -12,7 +12,7 @@ import { opsMember } from "@/lib/ops/roles";
 import { firstName, greeting, initials, orderNo, dateShort } from "@/lib/format";
 import { BrandImg } from "@/components/brand";
 import { JumpBackIn, RecentLink } from "@/components/recent";
-import { can, seesOrders } from "@/lib/access";
+import { can, canSalesHub, seesOrders } from "@/lib/access";
 import { docProducts } from "@/lib/docs";
 import { arrangeApps, homeTiles, parseLayout } from "@/lib/home-apps";
 import { HomeGrid } from "@/components/home-grid";
@@ -151,6 +151,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       due: due?.length ?? 0,
       inventory: emp && can(profile, "inventory") ? await reorderCount(supabase, profile.branch_id) : 0,
       chat: emp ? await unreadTotal(supabase) : 0,
+      // My calls: call-backs due today or overdue (0113).
+      calls: emp && canSalesHub(profile)
+        ? await Promise.resolve(
+            supabase.from("crm_calls").select("id", { count: "exact", head: true }).eq("rep_id", profile.id).lte("next_on", todayCentral()).not("status", "in", "(won,not_interested,wrong_number)"),
+          ).then((r) => r.count ?? 0, () => 0)
+        : 0,
     }),
     parseLayout(profile.home_apps),
   );

@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Camera, Check, CircleAlert, ImagePlus, LoaderCircle, Pencil, Percent, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { Camera, Check, CircleAlert, Download, ImagePlus, LoaderCircle, Pencil, Percent, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toJpeg } from "@/lib/images";
-import { applyMarkup, saveItem, saveItemField, setItemActive, type ItemField } from "@/app/store/desk-actions";
+import { applyMarkup, fillAmbitCosts, saveItem, saveItemField, setItemActive, type ItemField } from "@/app/store/desk-actions";
 import { catName } from "@/lib/adc-i18n";
 
 export type DeskItem = {
@@ -26,17 +26,22 @@ export type DeskItem = {
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const show = (v: number | null) => (v === null ? "" : Number.isInteger(v * 100) ? v.toFixed(2) : String(v));
 const markup = (cost: number | null, price: number | null) => (cost && price !== null ? Math.round(((price - cost) / cost) * 100) : null);
+const margin = (cost: number | null, price: number | null) => (cost !== null && price ? Math.round(((price - cost) / price) * 100) : null);
 
 type Filter = "all" | "missing" | "foam" | "removed";
 
 /** Nick's price sheet: every item on his store with his purchase price, sell price and qty on hand. */
-export function DeskPrices({ slug, items: start, readOnly }: { slug: string; items: DeskItem[]; readOnly: boolean }) {
+export function DeskPrices({ slug, items: start, readOnly, ambit = {} }: { slug: string; items: DeskItem[]; readOnly: boolean; ambit?: Record<string, number> }) {
   const [items, setItems] = useState(start);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [edit, setEdit] = useState<DeskItem | "new" | null>(null);
   const [markupOpen, setMarkupOpen] = useState(false);
+  const [filling, startFill] = useTransition();
+  // Bumped after a bulk change (fill from AMBIT, markup) so every price box shows the new numbers.
+  const [ver, setVer] = useState(0);
+  const ambitN = Object.keys(ambit).length;
   const [note, setNote] = useState<string | null>(null);
 
   const live = items.filter((i) => i.active);
@@ -63,6 +68,25 @@ export function DeskPrices({ slug, items: start, readOnly }: { slug: string; ite
         </span>
         {!readOnly ? (
           <>
+            {ambitN ? (
+              <button
+                type="button"
+                className="adc-ghost dark"
+                disabled={filling}
+                title="Your purchase price = what AMBIT charges you (foam per lb). Only boxes that are empty."
+                onClick={() =>
+                  startFill(async () => {
+                    const r = await fillAmbitCosts(slug, true);
+                    if (!r.ok) return setNote(r.error);
+                    setItems((cur) => cur.map((x) => (x.active && x.cost === null && ambit[x.id] !== undefined ? { ...x, cost: ambit[x.id] } : x)));
+                    setVer((v) => v + 1);
+                    setNote(r.message ?? "Done.");
+                  })
+                }
+              >
+                {filling ? <LoaderCircle size={17} className="spin" /> : <Download size={17} aria-hidden="true" />} Fill purchase prices from AMBIT
+              </button>
+            ) : null}
             <button type="button" className="adc-ghost dark" onClick={() => setMarkupOpen(true)}><Percent size={17} aria-hidden="true" /> Set sell prices by markup</button>
             <button type="button" className="adc-cta" onClick={() => setEdit("new")}><Plus size={18} aria-hidden="true" /> Add an item</button>
           </>
@@ -101,7 +125,7 @@ export function DeskPrices({ slug, items: start, readOnly }: { slug: string; ite
           <span role="columnheader">Item</span>
           <span role="columnheader" className="num">Purchase price</span>
           <span role="columnheader" className="num">Sell price</span>
-          <span role="columnheader" className="num">Markup</span>
+          <span role="columnheader" className="num">Markup / margin</span>
           <span role="columnheader" className="num">Qty on hand</span>
           <span role="columnheader"><span className="sr-only">Change</span></span>
         </div>
@@ -114,16 +138,24 @@ export function DeskPrices({ slug, items: start, readOnly }: { slug: string; ite
               <span className="ptn-line-b">
                 <span className="adc-sku">{i.sku}{i.category ? ` · ${i.category.toUpperCase()}` : ""}</span>
                 <b>{i.name}</b>
+                {ambit[i.id] !== undefined ? (
+                  <span className={`ptn-ambit${i.cost !== null && Math.abs(i.cost - ambit[i.id]) > 0.004 ? " diff" : ""}`}>
+                    Your AMBIT price {usd(ambit[i.id])}{i.per_customer ? "/lb" : ""}{i.cost !== null && Math.abs(i.cost - ambit[i.id]) > 0.004 ? " (not what's in your purchase price)" : ""}
+                  </span>
+                ) : null}
               </span>
             </span>
-            <Cell slug={slug} item={i} field="cost" readOnly={readOnly || !i.active} label={i.per_customer ? "Your purchase price per lb" : "Your purchase price"} onSaved={(v) => patch(i.id, { cost: v })} suffix={i.per_customer ? "/lb" : undefined} />
+            <Cell key={`c${ver}`} slug={slug} item={i} field="cost" readOnly={readOnly || !i.active} label={i.per_customer ? "Your purchase price per lb" : "Your purchase price"} onSaved={(v) => patch(i.id, { cost: v })} suffix={i.per_customer ? "/lb" : undefined} />
             {i.per_customer ? (
               <span role="cell" className="ptn-pc num"><b>Per customer</b><span>Set each customer&apos;s $/lb under Customers</span></span>
             ) : (
-              <Cell slug={slug} item={i} field="price" readOnly={readOnly || !i.active} label="Your sell price" onSaved={(v) => patch(i.id, { price: v })} />
+              <Cell key={`p${ver}`} slug={slug} item={i} field="price" readOnly={readOnly || !i.active} label="Your sell price" onSaved={(v) => patch(i.id, { price: v })} />
             )}
-            <span role="cell" className="num ptn-mk">{i.per_customer ? "" : markup(i.cost, i.price) === null ? "-" : `${markup(i.cost, i.price)}%`}</span>
-            <Cell slug={slug} item={i} field="qty_on_hand" readOnly={readOnly || !i.active} label="Qty on hand" onSaved={(v) => patch(i.id, { qty_on_hand: v })} plain />
+            <span role="cell" className="num ptn-mk">
+              {i.per_customer ? "" : markup(i.cost, i.price) === null ? "-" : `${markup(i.cost, i.price)}%`}
+              {!i.per_customer && margin(i.cost, i.price) !== null ? <span className="ptn-mg">{margin(i.cost, i.price)}% margin</span> : null}
+            </span>
+            <Cell key={`q${ver}`} slug={slug} item={i} field="qty_on_hand" readOnly={readOnly || !i.active} label="Qty on hand" onSaved={(v) => patch(i.id, { qty_on_hand: v })} plain />
             <span role="cell" className="ptn-srow-a">
               {readOnly ? (
                 <button type="button" className="ptn-icon" onClick={() => setEdit(i)} aria-label={`See ${i.name}`}><Pencil size={16} /></button>
@@ -158,9 +190,11 @@ export function DeskPrices({ slug, items: start, readOnly }: { slug: string; ite
       {markupOpen ? (
         <MarkupBox
           slug={slug}
+          cats={cats}
           onClose={() => setMarkupOpen(false)}
-          onDone={(pct, onlyEmpty, message) => {
-            setItems((cur) => cur.map((x) => (x.active && !x.per_customer && x.cost !== null && (!onlyEmpty || x.price === null) ? { ...x, price: Math.round(x.cost * (1 + pct / 100) * 100) / 100 } : x)));
+          onDone={(pct, onlyEmpty, message, group) => {
+            setItems((cur) => cur.map((x) => (x.active && !x.per_customer && x.cost !== null && (!onlyEmpty || x.price === null) && (!group || x.category === group) ? { ...x, price: Math.round(x.cost * (1 + pct / 100) * 100) / 100 } : x)));
+            setVer((v) => v + 1);
             setMarkupOpen(false);
             setNote(message);
           }}
@@ -360,8 +394,9 @@ function ItemEditor({ slug, item, cats, readOnly, onClose, onSaved }: { slug: st
   );
 }
 
-function MarkupBox({ slug, onClose, onDone }: { slug: string; onClose: () => void; onDone: (pct: number, onlyEmpty: boolean, message: string) => void }) {
+function MarkupBox({ slug, cats, onClose, onDone }: { slug: string; cats: string[]; onClose: () => void; onDone: (pct: number, onlyEmpty: boolean, message: string, group: string) => void }) {
   const [pct, setPct] = useState("35");
+  const [group, setGroup] = useState("");
   const [onlyEmpty, setOnlyEmpty] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -374,8 +409,15 @@ function MarkupBox({ slug, onClose, onDone }: { slug: string; onClose: () => voi
           <button type="button" className="ptn-icon" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
         <p className="adc-muted" style={{ margin: 0 }}>Sell price = your purchase price + this markup. Only items that have a purchase price. Spray foam is left alone.</p>
+        <label className="adc-f">
+          <span>Which items</span>
+          <select className="ptn-sel" value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Which items">
+            <option value="">Every product group</option>
+            {cats.map((c) => <option key={c} value={c}>{catName(c, "en")} only</option>)}
+          </select>
+        </label>
         <label className="adc-f"><span>Markup %</span><input inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} /></label>
-        {Number.isFinite(n) && n >= 0 ? <span className="adc-muted small">Example: a part you buy for {usd(10)} sells for {usd(Math.round(10 * (1 + n / 100) * 100) / 100)}.</span> : null}
+        {Number.isFinite(n) && n >= 0 ? <span className="adc-muted small">Example: a part you buy for {usd(10)} sells for {usd(Math.round(10 * (1 + n / 100) * 100) / 100)}, a {Math.round((n / (100 + n)) * 100)}% margin.</span> : null}
         <label className="ptn-toggle"><input type="checkbox" checked={onlyEmpty} onChange={(e) => setOnlyEmpty(e.target.checked)} /> Only items with no sell price yet (keep the ones I typed)</label>
         {err ? <div className="adc-err" role="alert"><CircleAlert size={18} aria-hidden="true" /> {err}</div> : null}
         <div className="ptn-modal-f">
@@ -386,9 +428,9 @@ function MarkupBox({ slug, onClose, onDone }: { slug: string; onClose: () => voi
             disabled={pending || !Number.isFinite(n) || n < 0}
             onClick={() =>
               start(async () => {
-                const r = await applyMarkup(slug, n, onlyEmpty);
+                const r = await applyMarkup(slug, n, onlyEmpty, group || null);
                 if (!r.ok) setErr(r.error);
-                else onDone(n, onlyEmpty, r.message ?? "Done.");
+                else onDone(n, onlyEmpty, r.message ?? "Done.", group);
               })
             }
           >

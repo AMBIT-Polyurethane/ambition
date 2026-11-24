@@ -8,7 +8,7 @@ import { canEmailCustomers, sendEmail } from "@/lib/email";
 import { currentOrigin } from "@/lib/origin";
 import { hashToken } from "@/lib/invites";
 import { getPartner, partnerMe } from "@/lib/partner-store";
-import { partnerOrderEmail, type PEmailLine, type POrderMail } from "@/lib/partner-email";
+import { partnerOrderEmail, partnerPasswordEmail, type PEmailLine, type POrderMail } from "@/lib/partner-email";
 import { adcLang } from "@/lib/adc-lang";
 import { pdict, perrText } from "@/lib/partner-i18n";
 
@@ -142,9 +142,26 @@ export async function partnerForgot(_prev: PFormState, form: FormData): Promise<
   const t = pdict(await adcLang());
   const email = clean(form.get("email"), 160).toLowerCase();
   if (!okSlug(slug) || !email) return { error: t.badLogin };
-  const supabase = await createClient();
   const origin = await currentOrigin();
-  await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(`/store/${slug}/reset`)}` });
+  const next = encodeURIComponent(`/store/${slug}/reset`);
+  // Sent by the app (Supabase's own mailer only reaches a few addresses), branded as the store.
+  const p = serviceReady() ? await getPartner(slug) : null;
+  if (p && serviceReady()) {
+    const db = serviceClient();
+    const { data: prof } = await db.from("profiles").select("full_name, partner_id").eq("email", email).maybeSingle<{ full_name: string | null; partner_id: string | null }>();
+    // Only logins that belong to this store get a link from it (anyone else's "forgot" is quietly ignored).
+    if (prof && prof.partner_id === slug) {
+      const { data } = await db.auth.admin.generateLink({ type: "recovery", email });
+      if (data?.properties?.hashed_token) {
+        const link = `${origin}/auth/callback?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=${data.properties.verification_type || "recovery"}&next=${next}`;
+        const lang = await adcLang();
+        await sendEmail({ to: [email], fromName: p.name, replyTo: p.email ?? undefined, subject: lang === "es" ? `Su contraseña de ${p.name}` : `Your ${p.name} password`, html: partnerPasswordEmail(p, origin, link, "reset", prof.full_name, lang === "es" ? "es" : "en"), text: `Choose a new password: ${link}` }).catch(() => null);
+      }
+    }
+    return { ok: t.linkSent };
+  }
+  const supabase = await createClient();
+  await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=${next}` });
   return { ok: t.linkSent };
 }
 

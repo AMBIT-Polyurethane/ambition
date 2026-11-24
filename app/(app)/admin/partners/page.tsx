@@ -3,6 +3,7 @@ import { Eye, Lock, Store } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { OwnerInvite } from "./owner-invite";
+import { HandOver } from "./hand-over";
 
 export const metadata = { title: "Distributor stores" };
 
@@ -47,7 +48,10 @@ export default async function PartnersPage() {
           </div>
           {can ? (
             owner ? (
-              <div className="alert ok small" style={{ margin: 0 }}>{owner.name ?? owner.email} has made the store login ({owner.email}). The store is theirs now.</div>
+              <>
+                <div className="alert ok small" style={{ margin: 0 }}>{owner.name ?? owner.email} has the store login ({owner.email}).</div>
+                <HandOver slug={p.id} owner={owner.name ?? p.owner_name ?? "the owner"} email={owner.email} />
+              </>
             ) : (
               <OwnerInvite slug={p.id} email={p.email ?? ""} owner={p.owner_name ?? "the owner"} sentTo={invite?.email ?? null} sentAt={invite?.at ?? null} />
             )

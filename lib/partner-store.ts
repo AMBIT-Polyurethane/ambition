@@ -47,6 +47,8 @@ export type PCatItem = {
   /** This signed-in customer's price (their special price, or the store price less their % off). */
   my_price: number | null;
   sort: number;
+  /** A Graco / Binks part: anyone not signed in sees the maker's MSRP (0114). */
+  msrp?: boolean;
 };
 
 export type PartnerCustomer = {
@@ -139,7 +141,7 @@ export const catId = (name: string | null) => (name?.trim() || "Other").toLowerC
 /** What a shopper's page sends to the browser (the description stays on the server). */
 export const toPItem = (i: PCatItem): PItem => ({
   id: i.id, sku: i.sku, name: i.name, category: i.category, unit: i.unit, image: i.image,
-  price: i.price, my_price: i.my_price, per_customer: i.per_customer, basis: i.basis, in_stock: i.in_stock,
+  price: i.price, my_price: i.my_price, per_customer: i.per_customer, basis: i.basis, in_stock: i.in_stock, msrp: Boolean(i.msrp),
 });
 
 /** "CFS-1001": the order number the store and its emails show. */

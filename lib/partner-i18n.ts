@@ -37,6 +37,7 @@ const EN = {
   // prices and buttons
   quote: "Call for price",
   yourPrice: "Your price",
+  msrp: "MSRP",
   perLb: (p: string) => `${p} per lb`,
   perCustomer: "Priced for your account",
   perCustomerOut: "Sign in for your price",
@@ -189,6 +190,7 @@ const ES: PartnerDict = {
   signInBandText: "Inicie sesión para ver sus precios, volver a pedir con un toque y seguir cada pedido.",
   quote: "Llame para el precio",
   yourPrice: "Su precio",
+  msrp: "Precio de lista",
   perLb: (p) => `${p} por libra`,
   perCustomer: "Precio de su cuenta",
   perCustomerOut: "Inicie sesión para ver su precio",
