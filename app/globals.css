@@ -3445,6 +3445,9 @@ button.chat-person { cursor: pointer; }
 .todo.done .todo-check { color: var(--ok); }
 .todo-t { font-size: 14.5px; font-weight: 600; line-height: 1.35; }
 .todo.done .todo-t { text-decoration: line-through; color: var(--text3); font-weight: 500; }
+.todo-go { color: inherit; text-decoration: none; border-radius: 8px; cursor: pointer; }
+.todo-go:hover .todo-t { color: var(--red-text); }
+.todo-go:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
 .todo-add { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .todo-list.compact .todo { padding: 7px 0; }
 

@@ -1,5 +1,6 @@
 import "server-only";
 import type { Answer, Submission } from "@/lib/jotform";
+import { archiveOnly } from "@/lib/jotform-store";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CHARGE_COLS, REPORT_COLS, RECEIPT_COLS, RECEIPT_COLS_0050, addDays, chargeLabel, endCustomersText, isMonth, missing0062, monthSpan, monthView, splitOf, type XCharge, type XReceipt, type XReport } from "@/lib/expense-kinds";
 import { expensePdfName, renderExpensePdf, type PdfLine } from "@/lib/expense-doc/pdf";
@@ -13,7 +14,7 @@ export * from "@/lib/expense-kinds";
 // Expense Receipt" Jotform form: the Jotform reading below is what brings those old ones over.
 
 export const EXPENSE_FORM_ID = (process.env.EXPENSE_FORM_ID || "262964802280965").trim();
-export const expensesReady = () => /^\d{6,25}$/.test(EXPENSE_FORM_ID) && Boolean(process.env.JOTFORM_API_KEY?.trim());
+export const expensesReady = () => /^\d{6,25}$/.test(EXPENSE_FORM_ID) && (Boolean(process.env.JOTFORM_API_KEY?.trim()) || archiveOnly());
 
 export type Receipt = {
   id: string;

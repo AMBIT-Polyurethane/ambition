@@ -5,6 +5,7 @@ import { TopBar } from "@/components/ui";
 import { TrackRecent } from "@/components/recent";
 import { dateTime, jfDate, money } from "@/lib/format";
 import { jotformReady } from "@/lib/jotform";
+import { archiveOnly } from "@/lib/jotform-store";
 import { KIND_LABEL, formSections, formSubmission, hubForm, jotformEditUrl, reviewable, summarize } from "@/lib/forms";
 import { approveFormReview, clearFormReview, declineFormReview } from "../../actions";
 import { SigImage } from "@/components/sig-image";
@@ -97,7 +98,7 @@ export default async function FormSubmissionPage({
         </div>
         <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
           <a className="btn sm" href={pdfHref} target="_blank" rel="noopener noreferrer"><Download size={15} /> Download PDF</a>
-          <a className="btn dark sm" href={jotformEditUrl(sub.id)} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Edit in Jotform</a>
+          {archiveOnly() ? null : <a className="btn dark sm" href={jotformEditUrl(sub.id)} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Edit in Jotform</a>}
         </div>
       </section>
 

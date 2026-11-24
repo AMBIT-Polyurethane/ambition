@@ -6,6 +6,7 @@ import { Empty, TopBar } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { dateShort, jfDate, money, searchSafe } from "@/lib/format";
 import { JotformError, jotformReady } from "@/lib/jotform";
+import { archiveOnly } from "@/lib/jotform-store";
 import { KIND_LABEL, formSubmissions, hubForm, jotformInboxUrl, reviewable, summarize } from "@/lib/forms";
 import { extraForms, reviewsFor } from "../reviews";
 import { removeHubForm, setHubFormKind } from "../actions";
@@ -78,9 +79,11 @@ export default async function FormSubmissionsPage({
         title={form.title}
         back="/admin/forms"
         right={
-          <a className="iconbtn" href={jotformInboxUrl(formId)} target="_blank" rel="noopener noreferrer" aria-label="Open in Jotform">
-            <ExternalLink size={18} />
-          </a>
+          archiveOnly() ? undefined : (
+            <a className="iconbtn" href={jotformInboxUrl(formId)} target="_blank" rel="noopener noreferrer" aria-label="Open in Jotform">
+              <ExternalLink size={18} />
+            </a>
+          )
         }
       />
       <div className="tiny faint">

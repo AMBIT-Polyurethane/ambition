@@ -1,4 +1,5 @@
 import "server-only";
+import { archiveOnly, fromArchive } from "@/lib/jotform-store";
 
 // Reads Price Request Form (PRF) submissions from Jotform. The API key never leaves the server.
 // Vercel settings: JOTFORM_API_KEY (required), JOTFORM_API_URL and PRF_FORM_ID (optional).
@@ -7,7 +8,8 @@ export const JOTFORM_API_URL = (process.env.JOTFORM_API_URL || "https://ambit-po
 export const JOTFORM_SITE = JOTFORM_API_URL.replace(/\/API$/i, "");
 export const PRF_FORM_ID = (process.env.PRF_FORM_ID || "252896183848172").trim();
 
-export const jotformReady = () => Boolean(process.env.JOTFORM_API_KEY?.trim());
+/** Jotform (or A.I.'s copy of it, 0111) can be read. */
+export const jotformReady = () => Boolean(process.env.JOTFORM_API_KEY?.trim()) || archiveOnly();
 
 export class JotformError extends Error {}
 
@@ -22,7 +24,28 @@ export type Submission = {
   answers: Record<string, Answer>;
 };
 
+/**
+ * Reads from Jotform. When Jotform can't answer (cancelled, key removed, down), the same answer comes from A.I.'s own
+ * copy (0111); once JOTFORM_ARCHIVE_ONLY=1 is set in Vercel, only the copy is read.
+ */
 export async function api<T>(path: string, revalidate: number | false): Promise<T> {
+  if (archiveOnly()) {
+    const a = await fromArchive<T>(path).catch(() => undefined);
+    if (a === undefined) throw new JotformError("That isn't in A.I.'s copy of Jotform.");
+    return a;
+  }
+  try {
+    return await liveApi<T>(path, revalidate);
+  } catch (e) {
+    if (!(e instanceof JotformError)) throw e;
+    const a = await fromArchive<T>(path).catch(() => undefined);
+    if (a !== undefined) return a;
+    throw e;
+  }
+}
+
+/** Jotform itself (no copy). The archive step uses this so it never copies from the copy. */
+export async function liveApi<T>(path: string, revalidate: number | false): Promise<T> {
   const key = process.env.JOTFORM_API_KEY?.trim();
   if (!key) throw new JotformError("The Jotform key isn't set up yet.");
   let res: Response;

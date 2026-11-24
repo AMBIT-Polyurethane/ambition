@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, CloudDownload } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { Empty, TopBar } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -87,6 +87,14 @@ export default async function FormsHubPage({ searchParams }: { searchParams: Pro
         Every form from AMBIT&apos;s Jotform account. Open one to read past submissions, approve credit applications and account setups, and
         download any submission as a PDF.
       </p>
+      <Link href="/admin/forms/archive" className="card row" style={{ gap: 12, alignItems: "center", textDecoration: "none", color: "inherit" }}>
+        <CloudDownload size={20} style={{ flex: "none" }} />
+        <span className="grow" style={{ minWidth: 0 }}>
+          <b className="small">Copy from Jotform</b>
+          <span className="tiny muted" style={{ display: "block" }}>Save every submission and attached file into A.I. and check it, before Jotform is cancelled.</span>
+        </span>
+        <ChevronRight size={18} className="chev" />
+      </Link>
       {error ? <div className="alert err">{error}</div> : null}
       {sp.msg ? <div className="alert ok" role="status">{sp.msg}</div> : null}
       {sp.err ? <div className="alert err" role="alert">{sp.err}</div> : null}

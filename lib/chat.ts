@@ -144,13 +144,21 @@ export async function unreadTotal(db: SupabaseClient): Promise<number> {
   return error ? 0 : Number(data ?? 0);
 }
 
-export type Todo = { id: number; text: string; due_on: string | null; channel_id: string | null; message_id: number | null; from_name: string | null; source: string; done_at: string | null; created_at: string };
+export type Todo = { id: number; text: string; due_on: string | null; channel_id: string | null; message_id: number | null; parent_id?: number | null; from_name: string | null; source: string; done_at: string | null; created_at: string };
 export async function myTodos(db: SupabaseClient, uid: string, opts: { done?: boolean; limit?: number } = {}): Promise<Todo[]> {
-  let q = db.from("chat_todos").select("id, text, due_on, channel_id, message_id, from_name, source, done_at, created_at").eq("user_id", uid);
-  q = opts.done ? q.not("done_at", "is", null).order("done_at", { ascending: false }) : q.is("done_at", null).order("due_on", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false });
-  const { data, error } = await q.limit(opts.limit ?? 50);
-  return error ? [] : ((data ?? []) as Todo[]);
+  const cols = "id, text, due_on, channel_id, message_id, from_name, source, done_at, created_at";
+  const run = (select: string) => {
+    let q = db.from("chat_todos").select(select).eq("user_id", uid);
+    q = opts.done ? q.not("done_at", "is", null).order("done_at", { ascending: false }) : q.is("done_at", null).order("due_on", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false });
+    return q.limit(opts.limit ?? 50);
+  };
+  // With the message's thread, so a to-do from a reply opens that thread.
+  let { data, error } = await run(`${cols}, message:chat_messages(parent_id)`);
+  if (error) ({ data, error } = await run(cols));
+  if (error) return [];
+  return ((data ?? []) as unknown as (Todo & { message?: { parent_id: number | null } | null })[]).map(({ message, ...t }) => ({ ...t, parent_id: message?.parent_id ?? null }));
 }
+
 
 /** Text with @mentions written as @[Name](id) in the box turned into plain "@Name" plus the ids. */
 export function readMentions(body: string, staff: Staff[]): { text: string; ids: string[] } {

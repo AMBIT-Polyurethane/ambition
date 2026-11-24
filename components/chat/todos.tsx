@@ -44,21 +44,32 @@ export function TodoList({ todos: start, compact = false, adding = true }: { tod
       {todos.length ? (
         todos.map((t) => {
           const d = due(t.due_on);
+          // Where it came from: the message in its chat (a reply opens its thread).
+          const href = !t.channel_id ? null : t.parent_id ? `/chat/${t.channel_id}?m=${t.parent_id}&t=${t.parent_id}` : `/chat/${t.channel_id}${t.message_id ? `?m=${t.message_id}` : ""}`;
+          const body = (
+            <>
+              <span className="todo-t">{t.text}</span>
+              <span className="tiny muted">
+                {d ? <span className={d.late ? "err-text" : ""}>{d.t}</span> : null}
+                {d && t.from_name ? " · " : ""}
+                {t.from_name ? `from ${t.from_name.split(" ")[0]}` : ""}
+              </span>
+            </>
+          );
           return (
             <div key={t.id} className={`todo${t.done_at ? " done" : ""}`}>
               <button type="button" className="todo-check" aria-label={t.done_at ? "Mark not done" : "Mark done"} onClick={() => toggle(t)} disabled={busy === t.id}>
                 {busy === t.id ? <LoaderCircle size={19} className="spin" /> : t.done_at ? <CheckCircle2 size={20} /> : <Circle size={20} />}
               </button>
-              <div className="grow col" style={{ gap: 2, minWidth: 0 }}>
-                <span className="todo-t">{t.text}</span>
-                <span className="tiny muted">
-                  {d ? <span className={d.late ? "err-text" : ""}>{d.t}</span> : null}
-                  {d && t.from_name ? " · " : ""}
-                  {t.from_name ? `from ${t.from_name.split(" ")[0]}` : ""}
-                </span>
-              </div>
-              {t.channel_id ? (
-                <Link className="iconbtn sm" href={`/chat/${t.channel_id}${t.message_id ? `?m=${t.message_id}` : ""}`} aria-label="Open the message"><MessageSquare size={15} /></Link>
+              {href ? (
+                <Link className="grow col todo-go" style={{ gap: 2, minWidth: 0 }} href={href} title="Open the message this came from">
+                  {body}
+                </Link>
+              ) : (
+                <div className="grow col" style={{ gap: 2, minWidth: 0 }}>{body}</div>
+              )}
+              {href ? (
+                <Link className="iconbtn sm" href={href} aria-label="Open the message"><MessageSquare size={15} /></Link>
               ) : null}
             </div>
           );

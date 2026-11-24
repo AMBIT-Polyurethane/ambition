@@ -1,6 +1,7 @@
 import "server-only";
 import { jfDate } from "@/lib/format";
 import { JOTFORM_API_URL, JOTFORM_SITE, JotformError, LAYOUT, PRF_FORM_ID, answerText, api, decode, type Answer, type Submission } from "@/lib/jotform";
+import { archiveOnly, archivedFile } from "@/lib/jotform-store";
 
 // The admin forms hub: every form in AMBIT's Jotform account, found automatically.
 // Credit applications and customer account setup forms get an approval step (credit limit, terms, note);
@@ -154,10 +155,18 @@ const label = (a: Answer) => decode(a.text ?? a.name ?? "").replace(/[*:]+\s*$/,
 
 const URL_RE = /https?:\/\/[^\s"'<>,]+/g;
 
+/** Web addresses in an answer. A file box's answer is often the whole address on its own, spaces and all
+ *  ("…/uploads/…/tax cert.pdf"), so that's taken whole; anything else is searched for addresses. */
+export function urlsIn(v: string): string[] {
+  const t = v.trim();
+  if (/^https?:\/\/\S/.test(t) && !/[\n"'<>]/.test(t) && !/\shttps?:\/\//.test(t)) return [t];
+  return t.match(URL_RE) ?? [];
+}
+
 function filesOf(a: Answer): { name: string; url: string }[] {
   const urls = new Set<string>();
   const add = (v: unknown) => {
-    if (typeof v === "string") (v.match(URL_RE) ?? []).forEach((u) => urls.add(u));
+    if (typeof v === "string") urlsIn(v).forEach((u) => urls.add(u));
     else if (Array.isArray(v)) v.forEach(add);
     else if (v && typeof v === "object") Object.values(v as Record<string, unknown>).forEach(add);
   };
@@ -269,8 +278,17 @@ export function isJotformFile(u: string): boolean {
 
 /** Downloads an uploaded file or signature from Jotform with the app's key (uploads need a login to view). */
 export async function fetchJotformFile(u: string): Promise<{ body: ArrayBuffer; type: string } | null> {
+  if (!isJotformFile(u)) return null;
+  // A.I.'s own copy first (0111): quicker, and it still works once Jotform is cancelled.
+  const saved = await archivedFile(u).catch(() => null);
+  if (saved) return saved;
+  return liveJotformFile(u);
+}
+
+/** The file from Jotform itself (the archive step uses this). */
+export async function liveJotformFile(u: string): Promise<{ body: ArrayBuffer; type: string } | null> {
   const key = process.env.JOTFORM_API_KEY?.trim();
-  if (!key || !isJotformFile(u)) return null;
+  if (!key || !isJotformFile(u) || archiveOnly()) return null;
   const tries = [
     () => fetch(u, { headers: { APIKEY: key }, cache: "no-store", signal: AbortSignal.timeout(15_000) }),
     () => fetch(`${u}${u.includes("?") ? "&" : "?"}apiKey=${encodeURIComponent(key)}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) }),
