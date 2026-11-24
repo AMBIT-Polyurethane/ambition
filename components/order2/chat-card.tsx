@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ArrowRight, MessagesSquare } from "lucide-react";
 import { OrderChatOpen } from "@/components/chat/order-button";
-import { loadMessages, staffList, type ChatMsg, type Staff } from "@/lib/chat";
+import { chatGroups, groupTags, loadMessages, staffList, type ChatMsg, type Staff } from "@/lib/chat";
 import { OrderChatCompose } from "@/components/order2/chat-compose";
 
 const time = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -18,10 +18,13 @@ export function MentionText({ body, staff }: { body: string; staff: Staff[] }) {
 
 /** The order's team chat, beside the order: the last few messages and a way in. */
 export async function ChatCard({ db, orderId, me, meName }: { db: SupabaseClient; orderId: string; me: string; meName: string }) {
-  const [{ data: found }, staff] = await Promise.all([
+  const [{ data: found }, people, groups] = await Promise.all([
     db.from("chat_channels").select("id").eq("order_id", orderId).maybeSingle<{ id: string }>(),
     staffList(db),
+    chatGroups(db),
   ]);
+  // Groups first (@Orders Group is one tag), then the people.
+  const staff = [...groupTags(groups), ...people];
   // Nobody has opened it yet: make it now, so the box below works straight away.
   let chan = found;
   if (!chan) {
@@ -29,7 +32,7 @@ export async function ChatCard({ db, orderId, me, meName }: { db: SupabaseClient
     chan = data ? { id: String(data) } : null;
   }
   let msgs: ChatMsg[] = [];
-  if (chan) msgs = (await loadMessages(db, chan.id, me, new Map(staff.map((s) => [s.id, s.name])), { limit: 5 })).filter((m) => !m.deleted_at);
+  if (chan) msgs = (await loadMessages(db, chan.id, me, new Map(people.map((s) => [s.id, s.name])), { limit: 5 })).filter((m) => !m.deleted_at);
   return (
     <aside className="card2 chat2" aria-label="Order chat">
       <div className="card2-h">

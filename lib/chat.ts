@@ -4,7 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Team Chat (0063): the shapes the screens use, and reading conversations with the person's own login (the
 // database decides what they can see).
 
-export type Staff = { id: string; name: string; first: string; role: string | null; branch: string | null };
+export type Staff = { id: string; name: string; first: string; role: string | null; branch: string | null; members?: string[] };
+/** A group that's tagged as one (@Orders Group, @Admins, @Credit Team; 0110). */
+export type ChatGroup = { key: string; name: string; rule: string; listed: string[]; members: string[] };
 export type ChatFile = { path: string; name: string; type: string; size: number; url?: string | null };
 export type Reaction = { emoji: string; n: number; mine: boolean; who: string[] };
 export type ChatMsg = {
@@ -60,6 +62,17 @@ export async function staffList(db: SupabaseClient): Promise<Staff[]> {
     return { id: p.id, name, first: name.split(/\s+/)[0], role: p.job_role, branch: p.branch_id };
   });
 }
+
+/** The chat groups and who is in each right now (empty before the 0110 update). */
+export async function chatGroups(db: SupabaseClient): Promise<ChatGroup[]> {
+  const { data, error } = await db.rpc("chat_groups_list");
+  if (error || !Array.isArray(data)) return [];
+  return (data as ChatGroup[]).map((g) => ({ ...g, listed: g.listed ?? [], members: g.members ?? [] }));
+}
+
+/** A group as an @ tag next to the people: one name, everyone in it behind it. */
+export const groupTags = (groups: ChatGroup[]): Staff[] =>
+  groups.map((g) => ({ id: `group:${g.key}`, name: g.name, first: g.name.split(/\s+/)[0], role: "group", branch: null, members: g.members }));
 
 /** A conversation's title as people see it. */
 export const channelTitle = (c: Pick<ChannelRow, "kind" | "name" | "people">) => (c.kind === "dm" ? c.people || "Just you" : c.name);

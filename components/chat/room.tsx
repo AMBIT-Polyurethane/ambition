@@ -65,6 +65,8 @@ function Body({ text, staff, me }: { text: string; staff: Staff[]; me: string })
     return out;
   }, [text, names]);
   const meName = staff.find((s) => s.id === me)?.name;
+  // A group tag (@Orders Group) is one tag; it's "you" when you're in the group.
+  const group = (v: string) => staff.find((s) => s.members && s.name === v);
   return (
     <>
       {parts.map((p, i) =>
@@ -73,7 +75,7 @@ function Body({ text, staff, me }: { text: string; staff: Staff[]; me: string })
         ) : p.t === "ord" ? (
           <Link key={i} href={`/orders/no/${p.v.slice(4)}`} className="chat-ord">{p.v}</Link>
         ) : p.t === "at" ? (
-          <span key={i} className={`chat-at${p.v.slice(1) === meName ? " me" : ""}`}>{p.v}</span>
+          <span key={i} className={`chat-at${group(p.v.slice(1)) ? " group" : ""}${p.v.slice(1) === meName || group(p.v.slice(1))?.members?.includes(me) ? " me" : ""}`}>{p.v}</span>
         ) : p.t === "b" ? (
           <b key={i}>{p.v.slice(2, -2)}</b>
         ) : (
@@ -96,6 +98,7 @@ export function ChatRoom({
   initial,
   focus,
   aiReady,
+  groups = [],
 }: {
   me: { id: string; name: string };
   room: RoomInfo;
@@ -108,8 +111,11 @@ export function ChatRoom({
   initial: ChatMsg[];
   focus?: { m?: number; t?: number };
   aiReady: boolean;
+  groups?: Staff[]; // groupTags(): @Orders Group and the like, each one tag with its members
 }) {
   const router = useRouter();
+  // Everyone who can be @tagged: the groups (one tag each), then the people.
+  const tags = useMemo(() => [...groups, ...staff], [groups, staff]);
   const [msgs, setMsgs] = useState<ChatMsg[]>(initial);
   const [older, setOlder] = useState(initial.length >= 60);
   const [member, setMember] = useState(memberStart);
@@ -321,7 +327,7 @@ export function ChatRoom({
                 {newDay ? <div className="chat-day"><span>{dayLabel(m.created_at)}</span></div> : null}
                 {unreadFrom === m.id ? <div className="chat-new"><span>New</span></div> : null}
                 <Message
-                  m={m} me={me} staff={staff} grouped={Boolean(grouped)} flash={flash === m.id} isAdmin={isAdmin}
+                  m={m} me={me} staff={tags} grouped={Boolean(grouped)} flash={flash === m.id} isAdmin={isAdmin}
                   onThread={() => setThread(m.id)}
                   onReact={(e) => act("react", () => chatReact(m.id, e))}
                   onPin={() => act("pin", () => chatPin(m.id, !m.pinned_at))}
@@ -346,7 +352,7 @@ export function ChatRoom({
         ) : null}
         {canPost ? (
           <Composer
-            roomId={room.id} me={me} staff={staff} members={room.kind === "dm" || room.private ? members : null} aiReady={aiReady} parent={null}
+            roomId={room.id} me={me} staff={tags} members={room.kind === "dm" || room.private ? members : null} aiReady={aiReady} parent={null}
             placeholder={room.kind === "dm" ? `Message ${room.title}` : room.kind === "order" ? `Message about ORD-${room.order?.no ?? ""}` : `Message #${room.title}`}
             onTyping={() => rt.current?.send({ type: "broadcast", event: "typing", payload: { id: me.id, name: meStaff?.first ?? me.name } })}
             onSent={async () => { await refreshRef.current(); setMember(true); toBottom(true); }}
@@ -366,7 +372,7 @@ export function ChatRoom({
             {threadMsgs.map((m, i) => (
               <div key={m.id}>
                 <Message
-                  m={m} me={me} staff={staff} grouped={false} flash={false} isAdmin={isAdmin} inThread
+                  m={m} me={me} staff={tags} grouped={false} flash={false} isAdmin={isAdmin} inThread
                   onThread={() => {}}
                   onReact={(e) => act("react", () => chatReact(m.id, e))}
                   onPin={() => act("pin", () => chatPin(m.id, !m.pinned_at))}
@@ -380,7 +386,7 @@ export function ChatRoom({
           </div>
           {canPost ? (
             <Composer
-              roomId={room.id} me={me} staff={staff} members={room.kind === "dm" || room.private ? members : null} aiReady={aiReady} parent={thread}
+              roomId={room.id} me={me} staff={tags} members={room.kind === "dm" || room.private ? members : null} aiReady={aiReady} parent={thread}
               placeholder="Reply in the thread"
               onTyping={() => {}}
               onSent={async () => { setThreadMsgs(await chatThread(thread)); await refreshRef.current(); }}
@@ -549,7 +555,6 @@ export function Composer({
 }) {
   const key = `chat-draft:${roomId}:${parent ?? ""}`;
   const [text, setText] = useState("");
-  const [mentions, setMentions] = useState<string[]>([]);
   const [files, setFiles] = useState<{ path: string; name: string; type: string; size: number; preview: string | null }[]>([]);
   const [uploading, setUploading] = useState(0);
   const [at, setAt] = useState<{ q: string; start: number } | null>(null);
@@ -625,11 +630,15 @@ export function Composer({
     const v = `${text.slice(0, at.start)}@${s.name} ${text.slice(caret)}`;
     caretAt.current = at.start + s.name.length + 2;
     setText(v);
-    setMentions((m) => [...new Set([...m, s.id])]);
     setAt(null);
   };
-  /** Anyone written as @Full Name (typed, said into the mic or written by AMBIT) counts as mentioned. */
-  const mentionIds = (t: string) => [...new Set([...mentions, ...pool.filter((s) => t.includes(`@${s.name}`)).map((s) => s.id)])].filter((id) => t.includes(`@${pool.find((s) => s.id === id)?.name}`));
+  /** Anyone written as @Full Name (typed, said into the mic or written by AMBIT) counts as mentioned; an @Group is
+   *  everyone in it. */
+  const mentionIds = (t: string) => {
+    const ids = new Set<string>();
+    for (const s of pool) if (t.includes(`@${s.name}`)) for (const id of s.members ?? [s.id]) if (id !== me.id) ids.add(id);
+    return [...ids];
+  };
 
   const upload = async (list: FileList | null) => {
     if (!list?.length) return;
@@ -662,7 +671,6 @@ export function Composer({
     if (!r.ok) return setErr(r.error);
     setText("");
     setFiles([]);
-    setMentions([]);
     await onSent();
   };
 
@@ -694,10 +702,14 @@ export function Composer({
         <div className="chat-at-menu" role="listbox">
           {hits.map((s, i) => (
             <button key={s.id} type="button" role="option" aria-selected={i === pick} className={i === pick ? "on" : ""} onMouseDown={(e) => (e.preventDefault(), choose(s))}>
-              <span className="chat-av sm" style={{ background: tone(s.id) }}>{initials(s.name)}</span>
+              {s.members ? (
+                <span className="chat-av sm group" aria-hidden><Users size={14} /></span>
+              ) : (
+                <span className="chat-av sm" style={{ background: tone(s.id) }}>{initials(s.name)}</span>
+              )}
               <span className="col" style={{ gap: 1, minWidth: 0 }}>
                 <span><Hl name={s.name} q={at.q} /></span>
-                {roleText(s) ? <span className="tiny faint">{roleText(s)}</span> : null}
+                {s.members ? <span className="tiny faint">Group · {s.members.length} {s.members.length === 1 ? "person" : "people"}</span> : roleText(s) ? <span className="tiny faint">{roleText(s)}</span> : null}
               </span>
             </button>
           ))}

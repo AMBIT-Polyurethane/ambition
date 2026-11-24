@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireEmployee } from "@/lib/session";
 import { claudeReady } from "@/lib/ai/claude";
-import { channelTitle, loadMessages, myTodos, overview, staffList, type ChannelRow } from "@/lib/chat";
+import { channelTitle, chatGroups, groupTags, loadMessages, myTodos, overview, staffList, type ChannelRow } from "@/lib/chat";
 import { ChatList } from "@/components/chat/list";
 import { ChatRoom, type RoomInfo } from "@/components/chat/room";
 import { STAGES, stageOf } from "@/lib/order-desk";
@@ -16,12 +16,13 @@ export default async function ChatRoomPage({ params, searchParams }: { params: P
   const sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { supabase, profile } = await requireEmployee();
-  const [{ rows }, staff, todos, { data: ch }, { data: mem }] = await Promise.all([
+  const [{ rows }, staff, todos, { data: ch }, { data: mem }, groups] = await Promise.all([
     overview(supabase),
     staffList(supabase),
     myTodos(supabase, profile.id),
     supabase.from("chat_channels").select("id, kind, name, about, private, order_id, archived_at").eq("id", id).maybeSingle(),
     supabase.from("chat_members").select("user_id, notify, last_read_id").eq("channel_id", id),
+    chatGroups(supabase),
   ]);
   if (!ch) notFound();
   const members = (mem ?? []) as { user_id: string; notify: "all" | "mentions" | "none"; last_read_id: number }[];
@@ -64,6 +65,7 @@ export default async function ChatRoomPage({ params, searchParams }: { params: P
         initial={initial}
         focus={focus}
         aiReady={claudeReady()}
+        groups={groupTags(groups)}
       />
     </main>
   );

@@ -8,7 +8,7 @@ import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { claudeReady, fillForm, friendlyClaudeError } from "@/lib/ai/claude";
 import { todayCentral } from "@/lib/sale";
 import { sendPush } from "@/lib/push";
-import { loadMessages, loadThread, staffList, type ChatMsg } from "@/lib/chat";
+import { chatGroups, loadMessages, loadThread, staffList, type ChatGroup, type ChatMsg } from "@/lib/chat";
 
 // Team Chat (0063). Everything goes through the database's chat_* functions with the person's own login, so the
 // database decides who can see and post where. Notifications and AI to-dos run after the answer goes back.
@@ -43,16 +43,23 @@ export type PostInput = { channel: string; body: string; parent?: number | null;
 export async function chatPost(d: PostInput): Promise<R<{ id: number }>> {
   const { supabase, profile } = await requireEmployee();
   const body = String(d.body ?? "").slice(0, 8000);
-  const staff = await staffList(supabase);
-  // Only people whose @Name is still in the message.
-  const mentions = [...new Set(d.mentions ?? [])].filter((id) => {
+  const [staff, groups] = await Promise.all([staffList(supabase), chatGroups(supabase)]);
+  // Only people whose @Name is still in the message, and everyone in an @Group that is (0110).
+  const want = new Set<string>();
+  for (const id of d.mentions ?? []) {
     const s = staff.find((x) => x.id === id);
-    return s && id !== profile.id && body.includes(`@${s.name}`);
-  });
+    if (s && body.includes(`@${s.name}`)) want.add(id);
+  }
+  for (const g of groups) if (body.includes(`@${g.name}`)) for (const id of g.members) if (staff.some((x) => x.id === id)) want.add(id);
+  want.delete(profile.id);
   const files = (d.files ?? []).slice(0, 10).map((f) => ({ path: String(f.path), name: String(f.name).slice(0, 120), type: String(f.type).slice(0, 80), size: Number(f.size) || 0 }));
-  const { data, error } = await supabase.rpc("chat_post", { p_channel: d.channel, p_body: body, p_parent: d.parent ?? null, p_files: files, p_mentions: mentions, p_kind: d.ai ? "ai" : "text" });
+  const { data, error } = await supabase.rpc("chat_post", { p_channel: d.channel, p_body: body, p_parent: d.parent ?? null, p_files: files, p_mentions: [...want], p_kind: d.ai ? "ai" : "text" });
   if (error) return fail(error);
   const id = Number(data);
+  // The database keeps only people who can be in this conversation (a private chat: only its people).
+  const { data: kept } = want.size ? await supabase.from("chat_messages").select("mentions").eq("id", id).maybeSingle<{ mentions: string[] | null }>() : { data: null };
+  const mentions = kept?.mentions ?? (want.size ? [...want] : []);
+  const tagged = groups.filter((g) => body.includes(`@${g.name}`));
 
   // A to-do for everyone @mentioned (the words of the message for now; AMBIT Intelligence tidies them up below).
   if (mentions.length) {
@@ -67,19 +74,22 @@ export async function chatPost(d: PostInput): Promise<R<{ id: number }>> {
   after(async () => {
     if (!serviceReady()) return;
     const db = serviceClient();
-    if (mentions.length && claudeReady()) await tidyTodos(db, id, body, me, mentions.map((m) => staff.find((s) => s.id === m)!).filter(Boolean)).catch(() => null);
+    if (mentions.length && claudeReady()) await tidyTodos(db, id, body, me, mentions.map((m) => staff.find((s) => s.id === m)!).filter(Boolean), tagged).catch(() => null);
     await notify(db, d.channel, id, profile.id, me, body, files.length, mentions, d.parent ?? null).catch(() => null);
   });
   return { ok: true, id };
 }
 
 /** Turns "@Tyler can you load the Red River order by 2pm?" into Tyler's to-do: "Load the Red River order (by 2pm today)". */
-async function tidyTodos(db: ReturnType<typeof serviceClient>, message: number, body: string, from: string, people: { id: string; name: string }[]) {
+async function tidyTodos(db: ReturnType<typeof serviceClient>, message: number, body: string, from: string, people: { id: string; name: string }[], groups: ChatGroup[] = []) {
+  const inGroups = groups
+    .map((g) => `@${g.name} is a group: ${people.filter((p) => g.members.includes(p.id)).map((p) => p.name).join(", ")} (asking the group asks each of them)`)
+    .join("\n");
   const { data } = await fillForm<{ todos: { name: string; todo: string; due_on: string; needed: boolean }[] }>({
     model: AI_MODEL,
     maxTokens: 600,
     system: `You turn a team chat message at AMBIT Polyurethane (spray foam and insulation supply) into a short to-do for each person @mentioned in it. Today is ${todayCentral()} (America/Chicago). Write each to-do as a plain imperative under 90 characters, starting with a verb ("Load the Red River order", "Call Hughes Insulation about the drums"), keeping order numbers, customers and times. due_on: YYYY-MM-DD only when the message gives a day or "today"/"tomorrow", else empty. needed: false when the message asks that person for nothing (a thank-you, an FYI).`,
-    content: `Message from ${from}:\n${body}\n\nPeople @mentioned: ${people.map((p) => p.name).join(", ")}`,
+    content: `Message from ${from}:\n${body}\n\nPeople @mentioned: ${people.map((p) => p.name).join(", ")}${inGroups ? `\n${inGroups}` : ""}`,
     name: "todos",
     description: "One to-do per person mentioned.",
     schema: {
@@ -342,4 +352,16 @@ export async function chatOrderId(order: string): Promise<R<{ id: string }>> {
   const { supabase } = await requireEmployee();
   const { data, error } = await supabase.rpc("chat_order", { p_order: order });
   return error || !data ? fail(error, "Couldn't open the order's chat.") : { ok: true, id: String(data) };
+}
+
+// ------------------------------------------------------------------ groups (0110)
+
+/** Admins: who is listed in a group you can @tag. */
+export async function chatGroupSave(form: FormData) {
+  const { supabase } = await requireAdmin();
+  const key = String(form.get("key") ?? "");
+  const ids = form.getAll("member").map(String).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+  const { error } = await supabase.rpc("chat_group_set", { p_key: key, p_members: ids });
+  revalidatePath("/chat", "layout");
+  redirect(`/chat/groups?${error ? `err=${encodeURIComponent(error.message)}` : `msg=${encodeURIComponent("Saved. The group's tag reaches these people from now on.")}`}#g-${key}`);
 }

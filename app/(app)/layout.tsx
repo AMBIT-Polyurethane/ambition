@@ -2,7 +2,7 @@ import { TabBar } from "@/components/tabbar";
 import { colorsCss, readColors } from "@/lib/theme-colors";
 import { Sidebar, type SideEntry, type SideGroup, type SideItem } from "@/components/sidebar";
 import { requireActive, isEmployee } from "@/lib/session";
-import { can, canEstimate, canFreight, roleLabel, seesInventory } from "@/lib/access";
+import { can, canEstimate, canFreight, canSalesAll, canSalesHub, roleLabel, seesInventory } from "@/lib/access";
 import { deskAccess } from "@/lib/order-desk";
 import { assistantAccess } from "@/lib/assistant/settings";
 import { opsCan, opsMember, opsRoleLabel } from "@/lib/ops/roles";
@@ -46,6 +46,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           seesInventory(profile) && { href: "/inventory", label: "Inventory", icon: "inventory" },
           { href: "/reports", label: "Order & sales reports", icon: "reports" },
         ]),
+        canSalesHub(profile) &&
+          G("sales", "Sales", "sales", [
+            { href: "/sales", label: canSalesAll(profile) ? "Sales hub" : "My sales hub", icon: "sales", exact: true, sub: "Customers, alerts, follow-ups, AI briefing" },
+            { href: "/sales/pipeline", label: "New-customer pipeline", icon: "pipeline" },
+            canSalesAll(profile) && { href: "/sales/dashboard", label: "Sales dashboard", icon: "salesdash", sub: "Every rep, side by side" },
+          ]),
         G("customers", "Customers", "customers", [
           credit && { href: "/customers", label: "Customers", icon: "customers", sub: "Dashboards, balances, payments" },
           credit && { href: "/credit", label: "Credit & collections", icon: "credit" },

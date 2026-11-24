@@ -23,6 +23,8 @@ export const PERMS = [
   { key: "prices", label: "Customer prices", hint: "Change customer prices, base prices and the pricing dashboard" },
   { key: "estimates", label: "Estimates", hint: "Build unofficial estimates for customers from their price list (prices can't be changed)" },
   { key: "estimate_freight", label: "Estimates: add freight", hint: "Add the quoted freight (and change the tax rate) on estimates" },
+  { key: "sales_hub", label: "Sales hub", hint: "Their own customers, follow-ups, new-customer pipeline and AI briefing (CRM)" },
+  { key: "sales_dashboard", label: "Sales dashboard", hint: "Every rep's customers and numbers, and assigning customers to reps" },
 ] as const;
 
 export type Perm = (typeof PERMS)[number]["key"];
@@ -30,8 +32,8 @@ export const PERM_KEYS = PERMS.map((p) => p.key) as Perm[];
 
 export const ROLES = [
   { key: "admin", label: "Admin", perms: PERM_KEYS },
-  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance" && k !== "add_customers" && k !== "prices") },
-  { key: "sales_rep", label: "Sales rep", perms: ["ordering", "price_requests", "time_off", "travel", "takeoff", "estimates"] as Perm[] },
+  { key: "crm", label: "CRM", perms: PERM_KEYS.filter((k) => k !== "prf_approve" && k !== "credit_check" && k !== "item_variance" && k !== "add_customers" && k !== "prices" && k !== "sales_hub" && k !== "sales_dashboard") },
+  { key: "sales_rep", label: "Sales rep", perms: ["ordering", "price_requests", "time_off", "travel", "takeoff", "estimates", "sales_hub"] as Perm[] },
   { key: "tech", label: "Tech", perms: ["time_off", "travel", "spray_log", "complaints"] as Perm[] },
   { key: "warehouse", label: "Warehouse manager", perms: ["inventory", "receiving", "transfers", "inv_reports", "ordering", "time_off", "travel"] as Perm[] },
   { key: "accounting", label: "Accounting", perms: ["credit_check", "add_customers", "time_off", "travel"] as Perm[] },
@@ -56,6 +58,10 @@ export function can(p: Who | null | undefined, perm: Perm): boolean {
 /** Estimates: build them (reps, CRMs), or add freight and send them (CRMs). Admins do both. */
 export const canEstimate = (p: Who) => can(p, "estimates") || can(p, "estimate_freight");
 export const canFreight = (p: Who) => can(p, "estimate_freight");
+
+/** Sales CRM (0109): a rep's own hub, or every rep (admins and "Sales dashboard"). */
+export const canSalesAll = (p: Who) => can(p, "sales_dashboard");
+export const canSalesHub = (p: Who) => can(p, "sales_hub") || can(p, "sales_dashboard");
 
 /** Anything in the Inventory Hub. */
 export const INV_PERMS: Perm[] = ["inventory", "receiving", "transfers", "inv_reports"];

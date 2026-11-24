@@ -3372,6 +3372,9 @@ a.sl-row:hover { background: var(--s2); color: var(--text); }
 .chat-at.me { background: #3b7cff; color: #fff; }
 :root[data-theme="light"] .chat-at { color: #1d4ed8; background: rgba(37, 99, 235, 0.12); }
 :root[data-theme="light"] .chat-at.me { background: #2563eb; color: #fff; }
+/* A group tag (@Orders Group, 0110): one tag for everyone in it. */
+.chat-at.group::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: currentColor; vertical-align: 2px; opacity: .7; }
+.chat-av.group { background: var(--s2); color: var(--text2); border: 1px solid var(--line); }
 .chat-ord { font-weight: 700; }
 .chat-files { display: flex; flex-wrap: wrap; gap: 8px; }
 .chat-img img { display: block; max-width: min(320px, 100%); max-height: 260px; border-radius: 12px; border: 1px solid var(--line); object-fit: cover; }
@@ -5745,3 +5748,86 @@ body:has(.adc) { background: #f4f4f2; }
   .est-addr .field:first-child { grid-column: 1 / -1; }
 }
 .est-need { border-color: var(--red); box-shadow: 0 0 0 1px var(--red) inset; }
+
+/* ---------------------------------------------------------------- Sales CRM (0109) */
+.crm { display: flex; flex-direction: column; gap: 16px; }
+.crm-nav { margin-top: -4px; }
+.crm-pad { padding: 14px 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+.crm .ihub-kpi b { font-size: 26px; }
+.crm-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.crm-head a.small { display: inline-flex; align-items: center; gap: 5px; }
+.crm-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.crm-tools .xr-search { display: flex; align-items: center; gap: 8px; }
+.crm-tbl td { vertical-align: middle; }
+.crm-tbl tr.crm-hot td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+.crm-name { font-weight: 750; color: var(--text); text-decoration: none; }
+.crm-name:hover { color: var(--red-text); }
+.crm-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 26px; width: 96px; }
+.crm-spark i { flex: 1; border-radius: 2px 2px 0 0; background: #3987e5; min-height: 2px; }
+.crm-spark i.now { background: #6aa8f0; }
+:root[data-theme="light"] .crm-spark i { background: #2a78d6; }
+:root[data-theme="light"] .crm-spark i.now { background: #5b9be3; }
+.crm-up { color: var(--ok-text); font-weight: 700; }
+.crm-down { color: var(--warn-text); font-weight: 700; }
+.crm-down.bad { color: var(--red-text); }
+.crm-assign { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; background: var(--s2); border: 1px solid var(--line); position: sticky; top: 8px; z-index: 3; }
+.crm-ai .card2-h b, .crm .card2-h b { display: inline-flex; align-items: center; gap: 8px; }
+.crm-ai-b { padding: 14px 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+.crm-ai-head { margin: 0; font-size: 15.5px; line-height: 1.45; }
+.crm-ai-acts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.crm-ai-acts li { display: flex; gap: 10px; align-items: flex-start; }
+.crm-ai-acts .n { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--red-soft); color: var(--red-text); font-size: 12px; font-weight: 800; display: grid; place-items: center; }
+.crm-ai-acts .t { font-size: 14.5px; font-weight: 750; color: var(--text); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.crm-ai-acts a.t:hover { color: var(--red-text); }
+.crm-ai-wins { display: flex; flex-direction: column; gap: 4px; }
+.crm-ai-wins span { font-size: 13px; color: var(--ok-text); }
+.crm-ai-wins span::before { content: "\2713  "; }
+.crm-ai-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.crm-next { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--s2); border-left: 3px solid var(--red); }
+.crm-next b { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); }
+.crm-next span { font-size: 14.5px; font-weight: 650; }
+.crm-alerts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.crm-alerts li a { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 8px 12px; border-radius: 10px; background: var(--s2); color: var(--text); text-decoration: none; border-left: 3px solid var(--line-hover); }
+.crm-alerts li a:hover { background: var(--s3); }
+.crm-alerts li.red a { border-left-color: var(--red); }
+.crm-alerts li.warn a { border-left-color: #fab219; }
+.crm-alerts li.info a { border-left-color: #3987e5; }
+.crm-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.crm-tasks li { display: flex; gap: 10px; align-items: flex-start; }
+.crm-tasks .tiny svg { vertical-align: -2px; }
+.crm-tick { flex: none; width: 24px; height: 24px; border-radius: 7px; border: 1.5px solid var(--line-hover); background: transparent; color: transparent; display: grid; place-items: center; cursor: pointer; margin-top: 1px; }
+.crm-tick:hover { border-color: var(--ok-text); color: var(--ok-text); }
+.crm-follow { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto; gap: 8px; align-items: center; }
+.crm-follow:has(> :nth-child(2):last-child) { grid-template-columns: minmax(0, 1fr) 150px; }
+.crm-acts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.crm-acts li { display: flex; gap: 10px; align-items: flex-start; }
+.crm-acts .ic { flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--s2); color: var(--text2); display: grid; place-items: center; }
+.crm-funnel { gap: 8px; }
+.crm-funnel-r { display: grid; grid-template-columns: 130px minmax(0, 1fr) 28px; gap: 10px; align-items: center; }
+.crm-funnel-r b { text-align: right; font-variant-numeric: tabular-nums; }
+.crm-funnel-bar, .crm-rep-bar { height: 10px; border-radius: 5px; background: var(--s2); overflow: hidden; display: block; }
+.crm-funnel-bar i, .crm-rep-bar i { display: block; height: 100%; border-radius: 5px; background: #3987e5; }
+.crm-rep-bar { margin-bottom: 4px; max-width: 220px; }
+.crm-board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
+.crm-col { flex: 0 0 250px; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 16px; background: var(--s1); border: 1px solid var(--line); }
+.crm-col-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.crm-col-h b { font-size: 14.5px; }
+.crm-card { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-radius: 12px; background: var(--s2); border: 1px solid var(--line); }
+.crm-card.stale { border-color: rgba(250, 178, 25, 0.55); }
+.crm-card-name { border: 0; background: none; padding: 0; color: var(--text); font: inherit; font-size: 14px; font-weight: 750; text-align: left; cursor: pointer; }
+.crm-card-name:hover { color: var(--red-text); }
+.crm-mv { height: 26px; min-width: 26px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--s1); color: var(--text2); font: inherit; font-size: 11.5px; font-weight: 700; display: inline-grid; place-items: center; cursor: pointer; }
+.crm-mv:hover:not(:disabled) { border-color: var(--line-hover); color: var(--text); }
+.crm-mv:disabled { opacity: 0.35; cursor: default; }
+.crm-mv.lost { color: var(--text3); }
+.crm-rep { width: 24px; height: 24px; border-radius: 50%; background: var(--s3); display: grid; place-items: center; font-size: 10px; font-weight: 800; }
+.crm-lead-form .crm-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 14px; padding: 14px 18px 10px; }
+.crm-lost { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.crm-lost li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; }
+.crm-lost li .tiny { grid-column: 1; }
+.crm-lost li .b2 { grid-row: 1 / span 2; grid-column: 2; }
+@media (max-width: 700px) {
+  .crm-follow { grid-template-columns: minmax(0, 1fr) 140px; }
+  .crm-follow .b2 { grid-column: 1 / -1; }
+  .crm-funnel-r { grid-template-columns: 110px minmax(0, 1fr) 24px; }
+}

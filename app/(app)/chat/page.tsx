@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CircleCheck, MessageSquarePlus, Trash2 } from "lucide-react";
+import { CircleCheck, MessageSquarePlus, Trash2, Users } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { claudeReady } from "@/lib/ai/claude";
 import { myTodos, overview } from "@/lib/chat";
@@ -41,7 +41,10 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
         <AskChat aiReady={claudeReady()} />
         <div className="card"><PushToggle /></div>
         {profile.role === "admin" ? (
-          <Link href="/chat/deleted" className="linkbtn small" style={{ alignSelf: "flex-start" }}><Trash2 size={14} /> Deleted direct messages (admins)</Link>
+          <div className="row" style={{ gap: 14, flexWrap: "wrap" }}>
+            <Link href="/chat/groups" className="linkbtn small"><Users size={14} /> Groups you can @tag (admins)</Link>
+            <Link href="/chat/deleted" className="linkbtn small"><Trash2 size={14} /> Deleted direct messages (admins)</Link>
+          </div>
         ) : null}
       </div>
     </main>

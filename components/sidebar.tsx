@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   MessagesSquare,
+  TrendingUp,
+  Gauge,
   CirclePlay,
   Blocks,
   ClipboardCheck,
@@ -83,6 +85,8 @@ const ICONS = {
   settings: Settings,
   forms: ClipboardPen,
   learn: BookOpen,
+  sales: TrendingUp,
+  salesdash: Gauge,
 } satisfies Record<string, LucideIcon>;
 
 type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
