@@ -764,7 +764,7 @@ type Lots = {
   created: boolean;
 };
 
-type DbLotRow = DbLot & { branch_id: string; on_sheet: boolean; sheet_row: number | null; sheet_pending: number; remaining: number; add_to_sheet?: boolean; starting: number; label: string | null; notes: string | null };
+type DbLotRow = DbLot & { branch_id: string; on_sheet: boolean; sheet_row: number | null; sheet_pending: number; remaining: number; add_to_sheet?: boolean; starting: number; label: string | null; notes: string | null; exp_set?: string | null; mfg_set?: string | null };
 
 /** Reads FOAM LOTS into the app (adding the tab first if the branch has lots but no tab yet). */
 async function syncLotsIn(
@@ -877,6 +877,8 @@ async function syncLotsIn(
       matched.add(ex.id);
       const patch: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(fields)) {
+        // A date fixed in the app (Change lots) and not written onto the sheet yet: the app's date stands.
+        if ((k === "exp" && ex.exp_set) || (k === "mfg" && ex.mfg_set)) continue;
         const cur = (ex as unknown as Record<string, unknown>)[k];
         const differs = typeof v === "number" ? !same(v, num(cur)) : (v ?? null) !== (cur ?? null);
         if (differs) patch[k] = v;
@@ -1069,12 +1071,24 @@ async function syncLotsOut(db: SupabaseClient, wb: Workbook, branch: string, lot
   if (!lots.products.size) return;
   const { data } = await db
     .from("inventory_lots")
-    .select("id, shipped_out, out_unsynced, adj, adj_unsynced, shipped_in, in_unsynced, sheet_row, sheet_pending, on_sheet")
+    .select("id, shipped_out, out_unsynced, adj, adj_unsynced, shipped_in, in_unsynced, sheet_row, sheet_pending, on_sheet, exp_set, mfg_set")
     .eq("branch_id", branch)
     .range(0, 4999);
   const outCol = lots.sheet?.cols.out;
-  type Row = { id: number; shipped_out: number; out_unsynced: number; adj: number; adj_unsynced: number; shipped_in: number; in_unsynced: number; sheet_row: number | null; sheet_pending: number; on_sheet: boolean };
+  type Row = { id: number; shipped_out: number; out_unsynced: number; adj: number; adj_unsynced: number; shipped_in: number; in_unsynced: number; sheet_row: number | null; sheet_pending: number; on_sheet: boolean; exp_set?: string | null; mfg_set?: string | null };
   for (const l of (data ?? []) as Row[]) {
+    // Dates fixed in the app (Inventory > Change lots) onto FOAM LOTS.
+    if (l.on_sheet && l.sheet_row && lots.tab && (l.exp_set || l.mfg_set)) {
+      const clear: Record<string, null> = {};
+      for (const [col, key] of [[lots.sheet?.cols.exp, "exp_set"], [lots.sheet?.cols.mfg, "mfg_set"]] as [number | undefined, "exp_set" | "mfg_set"][]) {
+        const v = l[key];
+        if (!v || !col) continue;
+        await wb.write(lots.tab, l.sheet_row, col, [[sheetDate(v)]]);
+        clear[key] = null;
+        sum.to_sheet++;
+      }
+      if (Object.keys(clear).length) await db.from("inventory_lots").update({ ...clear, updated_at: new Date().toISOString() }).eq("id", l.id);
+    }
     const held = r2(lotReserved.get(l.id) ?? 0);
     if (!same(held, num(l.sheet_pending))) await db.from("inventory_lots").update({ sheet_pending: held }).eq("id", l.id);
     // Approved count differences into Adj, and stock received in the app into Shipped In.

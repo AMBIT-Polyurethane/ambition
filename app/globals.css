@@ -5899,3 +5899,26 @@ body:has(.adc) { background: #f4f4f2; }
 .cp-table th.cp-adm, .cp-table td.cp-adm { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; background: rgba(57, 135, 229, 0.06); }
 .cp-table th.cp-adm { color: #9cc4f5; }
 :root[data-theme="light"] .cp-table th.cp-adm { color: #1d4ed8; }
+
+/* Inventory > Change lots (0115) */
+.lotchg-group { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.lotchg-gh { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 10px 14px; background: var(--s1); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.lotchg-row { border-top: 1px solid var(--line); }
+.lotchg-row:first-of-type { border-top: 0; }
+.lotchg-row.on { background: color-mix(in srgb, var(--red-text, #c62828) 4%, transparent); }
+.lotchg-line { display: grid; grid-template-columns: minmax(0, 1fr) 64px 64px auto; gap: 10px; align-items: center; padding: 10px 14px; }
+.lotchg-lot { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lotchg-n { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.lotchg-acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.lotchg-panel { display: flex; flex-direction: column; gap: 12px; padding: 4px 14px 16px; }
+.lotchg-grid { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 12px; }
+.lotchg-grid .lotchg-why { grid-column: 1 / -1; }
+.lotchg-preview { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--s1); border: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+.lotchg-preview svg { vertical-align: -2px; }
+.lotchg-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lotchg-log li { display: flex; flex-direction: column; gap: 2px; }
+@media (max-width: 640px) {
+  .lotchg-line { grid-template-columns: minmax(0, 1fr) 52px 52px; }
+  .lotchg-acts { grid-column: 1 / -1; justify-content: flex-start; }
+  .lotchg-grid { grid-template-columns: 1fr; }
+}

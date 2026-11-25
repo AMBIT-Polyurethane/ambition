@@ -1,17 +1,18 @@
 import Link from "next/link";
-import { ArrowLeftRight, BarChart3, Boxes, ClipboardList, LayoutDashboard, Lock, Send, Tags, Truck } from "lucide-react";
+import { ArrowLeftRight, BarChart3, Boxes, ClipboardList, LayoutDashboard, Lock, Repeat, Send, Tags, Truck } from "lucide-react";
 import { can, type Perm } from "@/lib/access";
 import type { Profile } from "@/lib/types";
 
 // The Inventory Hub's sections. Each person sees the ones they have access to (Admin > Users).
 
-export type HubTab = "dashboard" | "stock" | "holds" | "reorders" | "receiving" | "transfers" | "counts" | "reports" | "values";
+export type HubTab = "dashboard" | "stock" | "holds" | "lots" | "reorders" | "receiving" | "transfers" | "counts" | "reports" | "values";
 
 // perms: [] = admins only.
 const TABS: { key: HubTab; label: string; href: string; perms: Perm[]; icon: typeof Boxes }[] = [
   { key: "dashboard", label: "Dashboard", href: "/inventory", perms: ["inv_reports"], icon: LayoutDashboard },
   { key: "stock", label: "Stock", href: "/inventory/stock", perms: ["inventory"], icon: Boxes },
   { key: "holds", label: "Holds", href: "/inventory/holds", perms: ["inventory", "order_desk"], icon: Lock },
+  { key: "lots", label: "Change lots", href: "/inventory/lots", perms: ["item_variance", "inventory"], icon: Repeat },
   { key: "reorders", label: "Reorders", href: "/inventory/reorders", perms: ["inventory"], icon: Send },
   { key: "receiving", label: "Receiving", href: "/inventory/incoming", perms: ["receiving", "inventory"], icon: Truck },
   { key: "transfers", label: "Transfers", href: "/inventory/transfers", perms: ["transfers"], icon: ArrowLeftRight },
