@@ -490,6 +490,227 @@ export const HOWTO: HowToVideo[] = [
         "label": "Phone notifications"
       }
     ]
+  },
+  {
+    "n": 9,
+    "slug": "my-calls",
+    "title": "My Calls: Win-Back and Cold Leads",
+    "who": "Sales reps",
+    "roles": [
+      "sales_rep",
+      "admin"
+    ],
+    "blurb": "Win-back and cold-lead lists: who to call first, logging each call with one tap, call-backs, and sending interested leads to the pipeline.",
+    "seconds": 103,
+    "chapters": [
+      {
+        "t": 3.6,
+        "label": "Open My calls"
+      },
+      {
+        "t": 12.3,
+        "label": "Your progress"
+      },
+      {
+        "t": 18.4,
+        "label": "Three lists"
+      },
+      {
+        "t": 29.6,
+        "label": "Win-back: call A first"
+      },
+      {
+        "t": 39.0,
+        "label": "One tap after each call"
+      },
+      {
+        "t": 45.1,
+        "label": "Talked"
+      },
+      {
+        "t": 55.8,
+        "label": "Call back on a day"
+      },
+      {
+        "t": 65.3,
+        "label": "Cold leads"
+      },
+      {
+        "t": 74.5,
+        "label": "Interested"
+      },
+      {
+        "t": 83.9,
+        "label": "One call at a time"
+      },
+      {
+        "t": 92.7,
+        "label": "Every call counts"
+      }
+    ]
+  },
+  {
+    "n": 10,
+    "slug": "sales-hub",
+    "title": "Your Sales Hub",
+    "who": "Sales reps",
+    "roles": [
+      "sales_rep",
+      "admin"
+    ],
+    "blurb": "Your book of customers on one screen: the AI briefing, alerts, follow-ups, each customer's health, and logging calls and visits.",
+    "seconds": 130,
+    "chapters": [
+      {
+        "t": 3.6,
+        "label": "Open your sales hub"
+      },
+      {
+        "t": 14.6,
+        "label": "The numbers at the top"
+      },
+      {
+        "t": 28.4,
+        "label": "Today's briefing"
+      },
+      {
+        "t": 44.2,
+        "label": "Alerts"
+      },
+      {
+        "t": 55.9,
+        "label": "Follow-ups"
+      },
+      {
+        "t": 65.2,
+        "label": "Every customer's health"
+      },
+      {
+        "t": 83.6,
+        "label": "Open a customer"
+      },
+      {
+        "t": 93.8,
+        "label": "The AI read"
+      },
+      {
+        "t": 102.8,
+        "label": "Log every call and visit"
+      },
+      {
+        "t": 115.3,
+        "label": "Estimate or order"
+      },
+      {
+        "t": 121.0,
+        "label": "Start every day here"
+      }
+    ]
+  },
+  {
+    "n": 11,
+    "slug": "new-customer-pipeline",
+    "title": "The New-Customer Pipeline",
+    "who": "Sales reps",
+    "roles": [
+      "sales_rep",
+      "admin"
+    ],
+    "blurb": "Track every new customer from first conversation to second order: add a lead, move it through the stages, link the account, and send the credit app.",
+    "seconds": 111,
+    "chapters": [
+      {
+        "t": 3.6,
+        "label": "Open the pipeline"
+      },
+      {
+        "t": 14.1,
+        "label": "Six stages"
+      },
+      {
+        "t": 30.6,
+        "label": "Add a lead"
+      },
+      {
+        "t": 47.5,
+        "label": "Move a card"
+      },
+      {
+        "t": 54.3,
+        "label": "Cards that sit"
+      },
+      {
+        "t": 64.5,
+        "label": "Link their account"
+      },
+      {
+        "t": 74.8,
+        "label": "Lost"
+      },
+      {
+        "t": 85.6,
+        "label": "Sending the credit app"
+      },
+      {
+        "t": 99.4,
+        "label": "The second order"
+      }
+    ]
+  },
+  {
+    "n": 12,
+    "slug": "price-request-or-estimate",
+    "title": "Price Request or Estimate: Which One and When",
+    "who": "Sales reps and CRMs",
+    "roles": [
+      "sales_rep",
+      "crm",
+      "admin"
+    ],
+    "blurb": "When to ask for a new standing price and when to send an estimate, and how to do each one, start to finish.",
+    "seconds": 119,
+    "chapters": [
+      {
+        "t": 3.6,
+        "label": "Two ways to give a price"
+      },
+      {
+        "t": 11.2,
+        "label": "Price request: a new price"
+      },
+      {
+        "t": 21.2,
+        "label": "Making one"
+      },
+      {
+        "t": 39.4,
+        "label": "Approved"
+      },
+      {
+        "t": 51.3,
+        "label": "Estimate: what a job costs"
+      },
+      {
+        "t": 65.4,
+        "label": "Making one"
+      },
+      {
+        "t": 75.0,
+        "label": "Freight"
+      },
+      {
+        "t": 85.4,
+        "label": "Send it"
+      },
+      {
+        "t": 96.3,
+        "label": "Turn it into an order"
+      },
+      {
+        "t": 105.8,
+        "label": "The rule"
+      }
+    ]
   }
 ];
 
