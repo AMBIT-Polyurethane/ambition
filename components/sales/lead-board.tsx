@@ -94,7 +94,7 @@ export function LeadBoard({ leads, reps, me, all, customers }: { leads: Lead[]; 
                 <article key={l.id} className={`crm-card${l.days_in_stage >= 14 ? " stale" : ""}`}>
                   <div className="row between" style={{ gap: 8, alignItems: "flex-start" }}>
                     <button type="button" className="crm-card-name" onClick={() => edit(l)}>{l.name}</button>
-                    <span className="tiny faint" style={{ whiteSpace: "nowrap" }}>{l.days_in_stage ? `${l.days_in_stage} days` : "Today"}</span>
+                    <span className="tiny faint" style={{ whiteSpace: "nowrap" }}>{l.days_in_stage ? `${l.days_in_stage} day${l.days_in_stage === 1 ? "" : "s"}` : "Today"}</span>
                   </div>
                   {l.contact_name || l.city ? <span className="tiny muted">{[l.contact_name, [l.city, l.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}</span> : null}
                   {l.size_note ? <span className="tiny">{l.size_note}</span> : null}

@@ -149,9 +149,12 @@ export default async function OrderPage({ searchParams }: { searchParams: Promis
       for (const it of (d.items ?? []) as { product_id: string | null; qty: number }[]) {
         if (it.product_id && Number(it.qty) > 0) items[sold(it.product_id)] = (items[sold(it.product_id)] ?? 0) + Number(it.qty);
       }
+      // Turned into an order from an estimate: say which one.
+      const est = d.estimate_id ? (await supabase.from("estimates").select("est_no").eq("id", d.estimate_id).maybeSingle()).data : null;
       draft = {
         id: d.id,
         source: "intake",
+        estimateNo: est?.est_no ? `EST-${est.est_no}` : null,
         companyId: d.company_id,
         branchId: d.branch_id,
         delivery: d.delivery_method,

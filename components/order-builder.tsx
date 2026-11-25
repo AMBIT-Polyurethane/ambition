@@ -190,6 +190,8 @@ function SqftBox({ p, qty, onQty }: { p: CatalogProduct; qty: number; onQty: (n:
 export type OrderDraft = {
   id: string | null;
   source: "intake" | "smart";
+  /** Set when the draft came from an estimate (Turn into an order). */
+  estimateNo?: string | null;
   companyId: string | null;
   branchId: string | null;
   delivery: "pickup" | "jobsite" | "dropship" | null;
@@ -265,7 +267,7 @@ export function OrderBuilder(props: Props) {
       if (d.notes) setNotes(d.notes);
       setNotice(
         (d.source === "intake"
-          ? "Loaded from AI order intake. Check the customer, items and delivery, then send."
+          ? `Loaded from ${d.estimateNo ? `estimate ${d.estimateNo}` : "AI order intake"}. Check the customer, items and delivery, then send.`
           : "Your usual items are in the cart. Check the quantities and the date, then send.") +
           (missing ? ` ${missing} item${missing > 1 ? "s are" : " is"} no longer in the catalog.` : ""),
       );
