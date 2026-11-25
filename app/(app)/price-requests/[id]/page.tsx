@@ -10,6 +10,8 @@ import { PrfApproveForm } from "@/components/prf-approve-form";
 
 export const metadata = { title: "Price request" };
 export const dynamic = "force-dynamic";
+// Saving an approval talks to Jotform and sends an email; give it room (Jotform can be slow).
+export const maxDuration = 60;
 
 type Review = { approved_by_name: string | null; approved_at: string; note: string | null; email_status: string | null };
 

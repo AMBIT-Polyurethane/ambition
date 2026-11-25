@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { CircleAlert, CircleCheck } from "lucide-react";
 import { savePrfApproval, type PrfSaveState } from "@/app/(app)/price-requests/actions";
 
@@ -11,9 +12,13 @@ import { savePrfApproval, type PrfSaveState } from "@/app/(app)/price-requests/a
 export function PrfApproveForm({ children }: { children: React.ReactNode }) {
   const [state, action] = useActionState<PrfSaveState, FormData>(savePrfApproval, null);
   const box = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   useEffect(() => {
-    if (state) box.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [state]);
+    if (!state) return;
+    box.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Pick up the new status and prices in the background; the result message is already showing.
+    router.refresh();
+  }, [state, router]);
   return (
     <form action={action} className="col" style={{ gap: 12 }}>
       {state ? (

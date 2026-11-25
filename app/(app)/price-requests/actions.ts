@@ -52,8 +52,9 @@ export async function savePrfApproval(_prev: PrfSaveState, form: FormData): Prom
   const { supabase, profile } = await requirePerm("prf_approve");
   const id = String(form.get("id") ?? "");
   const note = String(form.get("note") ?? "").trim().slice(0, 2000);
+  // The page itself refreshes from the browser after the answer comes back (PrfApproveForm), so this answer
+  // never waits on the page reloading from Jotform (that wait is what left "Saving…" stuck).
   const done = (ok: boolean, text: string): PrfSaveState => {
-    revalidatePath(`/price-requests/${id}`);
     revalidatePath("/price-requests/approvals");
     return { ok, msg: text, at: Date.now() };
   };
@@ -92,7 +93,9 @@ export async function savePrfApproval(_prev: PrfSaveState, form: FormData): Prom
   );
 
   // The rep: SALES REP holds their email; otherwise the Sales Person Email box; otherwise their app account.
-  const fresh = (await prfSubmission(id).catch(() => null)) ?? sub;
+  // What Jotform now holds: the request as read, with the approved boxes just saved (no second trip to Jotform).
+  const fresh = { ...sub, answers: { ...sub.answers } };
+  for (const [qid, v] of Object.entries(values)) fresh.answers[qid] = { ...(fresh.answers[qid] ?? {}), answer: v, prettyFormat: v };
   const rep = fields.rep ? answerText(fresh.answers[fields.rep]) : "";
   const repBox = fields.repEmail ? answerText(fresh.answers[fields.repEmail]) : "";
   let to = looksLikeEmail(rep) ? rep.trim() : looksLikeEmail(repBox) ? repBox.trim() : "";
