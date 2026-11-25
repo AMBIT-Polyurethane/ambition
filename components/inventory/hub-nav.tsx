@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeftRight, BarChart3, Boxes, ClipboardList, LayoutDashboard, Lock, Repeat, Send, Tags, Truck } from "lucide-react";
+import { ArrowLeftRight, BarChart3, Boxes, ClipboardList, LayoutDashboard, Layers, Lock, Send, Tags, Truck } from "lucide-react";
 import { can, type Perm } from "@/lib/access";
 import type { Profile } from "@/lib/types";
 
@@ -12,7 +12,7 @@ const TABS: { key: HubTab; label: string; href: string; perms: Perm[]; icon: typ
   { key: "dashboard", label: "Dashboard", href: "/inventory", perms: ["inv_reports"], icon: LayoutDashboard },
   { key: "stock", label: "Stock", href: "/inventory/stock", perms: ["inventory"], icon: Boxes },
   { key: "holds", label: "Holds", href: "/inventory/holds", perms: ["inventory", "order_desk"], icon: Lock },
-  { key: "lots", label: "Change lots", href: "/inventory/lots", perms: ["item_variance", "inventory"], icon: Repeat },
+  { key: "lots", label: "Foam lots", href: "/inventory/lots", perms: ["item_variance", "inventory"], icon: Layers },
   { key: "reorders", label: "Reorders", href: "/inventory/reorders", perms: ["inventory"], icon: Send },
   { key: "receiving", label: "Receiving", href: "/inventory/incoming", perms: ["receiving", "inventory"], icon: Truck },
   { key: "transfers", label: "Transfers", href: "/inventory/transfers", perms: ["transfers"], icon: ArrowLeftRight },

@@ -32,6 +32,11 @@ export type StockRow = {
   rop_app?: boolean;
   rop_set_by_name?: string | null;
   max_qty: number | null;
+  /** Preferred vendor and lead time (business days) for this item here. */
+  vendor?: string | null;
+  lead_days?: number | null;
+  /** Added in the app (0116); its COUNT SHEET row is on the way. */
+  adding?: boolean;
   last_counted: string | null;
   counted_by: string | null;
   label: "in" | "low" | "out" | null;
@@ -67,10 +72,18 @@ export async function inventorySheets(supabase: SupabaseClient): Promise<SheetIn
 
 const INV_COLS = "product_id, sku, on_hand, reorder_point, max_qty, last_counted, counted_by, sheet_row, product:products(name, category_id, unit, image_url)";
 async function invRows(supabase: SupabaseClient, branch: string) {
-  const q = (cols: string) => supabase.from("inventory").select(cols).eq("branch_id", branch).eq("on_sheet", true).order("sheet_row").range(0, 4999);
-  const first = await q(`${INV_COLS}, rop_app, rop_set_by_name`);
+  const q = (cols: string, adding = false) => {
+    const x = supabase.from("inventory").select(cols).eq("branch_id", branch);
+    return (adding ? x.or("on_sheet.eq.true,add_to_sheet.eq.true") : x.eq("on_sheet", true)).order("sheet_row").range(0, 4999);
+  };
+  // 0116: items added in the app show up right away (their COUNT SHEET row follows). Older databases: fall back.
+  const a = await q(`${INV_COLS}, rop_app, rop_set_by_name, vendor, lead_days, on_sheet, add_to_sheet`, true);
+  if (!a.error) return a;
+  const b = await q(`${INV_COLS}, rop_app, rop_set_by_name, vendor, lead_days`);
+  if (!b.error) return b;
   // Before 0064 there's no rop_app column.
-  return first.error && /rop_/.test(first.error.message) ? q(INV_COLS) : first;
+  const c = await q(`${INV_COLS}, rop_app, rop_set_by_name`);
+  return c.error && /rop_/.test(c.error.message) ? q(INV_COLS) : c;
 }
 
 export async function branchStock(supabase: SupabaseClient, branch: string): Promise<StockRow[]> {
@@ -118,6 +131,10 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
     rop_app?: boolean;
     rop_set_by_name?: string | null;
     max_qty: number | null;
+    vendor?: string | null;
+    lead_days?: number | null;
+    on_sheet?: boolean;
+    add_to_sheet?: boolean;
     last_counted: string | null;
     counted_by: string | null;
     sheet_row: number | null;
@@ -140,6 +157,9 @@ export async function branchStock(supabase: SupabaseClient, branch: string): Pro
       rop_app: Boolean(r.rop_app),
       rop_set_by_name: r.rop_set_by_name ?? null,
       max_qty: n(r.max_qty),
+      vendor: r.vendor ?? null,
+      lead_days: n(r.lead_days),
+      adding: r.on_sheet === false && Boolean(r.add_to_sheet),
       last_counted: r.last_counted,
       counted_by: r.counted_by,
       label: l?.label === "in" || l?.label === "low" || l?.label === "out" ? l.label : null,

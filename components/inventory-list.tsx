@@ -2,8 +2,10 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, CircleAlert, CircleCheck, ListChecks, Search, Send, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ChevronRight, CircleAlert, CircleCheck, ListChecks, Plus, Search, Send, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { ProductPhoto } from "@/components/product-photo";
+import { ItemSettings } from "@/components/inventory/item-settings";
 import { Submit } from "@/components/forms";
 import type { StockRow } from "@/lib/inventory/view";
 import type { Category } from "@/lib/types";
@@ -199,6 +201,7 @@ export function InventoryList({
           <span className="tiny faint">
             {r.sku}
             <span className="show-sm"> · {q2(r.on_hand)} in stock{r.pending ? ` · ${q2(r.pending)} reserved` : ""}</span>
+            {r.adding ? " · being added to the COUNT SHEET" : ""}
             {r.lots ? ` · ${r.lots.length} ${r.lots.length === 1 ? "lot" : "lots"}` : r.last_counted ? ` · counted ${r.last_counted.slice(5).replace("-", "/")}${r.counted_by ? ` by ${r.counted_by}` : ""}` : ""}
           </span>
         </span>
@@ -268,7 +271,7 @@ export function InventoryList({
                       {r.lots.map((l) => (
                         <Fragment key={l.id}>
                           <tr className={l.expired ? "exp" : ""}>
-                            <td>{l.lot_no || "(no lot #)"}</td>
+                            <td><Link href={`/inventory/lots/${l.id}`}>{l.lot_no || "(no lot #)"}</Link></td>
                             <td>{md(l.use_by)}{l.expired ? " · expired" : l.exp ? "" : l.use_by ? " *" : ""}</td>
                             <td className="num">{q2(l.remaining)}</td>
                             <td className="num">{l.held ? q2(l.held) : "–"}</td>
@@ -287,7 +290,8 @@ export function InventoryList({
                   <p className="small muted" style={{ margin: 0 }}>No lots on the spreadsheet yet.</p>
                 )}
                 <p className="lot-note">
-                  Counted by lot. Change quantities on the FOAM LOTS tab of the {sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener noreferrer">spreadsheet</a> : "spreadsheet"}; the app adds pickups to Shipped Out.
+                  Counted by lot. Fix a count, a damaged drum or a date on <Link href={`/inventory/lots?b=${branch}`}>Foam lots</Link>; tap a lot # for its history.
+                  The app keeps the FOAM LOTS tab of the {sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener noreferrer">spreadsheet</a> : "spreadsheet"} in step (pickups go on Shipped Out).
                   {readOnly ? null : <>{" "}<a href={`/inventory/holds?b=${branch}`}>Hold drums for a customer</a>.</>}
                   {r.lots.some((l) => !l.exp && l.use_by) ? " * No Exp date: HFO 6 months after Mfg, everything else 12." : ""}
                 </p>
@@ -318,6 +322,12 @@ export function InventoryList({
                 <Submit className="btn sm" pendingText="Saving…">Save</Submit>
               </form>
             )}
+            {canRop && !readOnly ? (
+              <ItemSettings
+                branch={branch} product={r.product_id} unit={r.unit} rop={r.reorder_point} max={r.max_qty}
+                vendor={r.vendor ?? null} lead={r.lead_days ?? null} setBy={r.rop_set_by_name}
+              />
+            ) : null}
           </div>
         </div>
       </details>
@@ -444,6 +454,11 @@ export function InventoryList({
           ) : null}
           {mode === "view" && (canRop || canReorder) ? (
             <span className="stk-actions">
+              {canRop ? (
+                <Link className="b2 quiet sm" href={`/inventory/stock/add?b=${branch}`}>
+                  <Plus size={15} /> Add an item
+                </Link>
+              ) : null}
               {canRop ? (
                 <button type="button" className="b2 quiet sm" onClick={() => (setMode("rop"), setMsg(null))}>
                   <SlidersHorizontal size={15} /> Reorder points

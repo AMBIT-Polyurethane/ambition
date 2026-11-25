@@ -5922,3 +5922,65 @@ body:has(.adc) { background: #f4f4f2; }
   .lotchg-acts { grid-column: 1 / -1; justify-content: flex-start; }
   .lotchg-grid { grid-template-columns: 1fr; }
 }
+
+/* Inventory > Foam lots (0116): the FOAM LOTS tab in the app */
+.ldg-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.ldg-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 14px 16px 12px; }
+.ldg-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ldg-tbl th, .ldg-tbl td { padding: 9px 12px; text-align: left; border-top: 1px solid var(--line); vertical-align: middle; }
+.ldg-tbl thead th { font-size: 12px; font-weight: 700; color: var(--text2); white-space: nowrap; background: var(--s1); position: sticky; top: 0; z-index: 1; border-top: 0; }
+.ldg-tbl .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ldg-band th { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 7px 12px; }
+.ldg-prod td { background: var(--s1); padding: 8px 12px; }
+.ldg-row.empty td { color: var(--text3); }
+.ldg-row.on td { background: color-mix(in srgb, var(--red-text, #c62828) 5%, transparent); }
+.ldg-lot { font-weight: 750; font-variant-numeric: tabular-nums; }
+.ldg-held { color: #a78bfa; }
+:root[data-theme="light"] .ldg-held { color: #6d28d9; }
+.ldg-acts { text-align: right; width: 1%; white-space: nowrap; }
+.ldg-open td { border-top: 0; padding: 0; background: color-mix(in srgb, var(--red-text, #c62828) 5%, transparent); }
+.ldg-panel { display: flex; flex-direction: column; gap: 12px; padding: 6px 14px 16px; max-width: 760px; }
+.ldg-grid { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; }
+.ldg-grid .ldg-why { grid-column: 1 / -1; }
+.ldg-preview { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--s1); border: 1px dashed var(--line); font-variant-numeric: tabular-nums; }
+.ldg-preview svg { vertical-align: -2px; }
+.ldg-wait { list-style: none; margin: 0; padding: 0; }
+.ldg-wait li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.ldg-wait li:first-child { border-top: 0; }
+.ldg-wait-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ldg-wait-acts .input { width: 190px; }
+.lothist-nums { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.lothist-nums div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--s1); border: 1px solid var(--line); min-width: 0; }
+.lothist-nums b { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.lothist-nums span { font-size: 12px; color: var(--text2); }
+.lothist { list-style: none; margin: 0; padding: 0; }
+.lothist li { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto; gap: 12px; align-items: baseline; padding: 11px 18px; border-top: 1px solid var(--line); }
+.lothist li:first-child { border-top: 0; }
+.lothist .q { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.lothist .q.up { color: var(--ok-text); }
+.lothist .q.down { color: var(--red-text); }
+@media (max-width: 1000px) { .ldg-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lothist-nums { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 720px) {
+  .ldg-tbl .c-x { display: none; }
+  .ldg-tbl th, .ldg-tbl td { padding: 9px 8px; }
+  .ldg-grid { grid-template-columns: 1fr; }
+  .ldg-wait-acts { width: 100%; }
+  .ldg-wait-acts .input { flex: 1 1 100%; width: auto; }
+  .lothist-nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lothist li { grid-template-columns: minmax(0, 1fr) auto; padding: 11px 14px; }
+  .lothist li .t { grid-column: 1 / -1; }
+}
+/* Stock > an item > settings (0116) */
+.itm-set { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.itm-set-v { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.itm-set-v div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.itm-set-v dt { font-size: 12px; font-weight: 700; color: var(--text2); }
+.itm-set-v dd { margin: 0; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.itm-set-f { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.itm-add { display: flex; flex-direction: column; gap: 14px; padding: 18px; max-width: 760px; }
+.itm-add-pick { display: flex; flex-direction: column; max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+.itm-add-pick button { display: flex; justify-content: space-between; gap: 10px; align-items: center; text-align: left; padding: 11px 14px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: inherit; cursor: pointer; }
+.itm-add-pick button:first-child { border-top: 0; }
+.itm-add-pick button:hover, .itm-add-pick button.on { background: var(--s2); }
+.itm-add-pick button.on { box-shadow: inset 3px 0 0 #cf2e20; }
+@media (max-width: 640px) { .itm-set-v { grid-template-columns: repeat(2, minmax(0, 1fr)); } .itm-set-f { grid-template-columns: 1fr; } }

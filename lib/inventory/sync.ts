@@ -117,6 +117,11 @@ type Inv = {
   /** The sheet's Preferred Vendor and Lead Time (update 0101; absent before it). */
   vendor?: string | null;
   lead_days?: number | null;
+  /** Set in the app (0116): Max, and Vendor + Lead Time, are written to the sheet instead of read from it. */
+  max_app?: boolean;
+  supply_app?: boolean;
+  /** Added to this location in the app (0116): the sync adds its COUNT SHEET row. */
+  add_to_sheet?: boolean;
 };
 
 type Ord = {
@@ -332,6 +337,13 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
       itemByKey = new Map(count.items.map((i) => [i.key, i]));
       sum.items = count.items.length;
     }
+    // Items added to this location in the app (0116): their rows go onto the COUNT SHEET first.
+    if (await addAppItems(db, wb, countTab, countGrid, count, branch, productId, log)) {
+      countGrid = await wb.used(countTab);
+      count = parseCountSheet(countGrid);
+      itemByKey = new Map(count.items.map((i) => [i.key, i]));
+      sum.items = count.items.length;
+    }
     // PENDING PICKUP and NET AVAILABLE always calculate: a number typed over the formula is replaced.
     await restoreCountFormulas(wb, countTab, countGrid, count, sum, log);
 
@@ -475,15 +487,33 @@ async function runOnce(db: SupabaseClient, cfg: Cfg): Promise<SyncSummary> {
           sum.to_sheet++;
         }
       } else if (!same(item.rop, num(row.reorder_point))) patch.reorder_point = item.rop;
-      if (!same(item.max, num(row.max_qty))) patch.max_qty = item.max;
+      if (row.max_app) {
+        // Set in the app (0116): the sheet's Max column shows the app's number.
+        if (count.cols.max && !same(item.max, num(row.max_qty))) {
+          await wb.write(countTab, item.row, count.cols.max, [[row.max_qty ?? ""]]);
+          sum.to_sheet++;
+        }
+      } else if (!same(item.max, num(row.max_qty))) patch.max_qty = item.max;
       if (!same(item.weight, num(row.unit_weight))) patch.unit_weight = item.weight;
       if (!same(item.price, num(row.sell_price))) patch.sell_price = item.price;
       if (row.sheet_row !== item.row) patch.sheet_row = item.row;
       if (!row.on_sheet) patch.on_sheet = true;
       if (row.sku !== item.sku) patch.sku = item.sku;
       // Preferred Vendor and Lead Time, only once the database has the columns (update 0101).
-      if ("vendor" in row && count.cols.vendor && (item.vendor || null) !== (row.vendor || null)) patch.vendor = item.vendor || null;
-      if ("lead_days" in row && count.cols.lead && !same(item.lead, num(row.lead_days ?? null))) patch.lead_days = item.lead;
+      if (row.supply_app) {
+        // Set in the app (0116): the sheet shows the app's vendor and lead time.
+        if (count.cols.vendor && (item.vendor || null) !== (row.vendor || null)) {
+          await wb.write(countTab, item.row, count.cols.vendor, [[row.vendor ?? ""]]);
+          sum.to_sheet++;
+        }
+        if (count.cols.lead && !same(item.lead, num(row.lead_days ?? null))) {
+          await wb.write(countTab, item.row, count.cols.lead, [[row.lead_days ?? ""]]);
+          sum.to_sheet++;
+        }
+      } else {
+        if ("vendor" in row && count.cols.vendor && (item.vendor || null) !== (row.vendor || null)) patch.vendor = item.vendor || null;
+        if ("lead_days" in row && count.cols.lead && !same(item.lead, num(row.lead_days ?? null))) patch.lead_days = item.lead;
+      }
       const pendingHere = r2(manualPending.get(item.key) ?? 0);
       if (!same(pendingHere, num(row.sheet_pending))) patch.sheet_pending = pendingHere;
 
@@ -554,6 +584,87 @@ async function loadInventory(db: SupabaseClient, branch: string): Promise<Map<st
 /** SKU on the sheet -> product id. Adds products for SKUs the app doesn't have yet. */
 // ======================================================================================
 // COUNT SHEET upkeep
+
+/**
+ * Items added to a location in the app (Stock > Add an item, 0116): each gets a row on the COUNT SHEET under the last
+ * item of its product group (else at the bottom), with its SKU, description, group, unit, stock, reorder point, Max,
+ * vendor and lead time. The formula columns are filled in right after. Gives back how many rows went in.
+ */
+async function addAppItems(
+  db: SupabaseClient,
+  wb: Workbook,
+  tab: string,
+  g: Grid,
+  count: CountSheet,
+  branch: string,
+  productId: Map<string, string>,
+  log: (kind: string, message: string, sku?: string | null, before?: number | null, after?: number | null, by?: string) => void,
+): Promise<number> {
+  const { data, error } = await db
+    .from("inventory")
+    .select("product_id, sku, on_hand, reorder_point, max_qty, vendor, lead_days, last_counted, counted_by, added_by_name, product:products(name, unit, category_id)")
+    .eq("branch_id", branch)
+    .eq("add_to_sheet", true);
+  if (error || !data?.length) return 0; // before 0116 there's no add_to_sheet column
+  type Add = { product_id: string; sku: string; on_hand: number | null; reorder_point: number | null; max_qty: number | null; vendor: string | null; lead_days: number | null;
+    last_counted: string | null; counted_by: string | null; added_by_name: string | null; product: { name: string; unit: string; category_id: string | null } | null };
+  const adds = data as unknown as Add[];
+  const c = count.cols;
+  // Typed onto the sheet meanwhile: nothing to add, the row is there.
+  const onSheet = new Set(count.items.map((i) => productId.get(i.key)).filter(Boolean) as string[]);
+  for (const a of adds.filter((x) => onSheet.has(x.product_id))) {
+    await db.from("inventory").update({ add_to_sheet: false, updated_at: new Date().toISOString() }).eq("branch_id", branch).eq("product_id", a.product_id);
+  }
+  const todo = adds.filter((x) => !onSheet.has(x.product_id));
+  if (!todo.length) return 0;
+  // Each sheet item's product group, to put the new row with its kind.
+  const ids = [...new Set(count.items.map((i) => productId.get(i.key)).filter(Boolean) as string[])];
+  const catOf = new Map<string, string | null>();
+  for (let k = 0; k < ids.length; k += 300) {
+    const { data: ps } = await db.from("products").select("id, category_id").in("id", ids.slice(k, k + 300));
+    for (const p of (ps ?? []) as { id: string; category_id: string | null }[]) catOf.set(p.id, p.category_id);
+  }
+  const lastItemRow = Math.max(...count.items.map((i) => i.row), count.headerRow);
+  const width = Math.max(...Object.values(c).filter((v): v is number => typeof v === "number"), g.left + (g.values[0]?.length ?? 1) - 1);
+  const plan = todo.map((a) => {
+    const kin = count.items.filter((i) => { const pid = productId.get(i.key); return pid && a.product?.category_id && catOf.get(pid) === a.product.category_id; });
+    const after = kin.length ? kin.reduce((m, i) => (i.row > m.row ? i : m)) : null;
+    return { a, at: (after ? after.row : lastItemRow) + 1, group: after?.group ?? "" };
+  });
+  // From the bottom up, so the rows found above keep their numbers.
+  plan.sort((x, y) => y.at - x.at);
+  let added = 0;
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  for (const { a, at, group } of plan) {
+    const cells: unknown[] = Array(width).fill("");
+    const put = (col: number | undefined, v: unknown) => { if (col && col <= width) cells[col - 1] = v; };
+    put(c.sku, a.sku);
+    put(c.desc, a.product?.name ?? a.sku);
+    put(c.group, group);
+    put(c.uom, a.product?.unit ?? "");
+    put(c.stock, a.on_hand ?? "");
+    put(c.rop, a.reorder_point ?? "");
+    put(c.max, a.max_qty ?? "");
+    put(c.vendor, a.vendor ?? "");
+    put(c.lead, a.lead_days ?? "");
+    if (a.on_hand !== null) {
+      put(c.counted, sheetDate(a.last_counted ?? today));
+      put(c.by, a.counted_by ?? a.added_by_name ?? "");
+    }
+    // The formula columns (Pending Pickup, Net Available …): copied from the row above, moved down one.
+    for (let col = 1; col <= width; col++) {
+      const f = formulaText(g, at - 1, col);
+      if (f && cells[col - 1] === "") cells[col - 1] = shiftFormula(f, 1);
+    }
+    await wb.insertDown(tab, `A${at}:${colLetter(width)}${at}`);
+    await wb.write(tab, at, 1, [cells]);
+    await db.from("inventory").update({ add_to_sheet: false, on_sheet: true, sheet_row: at, synced_on_hand: a.on_hand, updated_at: new Date().toISOString() })
+      .eq("branch_id", branch).eq("product_id", a.product_id);
+    log("new_item", `${a.sku} added to the COUNT SHEET (row ${at}${group ? `, with ${group}` : ""}) from the app.`, a.sku, null, a.on_hand, a.added_by_name ?? "AMBIT A.I.");
+    added++;
+  }
+  return added;
+}
 
 /** Header text of each COUNT SHEET column, lower case. */
 const countHeaders = (g: Grid, count: CountSheet) => {

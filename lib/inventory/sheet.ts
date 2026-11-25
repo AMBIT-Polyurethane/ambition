@@ -141,7 +141,7 @@ const COUNT_COLS = {
   counted: (h: string) => h === "last counted",
   by: (h: string) => h === "counted by",
   notes: (h: string) => h === "notes",
-  // Read only (the app never writes them): who we buy it from and how long they take. Used by the ADC Best Strategy.
+  // Who we buy it from and how long they take (the ADC Best Strategy). Read from the sheet, unless set in the app (0116).
   vendor: (h: string) => h.startsWith("preferred vendor") || h === "vendor",
   lead: (h: string) => h.startsWith("lead time"),
 };
