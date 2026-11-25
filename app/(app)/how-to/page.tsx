@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CirclePlay } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { roleLabel } from "@/lib/access";
-import { HOWTO, HOWTO_FOLDER, clock, howtoThumb, type HowToVideo } from "@/lib/howto";
+import { HOWTO_FOLDER, clock, howtoFor, howtoThumb, type HowToVideo } from "@/lib/howto";
 import { HowToBulkUpload, WatchedMark } from "@/components/howto/player";
 
 export const metadata = { title: "How To Use A.I." };
@@ -17,9 +17,13 @@ export default async function HowToPage() {
 
   // Their job's videos first; admins and anyone without a job role just get the full list.
   const role = profile.job_role && profile.job_role !== "admin" ? profile.job_role : null;
-  const mine = role ? HOWTO.filter((v) => v.roles.includes(role)) : [];
-  const rest = mine.length ? HOWTO.filter((v) => !mine.includes(v)) : HOWTO;
-  const missing = HOWTO.filter((v) => !ready(v)).length;
+  const all = howtoFor(admin);
+  // Leadership videos (admins only) sit on top for admins.
+  const lead = all.filter((v) => v.adminOnly);
+  const staff = all.filter((v) => !v.adminOnly);
+  const mine = role ? staff.filter((v) => v.roles.includes(role)) : [];
+  const rest = mine.length ? staff.filter((v) => !mine.includes(v)) : staff;
+  const missing = all.filter((v) => !ready(v)).length;
 
   const card = (v: HowToVideo) => (
     <Link key={v.slug} href={`/how-to/${v.slug}`} className="howto-card">
@@ -58,6 +62,13 @@ export default async function HowToPage() {
       ) : null}
       {admin ? <HowToBulkUpload /> : null}
 
+      {lead.length ? (
+        <section className="section">
+          <div className="eyebrow">Leadership · admins only</div>
+          <div className="howto-grid">{lead.map(card)}</div>
+        </section>
+      ) : null}
+
       {mine.length ? (
         <section className="section">
           <div className="eyebrow">For you · {roleLabel(role)}</div>
@@ -66,7 +77,7 @@ export default async function HowToPage() {
       ) : null}
 
       <section className="section">
-        {mine.length ? <div className="eyebrow">More videos</div> : null}
+        {mine.length || lead.length ? <div className="eyebrow">{mine.length ? "More videos" : "How-to videos"}</div> : null}
         <div className="howto-grid">{rest.map(card)}</div>
       </section>
     </main>

@@ -100,6 +100,7 @@ export default async function ProfilePage() {
         <ListLink href="/orders" icon="cart" title={emp ? "Orders" : "My orders"} sub="History and reorder" />
         {emp ? <ListLink href="/directory" icon="users" title="Company directory" /> : null}
         {profile.role === "admin" ? <ListLink href="/admin" icon="shield" title="Admin" sub="Accounts, products, links and docs" /> : null}
+        {profile.role === "admin" ? <ListLink href="/feedback" icon="chat" title="Feedback" sub="Ideas, questions and concerns for Jeremiah" /> : null}
         {usesPassword ? <ListLink href="/reset-password" icon="shield" title="Change password" /> : null}
       </div>
 

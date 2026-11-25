@@ -13,6 +13,8 @@ export type HowToVideo = {
   blurb: string;
   seconds: number;
   chapters: { t: number; label: string }[];
+  /** Leadership only: admins see it; everyone else never does. */
+  adminOnly?: boolean;
 };
 
 export const HOWTO_FOLDER = "how-to";
@@ -715,3 +717,5 @@ export const HOWTO: HowToVideo[] = [
 ];
 
 export const howtoBySlug = (slug: string) => HOWTO.find((v) => v.slug === slug) ?? null;
+/** The videos this person may see (leadership videos are for admins only). */
+export const howtoFor = (admin: boolean) => HOWTO.filter((v) => admin || !v.adminOnly);

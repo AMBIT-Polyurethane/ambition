@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { requireEmployee } from "@/lib/session";
 import { TopBar } from "@/components/ui";
-import { HOWTO, clock, howtoBySlug, howtoPath, howtoPoster } from "@/lib/howto";
+import { clock, howtoBySlug, howtoFor, howtoPath, howtoPoster } from "@/lib/howto";
 import { HowToPlayer, HowToUpload } from "@/components/howto/player";
 
 export const metadata = { title: "How To Use A.I." };
@@ -14,15 +14,17 @@ export default async function HowToVideoPage({ params }: { params: Promise<{ slu
   if (!v) notFound();
   const { supabase, profile } = await requireEmployee();
   const admin = profile.role === "admin";
+  if (v.adminOnly && !admin) notFound();
+  const list = howtoFor(admin);
   const { data } = await supabase.storage.from("academy").createSignedUrl(howtoPath(v.slug), 60 * 60 * 6);
   const src = data?.signedUrl ?? null;
-  const next = HOWTO.find((x) => x.n === v.n + 1) ?? null;
+  const next = list.find((x) => x.n === v.n + 1) ?? null;
 
   return (
     <main className="shell">
       <TopBar title="How To Use A.I." back="/how-to" />
       <div className="col" style={{ gap: 4 }}>
-        <div className="eyebrow">Video {v.n} of {HOWTO.length} · {clock(v.seconds)}</div>
+        <div className="eyebrow">{v.adminOnly ? "Leadership · admins only" : `Video ${v.n} of ${list.filter((x) => !x.adminOnly).length}`} · {clock(v.seconds)}</div>
         <h1 className="howto-h1">{v.title}</h1>
         <div className="muted small">{v.who}</div>
       </div>
