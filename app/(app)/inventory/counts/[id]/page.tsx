@@ -87,7 +87,7 @@ export default async function CountPage({ params, searchParams }: { params: Prom
         <>
           <div className="card small col" style={{ gap: 6 }}>
             <b>How it works</b>
-            <span>Count what&apos;s physically on the shelf for each item (spray foam lot by lot), including anything set aside for orders that haven&apos;t left yet. Each number saves as you type it, so you can stop and come back. Leave an item blank if you didn&apos;t count it; it won&apos;t change. When you&apos;re done, tap <b>Send for approval</b>: an admin checks the differences, and once approved they go onto the spreadsheet.</span>
+            <span>Count what&apos;s physically on the shelf for each item (spray foam lot by lot), including anything set aside for orders that haven&apos;t left yet. Each number saves as you type it, so you can stop and come back. Leave an item blank if you didn&apos;t count it; it won&apos;t change. When you&apos;re done, tap <b>Send for approval</b>: an admin checks the differences, and once approved they go into stock.</span>
           </div>
           <CountSheet
             countId={count.id}
@@ -116,7 +116,7 @@ export default async function CountPage({ params, searchParams }: { params: Prom
             <section className="card col" style={{ gap: 10, borderColor: "var(--warn)" }}>
               <b>Approve these counts?</b>
               <span className="small muted">
-                Approving changes stock by each difference below (TOTAL IN STOCK on the COUNT SHEET, or Adj on FOAM LOTS for spray foam) and records who counted it. Anything picked up since the count is already taken into account.
+                Approving changes stock by each difference below (spray foam lot by lot, as an Adj on the lot) and records who counted it. Anything picked up since the count is already taken into account.
               </span>
               <span className="small muted">
                 A number counted wrong (a display item missed, digits swapped)? Tap <b>Edit count</b> next to the item and type the right number first. If it then matches the app, it&apos;s approved automatically.

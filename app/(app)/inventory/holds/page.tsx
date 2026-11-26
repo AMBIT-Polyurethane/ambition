@@ -44,7 +44,7 @@ export default async function HoldsPage({ searchParams }: { searchParams: Promis
     return (
       <main className="shell">
         <TopBar title="Holds" back="/inventory" />
-        <Empty icon="boxes" title="No inventory spreadsheet is connected yet">Holds are for lots on a location&apos;s FOAM LOTS tab.</Empty>
+        <Empty icon="boxes" title="No location has live inventory yet" />
       </main>
     );
   }
@@ -116,7 +116,7 @@ export default async function HoldsPage({ searchParams }: { searchParams: Promis
           {lots.length ? (
             <HoldForm branch={branch} lots={lots} customers={customers} lot={lotParam} company={sp.c ?? null} until={addDays(today, 30)} min={today} max={addDays(today, 180)} />
           ) : (
-            <p className="small muted" style={{ margin: 0 }}>No lots on this location&apos;s FOAM LOTS tab.</p>
+            <p className="small muted" style={{ margin: 0 }}>No foam lots at this location yet.</p>
           )}
         </section>
       ) : canPlace && !mine ? (

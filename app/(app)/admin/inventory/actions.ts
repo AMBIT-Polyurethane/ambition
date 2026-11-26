@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { msDisconnect } from "@/lib/microsoft";
-import { kickSync } from "@/lib/inventory/sync";
+import { kickSync, syncBranch } from "@/lib/inventory/sync";
 
 function back(kind: "msg" | "err", text: string): never {
   revalidatePath("/admin/inventory");
@@ -51,4 +51,30 @@ export async function disconnectMicrosoft() {
   if (!s) return;
   await msDisconnect();
   back("msg", "Disconnected from Microsoft. Stock stays as it is until someone connects again.");
+}
+
+/** Retire a location's spreadsheet (0120): one last sync, then A.I. is the only inventory record there. */
+export async function retireSheet(form: FormData) {
+  const s = await admin();
+  if (!s) return;
+  const branch = String(form.get("branch") ?? "");
+  if (!/^[a-z]{2,8}$/.test(branch)) back("err", "Pick a location.");
+  if (form.get("sure") !== "on") back("err", "Tick the box to confirm first.");
+  // Whatever was typed on the spreadsheet since the last sync comes in first.
+  const last = await syncBranch(branch, { force: true, why: "retiring the spreadsheet" });
+  // No Microsoft connection: retire anyway (an admin chose to); anything typed on the file since the last sync stays there.
+  const noMs = /microsoft/i.test(last.skipped ?? "");
+  if (!last.ok && !noMs && !/retired|no spreadsheet/i.test(last.skipped ?? "")) {
+    back("err", `The last sync didn't finish, so the spreadsheet wasn't retired: ${last.error ?? last.skipped ?? "try again in a minute"}`);
+  }
+  if (last.skipped === "another sync is running") back("err", "A sync is running right now. Try again in a minute.");
+  const { data, error } = await s.supabase.rpc("inventory_retire_sheet", { p_branch: branch });
+  if (error) back("err", /inventory_retire_sheet/.test(error.message) ? "Run the 0120 database update in Supabase first (SQL Editor)." : error.message);
+  const r = (data ?? {}) as { already?: boolean };
+  back(
+    "msg",
+    r.already
+      ? "That spreadsheet was already retired."
+      : `Retired. A.I. is now the only inventory record for this location. Move the spreadsheet into an Archive folder so nobody types in it.${noMs ? " (Microsoft wasn't connected, so nothing new was read from the file first.)" : ""}`,
+  );
 }

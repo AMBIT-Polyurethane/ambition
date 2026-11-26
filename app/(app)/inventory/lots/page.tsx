@@ -41,7 +41,7 @@ export default async function FoamLotsPage({ searchParams }: { searchParams: Pro
     return (
       <main className="shell">
         <TopBar title="Foam lots" back="/inventory" />
-        <Empty icon="boxes" title="No inventory spreadsheet is connected yet">Lots come from a location&apos;s FOAM LOTS tab.</Empty>
+        <Empty icon="boxes" title="No location has live inventory yet" />
       </main>
     );
   }
@@ -137,8 +137,8 @@ export default async function FoamLotsPage({ searchParams }: { searchParams: Pro
         <div className="alert warn small" role="note"><span>Foam lots needs database update {needs0115 ? "0115 and 0116" : "0116"} first (Supabase › SQL Editor). Until then it&apos;s look only.</span></div>
       ) : null}
       <p className="small muted" style={{ margin: 0 }}>
-        Every lot at {branchName(branch)}, the way the FOAM LOTS tab shows it. Fix a count, write off a damaged drum, change drums to another product,
-        or fix a date right here. The spreadsheet catches up within 2 minutes, and anything typed on the spreadsheet shows up here too.
+        Every lot at {branchName(branch)}. Fix a count, write off a damaged drum, change drums to another product, or fix a date right here; every change
+        is kept with who and why. <a href={`/inventory/lots/export?b=${branch}`}>Download as Excel</a>
       </p>
       {fixLevel === "limited" ? <p className="tiny faint" style={{ margin: 0 }}>You fix up to 2 drums at a time. More than that goes to an admin to OK, and they get an email.</p> : null}
       {!fixLevel && !needs0115 && !needs0116 ? <p className="tiny faint" style={{ margin: 0 }}>Look only{lock && lock !== branch ? `: lots at ${branchName(branch)} are fixed by that location` : ""}.</p> : null}
@@ -148,7 +148,7 @@ export default async function FoamLotsPage({ searchParams }: { searchParams: Pro
           canDecide={admin && !needs0116} waiting={waiting} changesWeek={weekRes.count ?? 0} pick={Number(sp.lot) || null}
         />
       ) : (
-        <p className="small muted" style={{ margin: 0 }}>No lots on this location&apos;s FOAM LOTS tab.</p>
+        <p className="small muted" style={{ margin: 0 }}>No foam lots at this location yet.</p>
       )}
       <section className="card col" style={{ gap: 6 }} aria-label="Changes made">
         <b>Changes made · {branchName(branch)}</b>

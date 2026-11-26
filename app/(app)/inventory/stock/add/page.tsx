@@ -55,8 +55,7 @@ export default async function AddItemPage({ searchParams }: { searchParams: Prom
       <TopBar title="Add an item" back={`/inventory/stock?b=${branch}`} />
       <HubNav profile={profile} active="stock" branch={branch} />
       <p className="small muted" style={{ margin: 0 }}>
-        Put a product on {where}&apos;s stock list. The app adds its row to the COUNT SHEET (under the other items in its category) within
-        2 minutes, so nobody has to type it into the spreadsheet. <Link href={`/inventory/stock?b=${branch}`}>Back to Stock</Link>
+        Put a product on {where}&apos;s stock list. It shows up on the stock list and the order screen right away. <Link href={`/inventory/stock?b=${branch}`}>Back to Stock</Link>
       </p>
       <AddStockItem branch={branch} where={where} products={products} />
     </main>

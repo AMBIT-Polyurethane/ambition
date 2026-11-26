@@ -145,9 +145,9 @@ export default async function LotHistoryPage({ params }: { params: Promise<{ id:
             <div><b>{q(free)}</b><span>Available{held ? ` (${q(held)} held)` : ""}</span></div>
           </div>
           {Number(l.out_unsynced) || Number(l.in_unsynced) || Number(l.adj_unsynced) ? (
-            <span className="tiny faint">Some of this is still going onto FOAM LOTS (the spreadsheet catches up within 2 minutes).</span>
+            <span className="tiny faint">Some of this is still being written to the old spreadsheet (within 2 minutes).</span>
           ) : null}
-          {l.notes ? <span className="small muted">Notes on the sheet: {l.notes}</span> : null}
+          {l.notes ? <span className="small muted">Notes: {l.notes}</span> : null}
         </div>
       </section>
       <section className="card2" aria-label="History">
@@ -167,7 +167,7 @@ export default async function LotHistoryPage({ params }: { params: Promise<{ id:
           </ul>
         ) : (
           <p className="small muted" style={{ margin: 0, padding: "14px 18px" }}>
-            Nothing has happened to this lot in the app yet. Starting quantity {q(l.starting)} came from the FOAM LOTS tab.
+            Nothing has happened to this lot in the app yet. It started with {q(l.starting)}.
           </p>
         )}
         <p className="tiny faint" style={{ margin: 0, padding: "10px 18px 14px" }}>Starting quantity {q(l.starting)} is what FOAM LOTS says the lot came in with.</p>

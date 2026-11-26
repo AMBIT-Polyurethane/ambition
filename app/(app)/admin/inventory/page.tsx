@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, CircleAlert, CircleCheck, ExternalLink, RefreshCw, X } from "lucide-react";
+import { Archive, Check, CircleAlert, CircleCheck, ExternalLink, RefreshCw, X } from "lucide-react";
 import { requireAdmin } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { Submit } from "@/components/forms";
@@ -10,7 +10,8 @@ import { MS_ENV, msConnection, msMissing } from "@/lib/microsoft";
 import { serviceReady } from "@/lib/supabase/service";
 import { ago, inventorySheets } from "@/lib/inventory/view";
 import { syncNow } from "@/app/(app)/inventory/actions";
-import { disconnectMicrosoft, saveSheet } from "./actions";
+import { disconnectMicrosoft, retireSheet, saveSheet } from "./actions";
+import { retireCheck, type RetireCheck } from "@/lib/inventory/retire";
 
 export const metadata = { title: "Inventory admin" };
 export const dynamic = "force-dynamic";
@@ -37,6 +38,11 @@ export default async function InventoryAdminPage({ searchParams }: { searchParam
     return b ? `${b.name}, ${b.state}` : id.toUpperCase();
   };
   const notSetUp = branches.filter((b) => !sheets.some((s) => s.branch_id === b.id));
+  // Retiring (0120): the clean-up list for every live location that still uses its spreadsheet.
+  const canRetire = sheets.some((s) => "retired_at" in s);
+  const checks = new Map<string, RetireCheck>(
+    await Promise.all(sheets.filter((s) => s.enabled && !s.retired_at).map(async (s) => [s.branch_id, await retireCheck(supabase, s.branch_id)] as const)),
+  );
   const logs = (logRows ?? []) as LogRow[];
   const ready = !missing.length && keyOk;
 
@@ -105,13 +111,19 @@ export default async function InventoryAdminPage({ searchParams }: { searchParam
                 <b>{name(s.branch_id)}</b>
                 <span className="tiny faint ellipsis">{s.file_name ?? "File name shows after the first sync"}</span>
                 <span className="tiny faint">
-                  {s.enabled ? (s.last_ok_at ? `Last matched ${ago(s.last_ok_at)}` : "Not synced yet") : "Off"}
-                  {s.last_summary?.items ? ` · ${s.last_summary.items} items on the sheet` : ""}
+                  {s.retired_at
+                    ? `Retired ${dateTime(s.retired_at)}${s.retired_by_name ? ` by ${s.retired_by_name}` : ""} · A.I. is the only inventory record here`
+                    : s.enabled
+                      ? s.last_ok_at
+                        ? `Last matched ${ago(s.last_ok_at)}`
+                        : "Not synced yet"
+                      : "Off"}
+                  {!s.retired_at && s.last_summary?.items ? ` · ${s.last_summary.items} items on the sheet` : ""}
                 </span>
               </div>
               <div className="row" style={{ gap: 8 }}>
-                <a className="iconbtn" href={s.share_url} target="_blank" rel="noopener noreferrer" aria-label="Open the spreadsheet"><ExternalLink size={18} /></a>
-                {s.enabled && conn ? (
+                <a className="iconbtn" href={s.share_url} target="_blank" rel="noopener noreferrer" aria-label={s.retired_at ? "Open the archived spreadsheet" : "Open the spreadsheet"}><ExternalLink size={18} /></a>
+                {s.enabled && conn && !s.retired_at ? (
                   <form action={syncNow}>
                     <input type="hidden" name="branch" value={s.branch_id} />
                     <input type="hidden" name="to" value="admin" />
@@ -120,11 +132,18 @@ export default async function InventoryAdminPage({ searchParams }: { searchParam
                 ) : null}
               </div>
             </div>
-            {s.last_error ? <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>{s.last_error}</span></div> : null}
-            {s.last_summary?.duplicates?.length ? (
+            {s.retired_at ? (
+              <div className="alert info small" style={{ margin: 0 }}>
+                <Archive size={16} style={{ flex: "none", marginTop: 2 }} />
+                <span>The app no longer reads or writes this file. Keep it in an Archive folder as a record of the old way; every count, pickup, receipt and lot change now lives only in A.I.</span>
+              </div>
+            ) : null}
+            {!s.retired_at && s.last_error ? <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none", marginTop: 2 }} /><span>{s.last_error}</span></div> : null}
+            {!s.retired_at && s.last_summary?.duplicates?.length ? (
               <div className="alert info small">These SKUs are on the COUNT SHEET twice (only the first is used): {s.last_summary.duplicates.join(", ")}</div>
             ) : null}
-            <form action={saveSheet} className="col">
+            {!s.retired_at && s.enabled && canRetire && checks.get(s.branch_id) ? <RetirePanel branch={s.branch_id} where={name(s.branch_id)} c={checks.get(s.branch_id)!} /> : null}
+            {s.retired_at ? null : <form action={saveSheet} className="col">
               <input type="hidden" name="branch" value={s.branch_id} />
               <label className="field">
                 <span className="label">Spreadsheet link (Share → Copy link)</span>
@@ -134,7 +153,7 @@ export default async function InventoryAdminPage({ searchParams }: { searchParam
                 <label className="check"><input type="checkbox" name="enabled" defaultChecked={s.enabled} /> The app keeps stock in step with this spreadsheet</label>
                 <Submit className="btn sm dark">Save</Submit>
               </div>
-            </form>
+            </form>}
           </div>
         ))}
         {notSetUp.length ? (
@@ -185,5 +204,54 @@ export default async function InventoryAdminPage({ searchParams }: { searchParam
         )}
       </section>
     </main>
+  );
+}
+
+/** Retire this location's spreadsheet: the clean-up list, then one confirmed button (no pop-ups). */
+function RetirePanel({ branch, where, c }: { branch: string; where: string; c: RetireCheck }) {
+  const list = (xs: string[]) => (xs.length > 6 ? `${xs.slice(0, 6).join(", ")} and ${xs.length - 6} more` : xs.join(", "));
+  const rows: { ok: boolean; text: string }[] = [
+    { ok: !c.negItems.length, text: c.negItems.length ? `Below zero: ${list(c.negItems.map((x) => `${x.sku} (${x.qty})`))}` : "No items below zero" },
+    { ok: !c.negLots.length, text: c.negLots.length ? `Lots below zero: ${list(c.negLots.map((x) => `${x.sku} ${x.lot} (${x.qty})`))}` : "No lots below zero" },
+    { ok: !c.expired.length, text: c.expired.length ? `Expired but still in stock: ${list(c.expired.map((x) => `${x.sku} ${x.lot} (${x.qty})`))}` : "No expired lots in stock" },
+    {
+      ok: !c.offList.length,
+      text: c.offList.length
+        ? `Taken off the spreadsheet but still holding drums in A.I. (hidden from orders; confirm with the warehouse): ${list(c.offList.map((x) => `${x.sku} ${x.lot} (${x.qty})`))}`
+        : "No lots hiding off the list",
+    },
+    { ok: !c.blanks, text: c.blanks ? `${c.blanks} of ${c.items} items have a blank stock number: count them so pickups take them down` : "Every item has a stock number" },
+    { ok: !c.noRop, text: c.noRop ? `${c.noRop} of ${c.items} items have no reorder point yet (low-stock alerts need one)` : "Every item has a reorder point" },
+  ];
+  return (
+    <details className="card2" style={{ padding: "12px 14px" }}>
+      <summary className="small" style={{ cursor: "pointer", fontWeight: 700 }}>
+        <Archive size={14} style={{ verticalAlign: -2 }} /> Retire this spreadsheet
+      </summary>
+      <div className="col" style={{ gap: 10, marginTop: 10 }}>
+        <span className="small muted">
+          A.I. runs one last sync, then becomes the only inventory record for {where}. Counts, pickups, receiving and lot fixes all happen in the app, and the
+          file is never read or written again. This can&apos;t be switched back on from here.
+        </span>
+        <ul className="setup-list">
+          {rows.map((r) => (
+            <li key={r.text} className={r.ok ? "ok" : ""}>
+              {r.ok ? <Check size={16} /> : <CircleAlert size={16} />}
+              <span className="small">{r.text}</span>
+            </li>
+          ))}
+        </ul>
+        <span className="tiny faint">None of these stop you from retiring; they&apos;re the clean-up list for {where}&apos;s warehouse manager.</span>
+        <form action={retireSheet} className="col" style={{ gap: 10 }}>
+          <input type="hidden" name="branch" value={branch} />
+          <label className="check">
+            <input type="checkbox" name="sure" required /> I understand: after this, nobody types in {where}&apos;s spreadsheet
+          </label>
+          <Submit className="btn sm dark" pendingText="Retiring…">
+            <Archive size={15} /> Retire the spreadsheet
+          </Submit>
+        </form>
+      </div>
+    </details>
   );
 }

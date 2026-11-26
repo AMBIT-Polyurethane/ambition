@@ -17,7 +17,7 @@ export default async function ListValuesPage() {
   const { supabase, profile } = await requireActive();
   if (profile.role !== "admin") redirect(hubHome(profile) ?? "/");
   const live = await inventoryBranches(supabase, profile);
-  if (!live.length) return <main className="shell"><TopBar title="List values" back="/inventory" /><Empty icon="boxes" title="No inventory spreadsheet is connected yet" /></main>;
+  if (!live.length) return <main className="shell"><TopBar title="List values" back="/inventory" /><Empty icon="boxes" title="No location has live inventory yet" /></main>;
   const ids = live.map((b) => b.id);
 
   type Inv = { branch_id: string; product_id: string; on_hand: number | null; sell_price: number | null; product: { id: string; sku: string; name: string; unit: string; list_price: number | null; category_id: string | null } | null };

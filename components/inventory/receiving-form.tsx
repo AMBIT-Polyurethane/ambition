@@ -669,7 +669,7 @@ export function ReceivingForm({
       <p className="tiny faint center" style={{ margin: 0 }}>
         {admin
           ? <>Everything that came in good goes onto TOTAL IN STOCK at {branchName}. Spray foam goes onto FOAM LOTS; other lots / batches go onto RECEIVED LOTS. The BOL stays with the report.</>
-          : <>An admin checks the report, then the stock and {branchName}&apos;s spreadsheet update. Until then these items can&apos;t be ordered from here.</>}
+          : <>An admin checks the report, then {branchName}&apos;s stock updates. Until then these items can&apos;t be ordered from here.</>}
       </p>
     </div>
   );

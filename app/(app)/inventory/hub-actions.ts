@@ -139,12 +139,12 @@ export async function receiveReport(input: ReportInput): Promise<{ ok: false; er
     const sent = await emailAdminsReportWaiting(s.supabase, id);
     redirect(
       `/inventory/incoming/${id}?msg=${encodeURIComponent(
-        `Sent to an admin for approval${sent.status === "sent" ? " (they were emailed)" : ""}. Stock and the spreadsheet update once it's approved.${also}`,
+        `Sent to an admin for approval${sent.status === "sent" ? " (they were emailed)" : ""}. Stock updates once it's approved.${also}`,
       )}`,
     );
   }
   kickSync(input.branch, "receiving report");
-  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent(`Received. Stock updated; the spreadsheet catches up within 2 minutes.${also}`)}`);
+  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent(`Received. Stock is updated.${also}`)}`);
 }
 
 /** A sent-back report that was redone as another report for the same truck: close it (nothing from it is in stock). */
@@ -196,7 +196,7 @@ export async function approveReceiving(form: FormData) {
   revalidatePath("/");
   if (error) redirect(`/inventory/incoming/${id}?err=${encodeURIComponent(error.message)}`);
   if (d) kickSync(d.branch_id, "receiving report approved");
-  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent("Approved. Stock updated; the spreadsheet catches up within 2 minutes.")}`);
+  redirect(`/inventory/incoming/${id}?msg=${encodeURIComponent("Approved. Stock is updated.")}`);
 }
 
 /** Admin: send a Receiving Report back to whoever received it, with what to fix. */

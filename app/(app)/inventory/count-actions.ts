@@ -124,7 +124,7 @@ async function review(form: FormData, approve: boolean) {
   done(
     `/inventory/counts/${id}`,
     "msg",
-    approve ? `Approved. ${Number(data)} ${Number(data) === 1 ? "difference goes" : "differences go"} onto the spreadsheet in a few seconds.` : "Not approved. Stock wasn't changed.",
+    approve ? `Approved. ${Number(data)} ${Number(data) === 1 ? "difference is" : "differences are"} now in stock.` : "Not approved. Stock wasn't changed.",
   );
 }
 
@@ -167,7 +167,7 @@ export async function receiveIncoming(id: number, lines: ReceiveLine[]): Promise
   const { error } = await s.supabase.rpc("inbound_receive", { p_id: id, p_lines: lines });
   if (error) return { ok: false, error: error.message };
   if (d) kickSync(d.branch_id, "delivery received");
-  done(`/inventory/incoming/${id}`, "msg", "Received. It goes onto the spreadsheet in a few seconds.");
+  done(`/inventory/incoming/${id}`, "msg", "Received. Stock is updated.");
 }
 
 export async function cancelIncoming(form: FormData) {

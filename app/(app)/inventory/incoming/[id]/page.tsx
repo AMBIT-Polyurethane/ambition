@@ -140,7 +140,7 @@ export default async function IncomingDetailPage({ params, searchParams }: { par
           <CircleAlert size={18} style={{ flex: "none", marginTop: 1 }} />
           <span>
             {admin
-              ? <>Sent by <b>{d.submitted_by_name ?? "the warehouse"}</b> · {dateTime(d.submitted_at)}. Check it against the BOL, then approve it: stock and {branchName}&apos;s spreadsheet update right away.</>
+              ? <>Sent by <b>{d.submitted_by_name ?? "the warehouse"}</b> · {dateTime(d.submitted_at)}. Check it against the BOL, then approve it: {branchName}&apos;s stock updates right away.</>
               : <>Waiting for an admin to approve it (sent by {d.submitted_by_name ?? "you"} · {dateTime(d.submitted_at)}). Nothing has gone into stock yet.</>}
           </span>
         </div>

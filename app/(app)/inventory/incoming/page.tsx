@@ -113,7 +113,7 @@ export default async function ReceivingPage({ searchParams }: { searchParams: Pr
         <>
           <div className="eyebrow">Waiting for admin approval</div>
           <p className="tiny faint" style={{ margin: 0 }}>
-            {profile.role === "admin" ? "Open each one, check it, and approve it. Stock and the spreadsheet update when you do." : "An admin approves these. Stock and the spreadsheet update then."}
+            {profile.role === "admin" ? "Open each one, check it, and approve it. Stock updates when you do." : "An admin approves these. Stock and the spreadsheet update then."}
           </p>
           <div className="list">{waiting.map(item)}</div>
         </>

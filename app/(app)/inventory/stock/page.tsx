@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, CircleAlert, CircleCheck, ClipboardCheck, Eye, ExternalLink, ListChecks, Lock, RefreshCw, Send, TriangleAlert, Truck } from "lucide-react";
+import { ChevronLeft, CircleAlert, CircleCheck, ClipboardCheck, Download, Eye, ExternalLink, ListChecks, Lock, RefreshCw, Send, TriangleAlert, Truck } from "lucide-react";
 import { Help } from "@/components/help";
 import { MoreMenu } from "@/components/order2/menu";
 import { todayCentral } from "@/lib/sale";
@@ -39,7 +39,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     return (
       <main className="shell">
         <TopBar title="Stock" back="/inventory" />
-        <Empty icon="boxes" title="No inventory spreadsheet is connected yet">
+        <Empty icon="boxes" title="No location has live inventory yet">
           {profile.role === "admin" ? <Link href="/admin/inventory">Set it up in Admin → Inventory</Link> : "An admin sets this up in Admin → Inventory."}
         </Empty>
       </main>
@@ -95,14 +95,28 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             <div className="o2-title">
               <h1>Stock</h1>
               <span className="o2-sub stk-sync">
-                <span className={`stk-dot${sheet.last_error ? " warn" : sheet.last_ok_at ? " ok" : ""}`} aria-hidden="true" />
-                {sheet.last_ok_at ? `Matches the spreadsheet · ${ago(sheet.last_ok_at)}` : "Not synced with the spreadsheet yet"}
-                <Help label="How the spreadsheet sync works">
-                  Counts saved here reach the spreadsheet in seconds. Changes made on the spreadsheet show here within 2 minutes. When a
-                  PENDING ORDERS line is marked Picked Up / Completed, the app lowers TOTAL IN STOCK for you (its Notes say &ldquo;Stock
-                  taken&rdquo;). Spray foam is counted by lot on the FOAM LOTS tab: orders take ISO from Covestro first, then the lot that
-                  expires soonest.
-                </Help>
+                {sheet.retired_at ? (
+                  <>
+                    <span className="stk-dot ok" aria-hidden="true" />
+                    Live in A.I.
+                    <Help label="Where stock lives">
+                      A.I. is the inventory record for this location (the old spreadsheet was retired). Orders hold stock the moment
+                      they&apos;re placed and take it out when they&apos;re picked up or delivered; receiving adds it; counts and lot
+                      fixes change it. Spray foam is counted by lot: orders take ISO from Covestro first, then the lot that expires soonest.
+                    </Help>
+                  </>
+                ) : (
+                  <>
+                    <span className={`stk-dot${sheet.last_error ? " warn" : sheet.last_ok_at ? " ok" : ""}`} aria-hidden="true" />
+                    {sheet.last_ok_at ? `Matches the spreadsheet · ${ago(sheet.last_ok_at)}` : "Not synced with the spreadsheet yet"}
+                    <Help label="How the spreadsheet sync works">
+                      Counts saved here reach the spreadsheet in seconds. Changes made on the spreadsheet show here within 2 minutes. When a
+                      PENDING ORDERS line is marked Picked Up / Completed, the app lowers TOTAL IN STOCK for you (its Notes say &ldquo;Stock
+                      taken&rdquo;). Spray foam is counted by lot on the FOAM LOTS tab: orders take ISO from Covestro first, then the lot that
+                      expires soonest.
+                    </Help>
+                  </>
+                )}
               </span>
             </div>
           </div>
@@ -116,14 +130,16 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 ))}
               </nav>
             ) : null}
-            <MoreMenu label="More: sync now, the spreadsheet, reorder requests, full count">
-              {mine ? (
+            <MoreMenu label={sheet.retired_at ? "More: download, reorder requests, full count" : "More: sync now, the spreadsheet, reorder requests, full count"}>
+              {mine && !sheet.retired_at ? (
                 <form action={syncNow}>
                   <input type="hidden" name="branch" value={branch} />
                   <button type="submit" className="menu2-i" style={{ width: "100%" }}><RefreshCw size={18} /> Sync with the spreadsheet now</button>
                 </form>
               ) : null}
-              <a className="menu2-i" href={sheet.share_url} target="_blank" rel="noopener noreferrer"><ExternalLink size={18} /> Open {sheet.file_name ?? "the spreadsheet"}</a>
+              {sheet.retired_at ? null : <a className="menu2-i" href={sheet.share_url} target="_blank" rel="noopener noreferrer"><ExternalLink size={18} /> Open {sheet.file_name ?? "the spreadsheet"}</a>}
+              <a className="menu2-i" href={`/inventory/stock/export?b=${branch}`}><Download size={18} /> Download stock list (Excel)</a>
+              <a className="menu2-i" href={`/inventory/lots/export?b=${branch}`}><Download size={18} /> Download foam lots (Excel)</a>
               {mine ? <Link className="menu2-i" href={`/inventory/reorders?b=${branch}`}><Send size={18} /> Reorder requests{openRequests ? ` · ${openRequests} waiting on ${buyer.name.split(" ")[0]}` : ""}</Link> : null}
               {mine ? <Link className="menu2-i" href={`/inventory/counts?b=${branch}`}><ListChecks size={18} /> Count everything (quarterly)</Link> : null}
             </MoreMenu>

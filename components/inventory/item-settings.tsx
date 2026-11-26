@@ -61,7 +61,7 @@ export function ItemSettings({ branch, product, unit, rop, max, vendor, lead, se
           <input className="input sm" inputMode="numeric" value={v.lead} onChange={(e) => setV({ ...v, lead: e.target.value.replace(/\D/g, "") })} />
         </label>
       </div>
-      <span className="tiny faint">Blank leaves it blank. Max is what a reorder fills up to. These go onto the COUNT SHEET within 2 minutes.</span>
+      <span className="tiny faint">Blank leaves it blank. Max is what a reorder fills up to.</span>
       {badMax ? <span className="small err-text">Max has to be at least the reorder point.</span> : null}
       <div className="row" style={{ gap: 8 }}>
         <button type="button" className="btn sm" disabled={pending || badMax} onClick={save}>{pending ? <LoaderCircle size={15} className="spin" /> : <Check size={15} />} Save settings</button>

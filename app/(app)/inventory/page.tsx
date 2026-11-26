@@ -42,7 +42,7 @@ export default async function InventoryHubPage({ searchParams }: { searchParams:
             Warehouse managers see the Inventory Hub for their own location. An admin sets your location in Admin → Accounts.
           </Empty>
         ) : (
-          <Empty icon="boxes" title="No inventory spreadsheet is connected yet">
+          <Empty icon="boxes" title="No location has live inventory yet">
             {profile.role === "admin" ? <Link href="/admin/inventory">Set it up in Admin → Inventory</Link> : "An admin sets this up in Admin → Inventory."}
           </Empty>
         )}

@@ -1095,7 +1095,7 @@ export function OrderBuilder(props: Props) {
                       <span className="lot-avail none">0 available · held for other orders</span>
                     )}
                   </div>
-                  <div className="lot-meta">{lotDates(l) || "No dates on the FOAM LOTS tab"}</div>
+                  <div className="lot-meta">{lotDates(l) || "No dates yet"}</div>
                 </div>
                 {off ? null : n > 0 ? (
                   <Stepper qty={n} max={l.available} label={`${p.name}, ${lotName}`} onChange={(v) => setLot(p.id, l, v)} />

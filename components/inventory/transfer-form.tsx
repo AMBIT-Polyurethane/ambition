@@ -57,7 +57,7 @@ export function TransferForm({
         if (q > l.item.available) return setError(`${fromName} has ${l.item.available} ${l.item.sku} available.`);
         out.push({ product_id: l.item.product_id, qty: q });
       }
-      if (!stocked.has(l.item.product_id)) return setError(`${l.item.sku} isn't on ${dest?.name}'s inventory sheet. They need a row for it on their COUNT SHEET first.`);
+      if (!stocked.has(l.item.product_id)) return setError(`${l.item.sku} isn't on ${dest?.name}'s stock list yet. Add it there first (Stock › Add an item).`);
     }
     if (!out.length) return setError("Add at least one item.");
     setBusy(true);
@@ -105,7 +105,7 @@ export function TransferForm({
                       {l.item.lots ? `${l.item.lotList.reduce((s, x) => s + Math.max(0, x.available), 0)} available across ${l.item.lotList.length} ${l.item.lotList.length === 1 ? "lot" : "lots"}` : `${l.item.available} ${plural(l.item.unit, l.item.available)} available`}
                     </div>
                   ) : null}
-                  {notThere ? <div className="tiny warn-t" style={{ marginTop: 2 }}>{dest?.name} doesn&apos;t stock this yet: they need a row for it on their COUNT SHEET first.</div> : null}
+                  {notThere ? <div className="tiny warn-t" style={{ marginTop: 2 }}>{dest?.name} doesn&apos;t stock this yet: add it to their stock list first (Stock › Add an item).</div> : null}
                 </div>
                 <button type="button" className="iconbtn" aria-label="Remove this line" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [{ key: seq++, item: null, qty: "", lot: "" }]))}>
                   <Trash2 size={16} />

@@ -14,6 +14,9 @@ export type SheetInfo = {
   last_ok_at: string | null;
   last_error: string | null;
   last_summary: { from_sheet?: number; to_sheet?: number; new_products?: string[]; lines_added?: number; sheet_closed?: number; conflicts?: number; items?: number; full?: boolean; duplicates?: string[]; lots?: number; lot_issues?: string[] } | null;
+  /** 0120: the spreadsheet was retired; A.I. is the only inventory record here. */
+  retired_at?: string | null;
+  retired_by_name?: string | null;
 };
 
 export type StockRow = {
@@ -61,11 +64,11 @@ export type LotView = {
 
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
+const SHEET_COLS = "branch_id, share_url, file_name, enabled, connected_at, last_sync_at, last_ok_at, last_error, last_summary";
 export async function inventorySheets(supabase: SupabaseClient): Promise<SheetInfo[]> {
-  const { data, error } = await supabase
-    .from("inventory_sheets")
-    .select("branch_id, share_url, file_name, enabled, connected_at, last_sync_at, last_ok_at, last_error, last_summary")
-    .order("branch_id");
+  const first = await supabase.from("inventory_sheets").select(`${SHEET_COLS}, retired_at, retired_by_name`).order("branch_id");
+  // Before the 0120 update there's no retired_at yet.
+  const { data, error } = first.error ? await supabase.from("inventory_sheets").select(SHEET_COLS).order("branch_id") : first;
   if (error) return [];
   return (data ?? []) as SheetInfo[];
 }

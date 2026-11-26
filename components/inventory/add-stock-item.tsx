@@ -87,7 +87,7 @@ export function AddStockItem({ branch, where, products }: { branch: string; wher
             <button type="button" className="btn" disabled={pending || badMax} onClick={save}>
               {pending ? <LoaderCircle size={16} className="spin" /> : <Check size={16} />} Add {pick.sku} to {where}
             </button>
-            <span className="tiny faint">Its COUNT SHEET row follows within 2 minutes.</span>
+            <span className="tiny faint">It&apos;s on the stock list now.</span>
           </div>
         </>
       ) : null}

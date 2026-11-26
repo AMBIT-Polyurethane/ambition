@@ -26,7 +26,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const pick =
     sp.b === "all" ? "all"
     : live.find((b) => b.id === sp.b)?.id ?? own ?? (live.some((b) => b.id === profile.branch_id) ? profile.branch_id! : "all");
-  if (!live.length) return <main className="shell"><TopBar title="Reports" back="/inventory" /><Empty icon="boxes" title="No inventory spreadsheet is connected yet" /></main>;
+  if (!live.length) return <main className="shell"><TopBar title="Reports" back="/inventory" /><Empty icon="boxes" title="No location has live inventory yet" /></main>;
   const hub = await loadHub(supabase, pick === "all" ? "all" : [pick]);
   const rep = buildReport(hub, key);
   const meta = REPORTS.find((r) => r.key === key)!;

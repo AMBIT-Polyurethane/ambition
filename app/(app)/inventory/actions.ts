@@ -41,7 +41,7 @@ export async function stockChange(form: FormData) {
   back(
     branch,
     "msg",
-    mode === "count" ? `${sku}: counted ${now}. It goes onto the spreadsheet in a few seconds.` : `${sku}: ${mode === "received" ? "added" : "taken out"}, now ${now} in stock.`,
+    mode === "count" ? `${sku}: counted ${now}.` : `${sku}: ${mode === "received" ? "added" : "taken out"}, now ${now} in stock.`,
     `p-${product}`,
   );
 }

@@ -94,6 +94,8 @@ type Cfg = {
   last_error: string | null;
   row_seen: Record<string, string> | null;
   sync_wanted_at: string | null;
+  /** 0120: the spreadsheet was retired; the app is the only record and never touches the file again. */
+  retired_at?: string | null;
 };
 
 type Inv = {
@@ -172,6 +174,7 @@ export async function syncBranch(branch: string, opts: { force?: boolean; why?: 
   const db = serviceClient();
   const { data: cfg } = await db.from("inventory_sheets").select("*").eq("branch_id", branch).maybeSingle<Cfg>();
   if (!cfg || !cfg.enabled) return { branch, ok: false, skipped: "no spreadsheet for this branch" };
+  if (cfg.retired_at) return { branch, ok: true, skipped: "the spreadsheet is retired" };
   if (!(await msConnection())) return { branch, ok: false, skipped: "Microsoft isn't connected yet" };
   const wanted = cfg.sync_wanted_at && (!cfg.last_sync_at || cfg.sync_wanted_at > cfg.last_sync_at);
   if (!opts.force && !wanted && cfg.last_sync_at && Date.now() - Date.parse(cfg.last_sync_at) < 45_000) {
@@ -186,6 +189,7 @@ export async function syncBranch(branch: string, opts: { force?: boolean; why?: 
       const started = new Date().toISOString();
       await db.from("inventory_sheets").update({ last_sync_at: started }).eq("branch_id", branch);
       const { data: fresh } = await db.from("inventory_sheets").select("*").eq("branch_id", branch).single<Cfg>();
+      if (fresh?.retired_at) break;
       const t0 = Date.now();
       try {
         const one = await runOnce(db, fresh!);
@@ -234,9 +238,9 @@ function mergeSummary(a: SyncSummary, b: SyncSummary): SyncSummary {
 /** Every branch with a spreadsheet (the 2-minute timer). */
 export async function syncAll(opts: { force?: boolean } = {}): Promise<SyncResult[]> {
   if (!serviceReady()) return [];
-  const { data } = await serviceClient().from("inventory_sheets").select("branch_id").eq("enabled", true);
+  const { data } = await serviceClient().from("inventory_sheets").select("*").eq("enabled", true);
   const out: SyncResult[] = [];
-  for (const r of (data ?? []) as { branch_id: string }[]) out.push(await syncBranch(r.branch_id, opts));
+  for (const r of (data ?? []) as { branch_id: string; retired_at?: string | null }[]) if (!r.retired_at) out.push(await syncBranch(r.branch_id, opts));
   return out;
 }
 

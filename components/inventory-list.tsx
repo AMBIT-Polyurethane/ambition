@@ -122,7 +122,7 @@ export function InventoryList({
     );
     setBusy(false);
     if (!res.ok) return setMsg({ ok: false, text: res.error });
-    setMsg({ ok: true, text: `Saved ${res.n ?? changed.length} reorder ${changed.length === 1 ? "point" : "points"}. The spreadsheet's Reorder Point column updates in a minute or two.` });
+    setMsg({ ok: true, text: `Saved ${res.n ?? changed.length} reorder ${changed.length === 1 ? "point" : "points"}.` });
     setRop({});
     setMode("view");
     router.refresh();
@@ -201,7 +201,7 @@ export function InventoryList({
           <span className="tiny faint">
             {r.sku}
             <span className="show-sm"> · {q2(r.on_hand)} in stock{r.pending ? ` · ${q2(r.pending)} reserved` : ""}</span>
-            {r.adding ? " · being added to the COUNT SHEET" : ""}
+            {r.adding ? " · just added" : ""}
             {r.lots ? ` · ${r.lots.length} ${r.lots.length === 1 ? "lot" : "lots"}` : r.last_counted ? ` · counted ${r.last_counted.slice(5).replace("-", "/")}${r.counted_by ? ` by ${r.counted_by}` : ""}` : ""}
           </span>
         </span>
@@ -287,11 +287,10 @@ export function InventoryList({
                     </tbody>
                   </table>
                 ) : (
-                  <p className="small muted" style={{ margin: 0 }}>No lots on the spreadsheet yet.</p>
+                  <p className="small muted" style={{ margin: 0 }}>No lots yet.</p>
                 )}
                 <p className="lot-note">
                   Counted by lot. Fix a count, a damaged drum or a date on <Link href={`/inventory/lots?b=${branch}`}>Foam lots</Link>; tap a lot # for its history.
-                  The app keeps the FOAM LOTS tab of the {sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener noreferrer">spreadsheet</a> : "spreadsheet"} in step (pickups go on Shipped Out).
                   {readOnly ? null : <>{" "}<a href={`/inventory/holds?b=${branch}`}>Hold drums for a customer</a>.</>}
                   {r.lots.some((l) => !l.exp && l.use_by) ? " * No Exp date: HFO 6 months after Mfg, everything else 12." : ""}
                 </p>

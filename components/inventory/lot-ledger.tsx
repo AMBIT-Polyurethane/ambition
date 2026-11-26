@@ -283,7 +283,7 @@ export function LotLedger({
           </table>
         </div>
         <p className="tiny faint" style={{ margin: 0, padding: "10px 16px 14px" }}>
-          Same columns as the FOAM LOTS tab at {branchName}. Remaining = Starting − Shipped out + Shipped in + Adj. Tap a lot # for its whole history.
+          Remaining = Starting − Shipped out + Shipped in + Adj. Tap a lot # for its whole history.
         </p>
       </section>
     </div>

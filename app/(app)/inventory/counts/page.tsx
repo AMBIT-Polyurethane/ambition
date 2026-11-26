@@ -57,7 +57,7 @@ export default async function CountsPage({ searchParams }: { searchParams: Promi
       ) : null}
       <section className="card col" style={{ gap: 8 }}>
         <b>Quarterly inventory reconciliation</b>
-        <span className="small muted">Count everything at {branch.name} in the app. An admin approves the differences, then they go onto the spreadsheet.</span>
+        <span className="small muted">Count everything at {branch.name} in the app. An admin approves the differences, then they go into stock.</span>
         {openRec ? (
           <Link href={`/inventory/counts/${openRec.id}`} className="btn sm" style={{ alignSelf: "flex-start" }}>Carry on counting (started {dateShort(openRec.started_at)})</Link>
         ) : (
