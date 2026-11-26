@@ -713,6 +713,48 @@ export const HOWTO: HowToVideo[] = [
         "label": "The rule"
       }
     ]
+  },
+  {
+    "n": 13,
+    "slug": "leadership-briefing",
+    "title": "How AMBIT Runs: Leadership Briefing",
+    "who": "Ownership and the executive team (admins only)",
+    "roles": [
+      "admin"
+    ],
+    "blurb": "How AMBIT runs in A.I.: how information flows, the standard every employee is held to, leading your people in the system, where it's going, and what Jeremiah needs from you.",
+    "seconds": 673,
+    "chapters": [
+      {
+        "t": 0.0,
+        "label": "How AMBIT runs"
+      },
+      {
+        "t": 44.0,
+        "label": "The system on one page"
+      },
+      {
+        "t": 143.5,
+        "label": "How information flows"
+      },
+      {
+        "t": 312.8,
+        "label": "The standard"
+      },
+      {
+        "t": 440.1,
+        "label": "Leading in the system"
+      },
+      {
+        "t": 529.5,
+        "label": "Where we're taking it"
+      },
+      {
+        "t": 624.4,
+        "label": "What I need from you"
+      }
+    ],
+    "adminOnly": true
   }
 ];
 
