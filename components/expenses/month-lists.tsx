@@ -101,9 +101,9 @@ export function ReceiptList({ view, editable, empty, backTo }: { view: MonthView
   );
 }
 
-/** Returns, fees and charges an approver said need no receipt. */
+/** Returns, fees and charges an approver said need no receipt. Personal purchases are listed on their own (RepayList). */
 export function OtherCharges({ view, locked = true }: { view: MonthView; locked?: boolean }) {
-  const other = view.charges.filter((c) => !c.receipt_id && (c.kind !== "purchase" || c.excused_note) && c.kind !== "other");
+  const other = view.charges.filter((c) => !c.receipt_id && !c.personal_repay && (c.kind !== "purchase" || c.excused_note) && c.kind !== "other");
   if (!other.length) return null;
   return (
     <section className="section">
@@ -115,7 +115,7 @@ export function OtherCharges({ view, locked = true }: { view: MonthView; locked?
               <span className="t ellipsis" style={{ fontSize: 14 }}>{chargeLabel(c)}</span>
               <span className="s ellipsis">
                 {dateShort(c.txn_date)} ·{" "}
-                {c.kind === "return" ? "Return / credit" : c.kind === "fee" ? "Bank fee" : PERSONAL.test(c.excused_note ?? "") ? "Personal purchase: payroll takes it out of your paycheck" : `No receipt needed: ${c.excused_note}`}
+                {c.kind === "return" ? "Return / credit" : c.kind === "fee" ? "Bank fee" : PERSONAL.test(c.excused_note ?? "") ? "Personal purchase: taken out of pay" : `No receipt needed: ${c.excused_note}`}
               </span>
             </span>
             <b className="nowrap">{money(Number(c.amount))}</b>
@@ -127,8 +127,39 @@ export function OtherCharges({ view, locked = true }: { view: MonthView; locked?
   );
 }
 
+/** Personal purchases on the AMBIT card: not on the expense report; payroll takes them out of a paycheck.
+ *  `who` is the person's first name on an approver's screen (blank = "your", on their own screen). */
+export function RepayList({ view, canUndo, who }: { view: MonthView; canUndo: boolean; who?: string }) {
+  if (!view.repay.length) return null;
+  const whose = who ? `${who}'s` : "your";
+  return (
+    <section className="section">
+      <div className="row between">
+        <div className="eyebrow">Personal purchases</div>
+        <span className="tiny muted">Out of {whose} pay · not in the total</span>
+      </div>
+      <div className="list">
+        {view.repay.map((c) => (
+          <div key={c.id} className="item" style={{ minHeight: 54 }}>
+            <span className="grow col" style={{ gap: 1, minWidth: 0 }}>
+              <span className="t ellipsis" style={{ fontSize: 14 }}>{chargeLabel(c)}</span>
+              <span className="s ellipsis">
+                {dateShort(c.txn_date)}
+                {c.card_last4 ? ` · card ••${c.card_last4}` : ""} ·{" "}
+                {c.repay_status === "withheld" ? `Taken out of pay${c.repay_withheld_at ? ` ${dateShort(c.repay_withheld_at)}` : ""}` : "Comes out of the next paycheck"}
+              </span>
+            </span>
+            <b className="nowrap">{money(Number(c.amount))}</b>
+            {canUndo && c.repay_status !== "withheld" ? <UndoPersonal chargeId={c.id} /> : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** The month's totals and how many card charges have their receipt. */
-export function MonthSummary({ view, label }: { view: MonthView; label: string }) {
+export function MonthSummary({ view, label, who }: { view: MonthView; label: string; who?: string }) {
   const t = view.totals;
   const done = t.matched + view.charges.filter((c) => c.kind === "purchase" && !c.receipt_id && c.excused_note).length;
   const pct = t.charges ? Math.round((done / t.charges) * 100) : 0;
@@ -145,8 +176,13 @@ export function MonthSummary({ view, label }: { view: MonthView; label: string }
       </div>
       <div className="exp-split">
         <span><i className="exp-dot c-card" /> AMBIT card <b>{money(t.card)}</b></span>
-        <span><i className="exp-dot personal" /> Pay back to you <b>{money(t.personal)}</b></span>
+        <span><i className="exp-dot personal" /> Pay back to {who || "you"} <b>{money(t.personal)}</b></span>
       </div>
+      {t.repay ? (
+        <span className="tiny muted">
+          Not in the total: {money(t.repay)} in personal purchases on the card, taken out of {who ? `${who}'s` : "your"} pay.
+        </span>
+      ) : null}
       {t.charges ? (
         <div className="xm-meter" aria-label={`${t.matched} of ${t.charges} card charges have a receipt`}>
           <div className="row between tiny">

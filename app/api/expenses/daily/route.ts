@@ -2,8 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { plaidReady, syncAll } from "@/lib/plaid";
 import { todayCentral } from "@/lib/sale";
-import { CHARGE_COLS, RECEIPT_COLS, RECEIPT_COLS_0050, addDays, missing0062, monthView, shiftMonth, type XCharge, type XReceipt } from "@/lib/expense-kinds";
+import { CHARGE_COLS, RECEIPT_COLS, RECEIPT_COLS_0050, addDays, missing0062, monthLabel, monthView, shiftMonth, type XCharge, type XReceipt } from "@/lib/expense-kinds";
 import { mailMissing, mailSubmitted, type Submitted } from "@/lib/expense-mail";
+import { textStaff } from "@/lib/sms";
+import { money } from "@/lib/format";
 
 // Every morning (vercel.json "crons"):
 // 1. New card charges from the bank link (when Chase is connected).
@@ -68,6 +70,8 @@ export async function GET(req: NextRequest) {
         if (dom === 3 || monday) {
           const r = await mailMissing(p, view.missing, site, last);
           if (r.status === "sent") reminded++;
+          const n = view.missing.length;
+          await textStaff([uid], `AMBIT A.I.: ${n} card ${n === 1 ? "charge" : "charges"} from ${monthLabel(last)} still ${n === 1 ? "needs" : "need"} a receipt. Add ${n === 1 ? "it" : "them"} so your report can go in: ${site}/expenses?m=${last}`, "waiting", `${uid}:${last}`).catch(() => 0);
         }
         continue;
       }
@@ -78,6 +82,11 @@ export async function GET(req: NextRequest) {
       const s = { ...(data as Omit<Submitted, "userId">), userId: uid };
       const res = await mailSubmitted(s, view, site, { auto: true });
       await db.from("expense_reports").update({ email_status: res.status, sent_to: s.approvers.map((a) => a.email) }).eq("user_id", uid).eq("month", lastFrom);
+      // 0118: approvers with text alerts on get a text too.
+      if (s.approvers.length) {
+        const { data: ap } = await db.from("profiles").select("id").in("email", s.approvers.map((a) => a.email));
+        await textStaff(((ap ?? []) as { id: string }[]).map((x) => x.id), `AMBIT A.I.: ${s.name}'s ${monthLabel(last)} expenses (${money(Number(s.total))}) went in for approval on their own. ${site}/admin/expenses/review?u=${uid}&m=${last}`, "waiting", `${uid}:${last}`).catch(() => 0);
+      }
       auto++;
     }
     out.auto_submitted = auto;
@@ -105,6 +114,7 @@ export async function GET(req: NextRequest) {
       if (!p) continue;
       const r = await mailMissing(p, list.sort((a, b) => a.txn_date.localeCompare(b.txn_date)), site);
       if (r.status === "sent") weekly++;
+      await textStaff([uid], `AMBIT A.I.: ${list.length} card ${list.length === 1 ? "charge needs" : "charges need"} a receipt. Snap ${list.length === 1 ? "it" : "them"} here: ${site}/expenses`, "waiting", uid).catch(() => 0);
     }
     out.weekly_reminders = weekly;
   }

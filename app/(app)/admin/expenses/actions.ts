@@ -11,6 +11,7 @@ import { mailReviewed } from "@/lib/expense-mail";
 import { api, type Submission } from "@/lib/jotform";
 import { exchange, linkToken, plaidReady, removeItem, syncAll, syncLink } from "@/lib/plaid";
 import { money } from "@/lib/format";
+import { textStaff } from "@/lib/sms";
 
 // What approvers do in Admin > Expense reports. Everything goes through the database's own rules
 // (is_expense_approver); the bank link's keys are handled with the server's own key, never sent to a browser.
@@ -39,7 +40,13 @@ export async function reviewMonth(userId: string, month: string, approve: boolea
     }
   }
   const demo = /\.invalid$/i.test(r.email ?? "");
-  const res = demo ? { status: "demo" as const } : await mailReviewed({ ...r, total: Number(r.total), personal: Number(r.personal), note: note || null }, await currentOrigin(), [profile.email], pdf);
+  const origin = await currentOrigin();
+  const res = demo ? { status: "demo" as const } : await mailReviewed({ ...r, total: Number(r.total), personal: Number(r.personal), note: note || null }, origin, [profile.email], pdf);
+  // 0118: sent back is waiting on them, so they get a text too (if they turned text alerts on).
+  if (!approve && !demo) {
+    const by = (profile.full_name || profile.email).split(" ")[0];
+    await textStaff([userId], `AMBIT A.I.: ${by} sent your ${monthLabel(month)} expenses back: "${note.slice(0, 160)}" Fix it and send it again: ${origin}/expenses?m=${month}`, "handoff", `${userId}:${month}`).catch(() => 0);
+  }
   done();
   const first = r.name.split(" ")[0];
   if (demo) return { ok: true, msg: `${approve ? `Approved ${first}'s ${monthLabel(month)} (${money(Number(r.total))}).` : `Sent ${first}'s ${monthLabel(month)} back.`} (Demo employee: no email.)` };

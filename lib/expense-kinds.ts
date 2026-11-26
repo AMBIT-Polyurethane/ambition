@@ -97,8 +97,12 @@ export type XCharge = {
   match_how: "auto" | "manual" | null;
   excused_note: string | null;
   category: string | null;
+  /** 0063: a personal purchase on the AMBIT card. Payroll takes it out of their pay; it's not on the expense report. */
+  personal_repay?: boolean;
+  repay_status?: "waiting" | "withheld" | null;
+  repay_withheld_at?: string | null;
 };
-export const CHARGE_COLS = "id, source, card_last4, user_id, txn_date, post_date, description, merchant, kind, amount, receipt_id, match_how, excused_note, category";
+export const CHARGE_COLS = "id, source, card_last4, user_id, txn_date, post_date, description, merchant, kind, amount, receipt_id, match_how, excused_note, category, personal_repay, repay_status, repay_withheld_at";
 
 export type ReportStatus = "sent" | "submitted" | "approved" | "returned";
 export type XReport = {
@@ -159,7 +163,9 @@ export type MonthView = {
   waiting: XReceipt[];
   /** Receipts not matched to any charge (any month nearby): what "Pick one I uploaded" offers. */
   loose: XReceipt[];
-  totals: { total: number; card: number; personal: number; receipts: number; charges: number; matched: number; byCategory: { category: string; total: number; count: number }[] };
+  /** Personal purchases on the AMBIT card: payroll takes them out of their pay, so they're not in the totals. */
+  repay: XCharge[];
+  totals: { total: number; card: number; personal: number; repay: number; receipts: number; charges: number; matched: number; byCategory: { category: string; total: number; count: number }[] };
 };
 
 /**
@@ -201,8 +207,14 @@ export function monthView(month: string, nearby: XReceipt[], charges: XCharge[])
     addSplit(r, Number(r.amount));
   }
   const byId = new Map(nearby.map((r) => [r.id, r]));
+  const repay: XCharge[] = [];
   for (const c of mine) {
     if (c.kind === "other") continue;
+    // A personal purchase isn't a company expense: it comes off the report and out of their paycheck.
+    if (c.personal_repay && !c.receipt_id) {
+      repay.push(c);
+      continue;
+    }
     card += Number(c.amount);
     const r = c.receipt_id ? byId.get(c.receipt_id) : null;
     if (r) addSplit(r, Number(c.amount));
@@ -215,10 +227,12 @@ export function monthView(month: string, nearby: XReceipt[], charges: XCharge[])
     chargeFor,
     waiting,
     loose,
+    repay,
     totals: {
       total: r2(card + personal),
       card: r2(card),
       personal: r2(personal),
+      repay: r2(repay.reduce((a, c) => a + Number(c.amount), 0)),
       receipts: receipts.length,
       charges: mine.filter((c) => c.kind === "purchase").length,
       matched: mine.filter((c) => c.kind === "purchase" && c.receipt_id).length,

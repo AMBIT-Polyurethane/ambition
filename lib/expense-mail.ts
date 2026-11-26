@@ -26,12 +26,13 @@ export async function mailSubmitted(s: Submitted, view: MonthView, origin: strin
   const link = `${origin}/admin/expenses/review?u=${s.userId}&m=${s.month}`;
   const tied = view.receipts.filter((r) => (r.customer_name ?? "").trim()).length;
   const noPhoto = view.receipts.filter((r) => !r.photos.length).length;
-  const excused = view.charges.filter((c) => c.excused_note).length;
+  const excused = view.charges.filter((c) => c.excused_note && !c.personal_repay).length;
   const lines = [
     `${s.receipts} ${s.receipts === 1 ? "receipt" : "receipts"}`,
     s.charges ? `every card charge (${view.totals.charges}) has a receipt${excused ? ` or "no receipt needed"` : ""}` : "no card charges loaded for the month",
     tied ? `${tied} tied to a customer` : "",
     noPhoto ? `${noPhoto} lost ${noPhoto === 1 ? "receipt" : "receipts"} (explained, no photo)` : "",
+    view.totals.repay ? `${money(view.totals.repay)} in personal purchases taken out of pay (not in the total)` : "",
   ].filter(Boolean);
   return sendEmail({
     to: s.approvers.map((a) => a.email),

@@ -1,15 +1,16 @@
 import Link from "next/link";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CalendarDays, ChevronRight, CircleCheck, CircleDollarSign, Hash, Hourglass, PenLine, Receipt, ShieldAlert, Truck } from "lucide-react";
+import { CalendarDays, Camera, ChevronRight, CircleCheck, CircleDollarSign, ClipboardCheck, Hash, Hourglass, PenLine, Receipt, ShieldAlert, Truck, Undo2 } from "lucide-react";
 import { can } from "@/lib/access";
 import type { Profile } from "@/lib/types";
 import { deskAccess, waitingSince } from "@/lib/order-desk";
 import { myTodos } from "@/lib/chat";
 import { TodoList } from "@/components/chat/todos";
-import { orderNo } from "@/lib/format";
+import { money, orderNo } from "@/lib/format";
+import { monthLabel } from "@/lib/expense-kinds";
 import type { Order, OrderStage } from "@/lib/types";
 
-type Item = { id: string; no: number; company: string; what: string; when: string; late: boolean; since: number; icon: React.ReactNode; color: string };
+type Item = { id: string; no: number; company: string; what: string; when: string; late: boolean; since: number; icon: React.ReactNode; color: string; href?: string; sub?: string };
 
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 const ago = (iso: string | null) => {
@@ -32,7 +33,10 @@ export async function MyWork({ db, profile }: { db: SupabaseClient; profile: Pro
   const stages: string[] = [];
   if (desk && !admin) stages.push("needs_po", "invoice_update", "schedule");
   if (credit && !admin) stages.push("credit", "hold");
-  const [byStage, toLoad, mine, changes, todos] = await Promise.all([
+  const staff = profile.role === "admin" || profile.role === "employee";
+  const approver = staff && Boolean(profile.expense_approver);
+  const old = new Date(Date.now() - 3 * 86400_000).toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const [byStage, toLoad, mine, changes, todos, myReps, owed, toApprove] = await Promise.all([
     stages.length ? db.from("orders").select(cols).in("stage", stages).order("created_at").limit(60) : Promise.resolve({ data: [] }),
     // The warehouse: today's and late pickups / deliveries at their location (the desk sees late ones too).
     warehouse || (desk && !admin)
@@ -47,6 +51,13 @@ export async function MyWork({ db, profile }: { db: SupabaseClient; profile: Pro
     // Admins: changes nobody can load until an admin approves them (0075).
     admin ? db.from("order_edits").select("order_id, edited_at, orders!inner(id, order_no, company_name)").eq("admin_needed", true).is("admin_approved_at", null).order("edited_at").limit(30) : Promise.resolve({ data: [] }),
     myTodos(db, profile.id, { limit: 5 }),
+    // Expenses: a month that was sent back to them, card charges over 3 days old with no receipt, and (approvers)
+    // reports waiting for approval.
+    staff ? db.from("expense_reports").select("month, review_note, returned_at").eq("user_id", profile.id).eq("status", "returned").limit(6) : Promise.resolve({ data: [] }),
+    staff
+      ? db.from("expense_charges").select("txn_date").eq("user_id", profile.id).eq("removed", false).eq("kind", "purchase").is("receipt_id", null).is("excused_note", null).lte("txn_date", old).order("txn_date").limit(50)
+      : Promise.resolve({ data: [] }),
+    approver ? db.from("expense_reports").select("user_id, month, total, submitted_at").eq("status", "submitted").neq("user_id", profile.id).order("submitted_at").limit(20) : Promise.resolve({ data: [] }),
   ]);
 
   const items: Item[] = [];
@@ -78,11 +89,32 @@ export async function MyWork({ db, profile }: { db: SupabaseClient; profile: Pro
     const s = ago(c.edited_at);
     items.push({ id: o.id, no: o.order_no, company: o.company_name, what: "Approve the change (check the invoice)", when: s.text, late: s.days >= 1, since: s.days + 1000, icon: <ShieldAlert size={17} />, color: "#F87171" });
   }
+  for (const r of (myReps.data ?? []) as { month: string; review_note: string | null; returned_at: string | null }[]) {
+    const m = r.month.slice(0, 7);
+    const s = ago(r.returned_at);
+    items.push({ id: `xr:${m}`, no: 0, company: "", what: `Fix your ${monthLabel(m)} expenses and send them again`, sub: r.review_note ? `“${r.review_note}”` : "Sent back", when: s.text, late: s.days >= 2, since: s.days + 500, icon: <Undo2 size={17} />, color: "#F0B95A", href: `/expenses?m=${m}` });
+  }
+  const owedRows = (owed.data ?? []) as { txn_date: string }[];
+  if (owedRows.length) {
+    const s = ago(`${owedRows[0].txn_date}T12:00:00Z`);
+    items.push({ id: "xr:owed", no: 0, company: "", what: `Add the receipt for ${owedRows.length === 1 ? "a card charge" : `${owedRows.length} card charges`}`, sub: "Expenses · AMBIT card", when: s.text, late: s.days >= 10, since: s.days, icon: <Camera size={17} />, color: "#34D399", href: `/expenses?m=${owedRows[0].txn_date.slice(0, 7)}` });
+  }
+  const waitRows = (toApprove.data ?? []) as { user_id: string; month: string; total: number; submitted_at: string | null }[];
+  if (waitRows.length) {
+    const ids = [...new Set(waitRows.map((w) => w.user_id))];
+    const { data: ppl } = await db.from("profiles").select("id, full_name, email").in("id", ids);
+    const nm = new Map(((ppl ?? []) as { id: string; full_name: string | null; email: string }[]).map((p) => [p.id, p.full_name || p.email]));
+    for (const w of waitRows) {
+      const m = w.month.slice(0, 7);
+      const s = ago(w.submitted_at);
+      items.push({ id: `xa:${w.user_id}:${m}`, no: 0, company: "", what: `Approve ${(nm.get(w.user_id) ?? "an employee").split(" ")[0]}'s ${monthLabel(m)} expenses`, sub: `Expense report · ${money(Number(w.total))}`, when: s.text, late: s.days >= 3, since: s.days, icon: <ClipboardCheck size={17} />, color: "#A78BFA", href: `/admin/expenses/review?u=${w.user_id}&m=${m}` });
+    }
+  }
   items.sort((a, b) => b.since - a.since);
   const shown = items.slice(0, 7);
   const allHref = admin ? "/orders/desk" : desk ? "/orders/desk" : credit ? "/orders?stage=credit" : warehouse ? "/orders?stage=scheduled" : "/orders";
   const nothing = !items.length && !todos.length;
-  if (nothing && !(desk || credit || warehouse || admin || rep)) return null;
+  if (nothing && !(desk || credit || warehouse || admin || rep || approver)) return null;
 
   return (
     <section className="card2 mywork" aria-label="My work">
@@ -94,11 +126,11 @@ export async function MyWork({ db, profile }: { db: SupabaseClient; profile: Pro
         <div className="card2-b row" style={{ gap: 10, color: "var(--ok-text)", fontWeight: 700 }}><CircleCheck size={19} /> Nothing waiting on you. All caught up.</div>
       ) : null}
       {shown.map((it) => (
-        <Link key={it.id} href={`/orders/${it.id}`} className="mw-row">
+        <Link key={it.id} href={it.href ?? `/orders/${it.id}`} className="mw-row">
           <span className="mw-ic" style={{ color: it.color }}>{it.icon}</span>
           <span className="mw-b">
             <span className="mw-t">{it.what}</span>
-            <span className="mw-s">{orderNo(it.no)} · {it.company}</span>
+            <span className="mw-s">{it.sub ?? `${orderNo(it.no)} · ${it.company}`}</span>
           </span>
           <span className={`mw-w${it.late ? " late" : ""}`}>{it.when}</span>
           <ChevronRight size={17} className="mw-c" />

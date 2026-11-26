@@ -223,7 +223,7 @@ export function ReviewForm({ userId, month, mode, canApprove, mine, missing }: {
         <details>
           <summary className="tiny muted" style={{ cursor: "pointer" }}>Something wrong? Send it back</summary>
           <div className="col" style={{ gap: 10, marginTop: 10 }}>
-            <textarea className="textarea" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What needs fixing" />
+            <textarea className="textarea" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What needs fixing" aria-label="What needs fixing" />
             <button type="button" className="btn sm dark" style={{ alignSelf: "flex-start" }} disabled={pending || !note.trim()} onClick={() => go(false)}>
               Send back
             </button>

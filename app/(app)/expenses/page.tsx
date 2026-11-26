@@ -5,7 +5,7 @@ import { isExpenseApprover, requireEmployee } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { dateShort, money } from "@/lib/format";
 import { isMonth, loadMonth, monthLabel, reportBadge, shiftMonth, thisMonth } from "@/lib/expenses";
-import { MissingList, MonthSummary, OtherCharges, ReceiptList } from "@/components/expenses/month-lists";
+import { MissingList, MonthSummary, OtherCharges, ReceiptList, RepayList } from "@/components/expenses/month-lists";
 import { SubmitMonth } from "@/components/expenses/month-bits";
 
 export const metadata = { title: "Expenses" };
@@ -154,6 +154,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
           <MissingList view={view} locked={locked} />
           <ReceiptList view={view} editable={!locked} empty={month === now ? "No receipts yet this month. Tap Add a receipt after each purchase." : `No receipts for ${label}.`} />
           <OtherCharges view={view} locked={locked} />
+          <RepayList view={view} canUndo={!locked} />
         </>
       ) : null}
 

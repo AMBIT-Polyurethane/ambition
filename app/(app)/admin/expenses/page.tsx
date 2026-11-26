@@ -120,7 +120,7 @@ export default async function AdminExpensesPage({ searchParams }: { searchParams
       supabase.from("expense_reports").select("id, user_id, month, total, submitted_at, auto_submitted, receipt_count").eq("status", "submitted").order("submitted_at"),
       supabase.from("expense_reports").select("user_id, status, total, approved_by_name").eq("month", from),
       supabase.from("expense_receipts").select("id, user_id, amount, paid_with").is("deleted_at", null).gte("bought_on", from).lt("bought_on", next).limit(5000),
-      supabase.from("expense_charges").select("user_id, amount, kind, receipt_id, excused_note").eq("removed", false).gte("txn_date", from).lt("txn_date", next).limit(5000),
+      supabase.from("expense_charges").select("user_id, amount, kind, receipt_id, excused_note, personal_repay").eq("removed", false).gte("txn_date", from).lt("txn_date", next).limit(5000),
     ]);
     const waiting = (waitRows ?? []) as (Pick<XReport, "id" | "user_id" | "month" | "total" | "submitted_at" | "auto_submitted" | "receipt_count">)[];
     const reps = new Map(((repRows ?? []) as Pick<XReport, "user_id" | "status" | "total" | "approved_by_name">[]).map((r) => [r.user_id, r]));
@@ -128,7 +128,7 @@ export default async function AdminExpensesPage({ searchParams }: { searchParams
     const rows = new Map<string, Row>();
     const row = (id: string) => rows.get(id) ?? (rows.set(id, { id, receipts: 0, charges: 0, missing: 0, total: 0 }), rows.get(id)!);
     const recs = (recRows ?? []) as { id: string; user_id: string; amount: number; paid_with: string }[];
-    const chgs = (chgRows ?? []) as Pick<XCharge, "user_id" | "amount" | "kind" | "receipt_id" | "excused_note">[];
+    const chgs = (chgRows ?? []) as Pick<XCharge, "user_id" | "amount" | "kind" | "receipt_id" | "excused_note" | "personal_repay">[];
     const onCard = new Set(chgs.map((c) => c.receipt_id).filter(Boolean));
     for (const r of recs) {
       const x = row(r.user_id);
@@ -146,7 +146,8 @@ export default async function AdminExpensesPage({ searchParams }: { searchParams
       const x = row(c.user_id);
       if (c.kind === "purchase") x.charges++;
       if (c.kind === "purchase" && !c.receipt_id && !c.excused_note) x.missing++;
-      x.total += Number(c.amount);
+      // Personal purchases come out of their pay, not the expense report.
+      if (!(c.personal_repay && !c.receipt_id)) x.total += Number(c.amount);
     }
     for (const id of reps.keys()) row(id);
     const list = [...rows.values()].sort((a, b) => (nameOf.get(a.id) ?? "").localeCompare(nameOf.get(b.id) ?? ""));
@@ -215,7 +216,7 @@ export default async function AdminExpensesPage({ searchParams }: { searchParams
                   <Link key={x.id} className="xa-mrow" href={`/admin/expenses/review?u=${x.id}&m=${month}`}>
                     <b className="ellipsis">{nameOf.get(x.id) ?? "Former employee"}</b>
                     <span>{x.receipts}</span>
-                    <span className={x.missing ? "err-text" : ""}>{x.charges ? (x.missing ? `${x.missing} of ${x.charges} need a receipt` : `All ${x.charges} have one`) : "None"}</span>
+                    <span className={x.missing ? "err-text" : ""}>{x.charges ? (x.missing ? `${x.missing} of ${x.charges} need a receipt` : x.charges === 1 ? "It has one" : `All ${x.charges} have one`) : "None"}</span>
                     <b>{money(rep && rep.status !== "sent" ? Number(rep.total) : x.total)}</b>
                     <span className={`pill ${b.tone}`}>{b.text}</span>
                   </Link>

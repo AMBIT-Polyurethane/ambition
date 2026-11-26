@@ -5,7 +5,7 @@ import { requireExpenseApprover } from "@/lib/session";
 import { TopBar } from "@/components/ui";
 import { dateShort, money } from "@/lib/format";
 import { catsOf, chargeLabel, isMonth, loadMonth, monthLabel, reportBadge, shiftMonth, thisMonth, type XReport } from "@/lib/expenses";
-import { MonthSummary, OtherCharges, ReceiptList } from "@/components/expenses/month-lists";
+import { MonthSummary, OtherCharges, ReceiptList, RepayList } from "@/components/expenses/month-lists";
 import { ChargeTools, ReviewForm, UndoExcuse, type Person } from "@/components/expenses/admin-bits";
 
 export const metadata = { title: "Review expenses" };
@@ -84,7 +84,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
         </div>
       ) : null}
 
-      <MonthSummary view={view} label={monthLabel(month)} />
+      <MonthSummary view={view} label={monthLabel(month)} who={name.split(" ")[0]} />
 
       {view.missing.length ? (
         <section className="section">
@@ -111,11 +111,12 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
 
       <ReceiptList view={view} editable empty={`No receipts for ${monthLabel(month)}.`} backTo={`/admin/expenses/review?u=${uid}&m=${month}`} />
       <OtherCharges view={view} />
-      {view.charges.some((c) => c.excused_note && !c.receipt_id) ? (
+      <RepayList view={view} canUndo={report?.status !== "approved"} who={name.split(" ")[0]} />
+      {view.charges.some((c) => c.excused_note && !c.receipt_id && !c.personal_repay) ? (
         <div className="row wrap tiny muted" style={{ gap: 8 }}>
           Marked &quot;no receipt needed&quot; by mistake?
           {view.charges
-            .filter((c) => c.excused_note && !c.receipt_id)
+            .filter((c) => c.excused_note && !c.receipt_id && !c.personal_repay)
             .map((c) => (
               <span key={c.id} className="row" style={{ gap: 4 }}>
                 {chargeLabel(c)} <UndoExcuse chargeId={c.id} />
@@ -131,6 +132,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
             <span className="small muted">
               {report?.submitted_at ? `Sent ${dateShort(report.submitted_at)}${report.auto_submitted ? " automatically" : ""} · ` : ""}
               {money(view.totals.total)} · pay back {money(view.totals.personal)}
+              {view.totals.repay ? ` · ${money(view.totals.repay)} personal, taken out of pay` : ""}
             </span>
           </div>
           <a className="btn sm dark" href={`/expenses/report?m=${month}&u=${uid}`} target="_blank" rel="noopener noreferrer">
@@ -167,7 +169,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
           <div className="row wrap" style={{ gap: 6 }}>
             {((hist ?? []) as Pick<XReport, "month" | "status" | "total">[]).map((h) => (
               <Link key={h.month} href={`/admin/expenses/review?u=${uid}&m=${h.month.slice(0, 7)}`} className={`chip sm${h.month.slice(0, 7) === month ? " on2" : ""}`}>
-                {monthLabel(h.month.slice(0, 7)).split(" ")[0].slice(0, 3)} {h.month.slice(2, 4)} · {money(Number(h.total))} · {{ approved: "Approved", submitted: "Waiting", returned: "Sent back", sent: "Emailed" }[h.status] ?? h.status}
+                {monthLabel(h.month.slice(0, 7)).split(" ")[0].slice(0, 3)} {h.month.slice(0, 4)} · {money(Number(h.total))} · {{ approved: "Approved", submitted: "Waiting", returned: "Sent back", sent: "Emailed" }[h.status] ?? h.status}
               </Link>
             ))}
           </div>

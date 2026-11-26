@@ -635,6 +635,7 @@ function CustomerField({
           value={q}
           onChange={(e) => (setQ(e.target.value), setOpen(true))}
           onFocus={() => setOpen(true)}
+          aria-label="Customer"
           placeholder={none ? "Not for a customer" : "Type the customer's name"}
           autoComplete="off"
         />

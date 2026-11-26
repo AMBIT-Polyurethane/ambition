@@ -412,7 +412,7 @@ export async function submitMonth(_prev: SubmitState, form: FormData): Promise<S
   if (serviceReady() && s.approvers.length) {
     const { data: ap } = await serviceClient().from("profiles").select("id").in("email", s.approvers.map((a) => a.email));
     const origin = await currentOrigin();
-    await textStaff(((ap ?? []) as { id: string }[]).map((p) => p.id), `AMBIT A.I.: ${profile.full_name ?? profile.email} sent ${monthLabel(month)} expenses (${money(s.total)}) for your approval. ${origin}/admin/expenses`, "waiting", `${profile.id}:${month}`).catch(() => 0);
+    await textStaff(((ap ?? []) as { id: string }[]).map((p) => p.id), `AMBIT A.I.: ${profile.full_name ?? profile.email} sent ${monthLabel(month)} expenses (${money(s.total)}) for your approval. ${origin}/admin/expenses/review?u=${profile.id}&m=${month}`, "waiting", `${profile.id}:${month}`).catch(() => 0);
   }
   revalidatePath("/expenses");
   revalidatePath("/admin/expenses");

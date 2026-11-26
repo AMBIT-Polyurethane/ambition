@@ -122,7 +122,14 @@ export function pdfLines(view: ReturnType<typeof monthView>): PdfLine[] {
       date: r.bought_on,
       vendor: r.vendor,
       category: splitOf(r).length > 1 ? splitOf(r).map((l) => `${l.category} ${money(l.amount)}`).join(" + ") : r.category,
-      what: [cust ? `For ${cust}` : "", endCustomersText(r) ? `Saw ${endCustomersText(r)}` : "", r.purpose ?? "", r.attendees ? `With ${r.attendees}` : ""].filter(Boolean).join(" · "),
+      what: [
+        cust ? `For ${cust}` : "",
+        endCustomersText(r) ? `Saw ${endCustomersText(r)}` : "",
+        r.purpose ?? "",
+        r.attendees ? `With ${r.attendees}` : "",
+        // The card was charged more than the receipt shows: the tip written on after.
+        c && Number(c.amount) > Number(r.amount) + 0.004 ? `Receipt ${money(Number(r.amount))} + tip ${money(Number(c.amount) - Number(r.amount))}` : "",
+      ].filter(Boolean).join(" · "),
       paid: r.paid_with === "personal" ? "Personal" : "Card",
       amount: c ? Number(c.amount) : Number(r.amount),
       photos: r.photos,
@@ -130,7 +137,7 @@ export function pdfLines(view: ReturnType<typeof monthView>): PdfLine[] {
     });
   }
   for (const c of view.charges) {
-    if (c.receipt_id || c.kind === "other") continue;
+    if (c.receipt_id || c.kind === "other" || c.personal_repay) continue;
     out.push({
       id: c.id,
       date: c.txn_date,
@@ -162,6 +169,7 @@ export async function expensePdf(supabase: SupabaseClient, who: { id: string; na
     email: who.email,
     month,
     lines: pdfLines(view),
+    repay: view.repay.map((c) => ({ date: c.txn_date, vendor: chargeLabel(c), amount: Number(c.amount), withheld: c.repay_status === "withheld" ? (c.repay_withheld_at ?? "") : null })),
     totals: view.totals,
     byCategory: view.totals.byCategory,
     status,

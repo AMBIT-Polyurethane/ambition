@@ -101,6 +101,8 @@ export type ExpenseDocInput = {
   email: string;
   month: string; // YYYY-MM
   lines: PdfLine[];
+  /** Personal purchases on the AMBIT card: not in the total; payroll takes them out of the employee's pay. */
+  repay?: { date: string; vendor: string; amount: number; withheld: string | null }[];
   totals: { total: number; card: number; personal: number };
   byCategory: { category: string; total: number; count: number }[];
   status?: { kind: "approved" | "submitted" | "returned" | "draft"; by?: string | null; at?: string | null; note?: string | null } | null;
@@ -214,6 +216,22 @@ export async function renderExpensePdf(d: ExpenseDocInput): Promise<Buffer> {
           <Text style={{ flex: 1, paddingHorizontal: 4 }}>Total for {title}</Text>
           <Text style={{ width: 90, textAlign: "right", paddingHorizontal: 4 }}>{money(t.total)}</Text>
         </View>
+        {d.repay?.length ? (
+          <View wrap={false} style={{ marginTop: 10 }}>
+            <View style={s.secHead}>
+              <Text style={s.secT}>PERSONAL PURCHASES ON THE AMBIT CARD (NOT IN THE TOTAL)</Text>
+              <Text style={{ fontSize: 6.6, color: GRAY }}>Taken out of {d.name.split(" ")[0]}&apos;s pay by payroll</Text>
+            </View>
+            {d.repay.map((r, i) => (
+              <View key={`${r.date}${r.vendor}${i}`} style={[s.tr, i % 2 ? { backgroundColor: ZEBRA } : {}]}>
+                <Text style={[s.td, { width: 70 }]}>{day(r.date)}</Text>
+                <Text style={[s.td, { flex: 1 }]}>{r.vendor}</Text>
+                <Text style={[s.td, { width: 150, color: GRAY }]}>{r.withheld ? `Taken out of pay ${day(r.withheld)}` : "Payroll takes it out of the next paycheck"}</Text>
+                <Text style={[s.td, { width: 70, textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{money(r.amount)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
         <Text style={s.fine}>
           &quot;Card&quot; = the AMBIT company card (the amount the bank charged when the charge is matched). &quot;Personal&quot; = paid with the employee&apos;s own money; the &quot;Pay back to employee&quot; total is owed to them.
         </Text>
