@@ -168,7 +168,7 @@ export function LotLedger({
           {target && n > 0 ? (
             <div className="ldg-preview" aria-live="polite">
               <span><b>{l.sku}</b> lot {l.lot_no ?? "(no lot #)"}: {q2(l.left)} <ArrowRight size={13} aria-hidden /> <b>{q2(l.left - n)}</b></span>
-              <span><b>{target.sku}</b> lot {l.lot_no ?? "(no lot #)"}: {q2(sameLot(target.id)?.left ?? 0)} <ArrowRight size={13} aria-hidden /> <b>{q2((sameLot(target.id)?.left ?? 0) + n)}</b>{sameLot(target.id) ? "" : " (new row on FOAM LOTS)"}</span>
+              <span><b>{target.sku}</b> lot {l.lot_no ?? "(no lot #)"}: {q2(sameLot(target.id)?.left ?? 0)} <ArrowRight size={13} aria-hidden /> <b>{q2((sameLot(target.id)?.left ?? 0) + n)}</b>{sameLot(target.id) ? "" : " (new lot row)"}</span>
             </div>
           ) : null}
         </>
@@ -179,7 +179,7 @@ export function LotLedger({
             <label className="field"><span className="label">Made on</span><input className="input" type="date" value={mfg} onChange={(e) => setMfg(e.target.value)} /></label>
             <label className="field ldg-why"><span className="label">Why (optional)</span><input className="input" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Typed wrong on the sheet" /></label>
           </div>
-          <span className="tiny faint">{rowsOfLot > 1 ? `Lot ${l.lot_no} is on ${rowsOfLot} rows here (different products). All ${rowsOfLot} get the new date.` : "The new date goes onto FOAM LOTS."}</span>
+          <span className="tiny faint">{rowsOfLot > 1 ? `Lot ${l.lot_no} is on ${rowsOfLot} rows here (different products). All ${rowsOfLot} get the new date.` : "Saved with who and why."}</span>
         </>
       )}
       <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
@@ -258,12 +258,12 @@ export function LotLedger({
                       <tr className="ldg-prod"><td colSpan={10}><b>{l.name}</b> <span className="tiny faint">{l.sku} · {q2(ls.filter((x) => x.product_id === l.product_id).reduce((s, x) => s + x.left, 0))} on hand</span></td></tr>
                     ) : null}
                     <tr className={`ldg-row${open === l.id ? " on" : ""}${l.left === 0 ? " empty" : ""}`}>
-                      <td><Link href={`/inventory/lots/${l.id}`} className="ldg-lot">{l.lot_no || "(no lot #)"}</Link>{l.adding ? <span className="tiny faint" style={{ display: "block" }}>being added to FOAM LOTS</span> : null}</td>
+                      <td><Link href={`/inventory/lots/${l.id}`} className="ldg-lot">{l.lot_no || "(no lot #)"}</Link>{l.adding ? <span className="tiny faint" style={{ display: "block" }}>just added</span> : null}</td>
                       <td><span className={l.expired ? "pill2 sm err" : l.soon ? "pill2 sm warn" : "small"}>{us(l.exp)}</span></td>
                       <td className="num c-x">{q2(l.starting)}</td>
                       <td className="num c-x">{q2(l.out)}</td>
                       <td className="num c-x">{q2(l.inn)}</td>
-                      <td className="num c-x">{q2(l.adj)}{l.sending ? <span className="tiny faint" style={{ display: "block" }}>{sgn(l.sending)} sending</span> : null}</td>
+                      <td className="num c-x">{q2(l.adj)}{l.sending ? <span className="tiny faint" style={{ display: "block" }}>{sgn(l.sending)} not on the old sheet yet</span> : null}</td>
                       <td className="num"><b>{q2(l.left)}</b></td>
                       <td className="num c-x">{l.promised ? q2(l.promised) : "–"}</td>
                       <td className="num"><b>{q2(l.free)}</b>{l.held ? <span className="tiny ldg-held" style={{ display: "block" }}>{q2(l.held)} held</span> : null}</td>
