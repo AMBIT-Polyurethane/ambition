@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, wrapEmail, type SendResult } from "@/lib/email";
 import { escapeHtml as h } from "@/lib/format";
 import { currentOrigin } from "@/lib/origin";
+import { textAdmins } from "@/lib/sms";
 
 // Foam lots (0116): a warehouse fix of more than 2 drums waits for an admin. Tell the admins.
 
@@ -35,5 +36,7 @@ ${c.note ? `<p style="font-size:14px;margin:0 0 12px;color:#52525b;">&ldquo;${h(
 <p style="font-size:14px;margin:0 0 4px;color:#52525b;">Nothing changes on the lot or the spreadsheet until an admin OKs it.</p>
 <p style="margin:20px 0 0;"><a href="${h(link)}" style="display:inline-block;background:#E33527;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;letter-spacing:1px;padding:13px 20px;border-radius:8px;">OPEN FOAM LOTS</a></p>`;
   const text = [`LOT FIX TO OK: ${place} · ${c.from_sku ?? ""} lot ${lot}`, `${c.by_name ?? "The warehouse"}: ${change} (${REASON[c.reason ?? ""] ?? "Fix"})`, c.note ?? "", "", link].join("\n");
+  // 0118: admins with text alerts on get a text too.
+  await textAdmins(`AMBIT A.I.: lot fix to OK at ${place}: ${c.from_sku ?? ""} lot ${lot}, ${change} (${REASON[c.reason ?? ""] ?? "fix"}) from ${c.by_name ?? "the warehouse"}. ${link}`, String(id)).catch(() => 0);
   return sendEmail({ to, subject, html: wrapEmail("Lot fix", inner), text });
 }

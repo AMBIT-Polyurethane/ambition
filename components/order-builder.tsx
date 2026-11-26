@@ -236,6 +236,8 @@ export function OrderBuilder(props: Props) {
   const [customerList, setCustomerList] = useState<OrderCustomer[]>(() => (companies ?? []).map(unpackCustomer));
   const [autoAddress, setAutoAddress] = useState("");
   const [approvalEmail, setApprovalEmail] = useState("");
+  const [smsPhone, setSmsPhone] = useState("");
+  const [smsAgreed, setSmsAgreed] = useState(false);
   // Staff: the customer already OK'd it (by phone, in person): skip the approval email.
   const [skipApproval, setSkipApproval] = useState(false);
   const [autoEmail, setAutoEmail] = useState("");
@@ -552,6 +554,8 @@ export function OrderBuilder(props: Props) {
         customerName: "",
         approvalEmail: isEmployee && approvals && !skipApproval ? approvalEmail : "",
         skipApproval: isEmployee && approvals && skipApproval,
+        smsPhone: isEmployee ? smsPhone : "",
+        smsAgreed: isEmployee && smsAgreed,
         draftId: draftId ?? undefined,
         salesRep: isEmployee ? salesRep : undefined,
         repToCustomer: isEmployee && Boolean(companyId) && salesRep !== fileRep && repToCustomer,
@@ -971,6 +975,20 @@ export function OrderBuilder(props: Props) {
               They get the order with an Approve button. It goes to orders@ambitpu.com once they approve.
             </p>
             ) : null}
+            <label className="field" style={{ marginTop: 10 }}>
+              <span className="label">Customer mobile for texts (optional)</span>
+              <input className="input" type="tel" inputMode="tel" autoComplete="off" value={smsPhone} onChange={(e) => setSmsPhone(e.target.value)} placeholder="(405) 555-0134" />
+            </label>
+            {smsPhone.trim() ? (
+              <label className="check small" style={{ marginTop: 6 }}>
+                <input type="checkbox" checked={smsAgreed} onChange={(e) => setSmsAgreed(e.target.checked)} />
+                <span>The customer agreed to get texts about their orders</span>
+              </label>
+            ) : null}
+            <p className="tiny faint" style={{ margin: "4px 0 0" }}>
+              {!skipApproval ? "They get the approval link by text too, then scheduled and picked up / delivered. " : "They get scheduled and picked up / delivered texts. "}
+              Leave it blank to use the number on file for this customer (if they agreed to texts before).
+            </p>
           </section>
         ) : null}
 

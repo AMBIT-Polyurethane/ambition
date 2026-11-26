@@ -10,6 +10,7 @@ import { renderPackingSlip, signedSlipFileName } from "@/lib/order-doc/packing-s
 import type { Order } from "@/lib/types";
 import { kickForOrder } from "@/lib/inventory/sync";
 import { pushHandoffs } from "@/lib/chat-handoff";
+import { textDone } from "@/lib/order-texts";
 import { can } from "@/lib/access";
 import { money } from "@/lib/format";
 import { changesText, detailsText, type DetailChange, type OrderChange } from "@/lib/order-edit";
@@ -22,7 +23,9 @@ const STATUSES = ["new", "processing", "completed", "cancelled"];
 function back(id: string, kind: "msg" | "err", text: string): never {
   revalidatePath(`/orders/${id}`);
   revalidatePath("/orders");
-  if (kind === "msg") handoffPush(id);
+  // Hand-offs go out even when the page shows a warning (say the customer email failed but the order still moved on);
+  // when nothing moved there is nothing to send.
+  handoffPush(id);
   redirect(`/orders/${id}?${kind}=${encodeURIComponent(text)}`);
 }
 
@@ -648,6 +651,8 @@ export async function completeOrder(form: FormData) {
   }
   const { error } = await s.supabase.rpc("order_complete", { p_order: id });
   if (error) back(id, "err", error.message);
+  // 0118: picked up / delivered, by text (when the customer agreed to texts).
+  await textDone(s.supabase, id).catch(() => null);
   await kickForOrder(s.supabase, id, "order completed");
   // 0082: the AI reads the signed BOL just attached (right order? signed? lots match?) once the page has moved on.
   if (files.length && bolCheckReady() && !checked) {

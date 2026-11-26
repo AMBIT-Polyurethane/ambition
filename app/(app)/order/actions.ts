@@ -247,6 +247,9 @@ export type PlaceOrderInput = {
   repToCustomer?: boolean;
   /** Employees only (custom foam order): the exact lots picked, drums per lot. The rest is picked by the app. */
   lots?: { product_id: string; lot_id: number; qty: number }[];
+  /** 0118, employees only: the customer mobile for this order's texts, and that they agreed to texts. */
+  smsPhone?: string;
+  smsAgreed?: boolean;
 };
 
 /** sent = went to orders@ (or saved, if email is off); approval = emailed to the customer to approve first. */
@@ -304,6 +307,10 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   if (needsApproval && !EMAIL_RE.test(approvalEmail)) {
     return { ok: false, error: "Enter the customer's email so they can approve the order." };
   }
+  // 0118: a mobile for texts needs 10 digits and the customer's OK.
+  const smsTyped = emp ? String(input.smsPhone ?? "").trim() : "";
+  if (smsTyped && String(smsTyped).replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "").length !== 10) return { ok: false, error: "The mobile for texts needs a 10-digit US number." };
+  if (smsTyped && !input.smsAgreed) return { ok: false, error: "Tick that the customer agreed to texts (or leave the mobile blank)." };
 
   // Staff picked exact lots (custom foam order): only for items on this order, from an AMBIT location.
   const lots = emp && input.delivery !== "dropship"
@@ -337,6 +344,23 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   revalidatePath("/orders");
   // Branches with a live inventory sheet: the order's lines go onto PENDING ORDERS right away.
   if (input.delivery !== "dropship") kickSync(input.branchId, "order placed");
+
+  // 0118: who gets this order's texts. Staff: the mobile typed, else the customer's number on file that agreed to
+  // texts. Contractors: their own number, if they turned texts on in Profile.
+  try {
+    let phone = smsTyped, agreed = Boolean(input.smsAgreed);
+    if (emp && !phone && UUID.test(input.companyId)) {
+      const { data: c } = await s.supabase.from("sms_consent").select("phone").eq("company_id", input.companyId).order("consented_at", { ascending: false }).limit(1).maybeSingle<{ phone: string }>();
+      if (c?.phone) { phone = c.phone; agreed = true; }
+    }
+    if (!emp) {
+      const { data: me } = await s.supabase.from("profiles").select("sms_phone, sms_on").eq("id", s.profile.id).maybeSingle<{ sms_phone: string | null; sms_on: boolean }>();
+      if (me?.sms_on && me.sms_phone) { phone = me.sms_phone; agreed = true; }
+    }
+    if (phone) await s.supabase.rpc("order_set_sms", { p_order: orderId, p_phone: phone, p_agreed: agreed });
+  } catch {
+    // texts are extra; the order is placed
+  }
 
   if (needsApproval) {
     const sent = await sendApprovalRequest(s.supabase, orderId, approvalEmail);

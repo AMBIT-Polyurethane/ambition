@@ -29,6 +29,8 @@ import { holidaySettings } from "@/lib/holidays-server";
 import { todayCentral } from "@/lib/sale";
 import { closuresAround } from "@/lib/holidays";
 import { howtoBySlug } from "@/lib/howto";
+import { OrderTextsCard } from "@/components/order-texts-card";
+import { smsReady } from "@/lib/sms";
 import { OrderReturnsCard, type ReturnLine } from "@/components/order-returns-card";
 import { canCredit, creditFor } from "@/lib/credit";
 import { requireActive, isEmployee } from "@/lib/session";
@@ -268,6 +270,9 @@ export default async function OrderDetailPage({
       <Link href={`/orders/${order.id}`} className="b2 sm quiet icon" aria-label="Close"><X size={18} /></Link>
     </div>
   );
+  // 0118: customer texts for this order (the number replied STOP?).
+  const smsOn = smsReady();
+  const smsStopped = emp && order.sms_phone ? Boolean((await supabase.from("sms_optout").select("phone").eq("phone", order.sms_phone).maybeSingle()).data) : false;
   const howtos = [howtoBySlug("order-desk"), howtoBySlug("close-out-an-order")].filter((v): v is NonNullable<typeof v> => Boolean(v));
   const slipOk = emp && kind !== "return" && order.status !== "cancelled" && order.delivery_method !== "dropship" && !waitingEdits.length;
   const hasLots = lines.some((l) => pickFor(l));
@@ -755,6 +760,7 @@ export default async function OrderDetailPage({
               {emp ? <DropShipCard orderId={order.id} canSend={admin || can(profile, "order_desk")} open={isOpen} /> : null}
               {emp ? <OrderBucksCard orderId={order.id} companyId={order.company_id} canUse={admin || desk} status={order.status} subtotal={Number(order.est_subtotal ?? 0)} kind={kind} /> : null}
               {detailsCard}
+              {emp ? <OrderTextsCard orderId={order.id} phone={order.sms_phone ?? null} ready={smsOn} optedOut={smsStopped} /> : null}
               {historyCard}
             </div>
             {emp ? (

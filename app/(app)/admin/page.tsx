@@ -54,6 +54,7 @@ export default async function AdminPage() {
           tiles={[
             { key: "users", href: "/admin/users", icon: "users", title: "Accounts", sub: waiting ? `${waiting} waiting for approval` : "Who can sign in", badge: waiting },
             { key: "alerts", href: "/admin/email-alerts", icon: "mail", title: "Email alerts", sub: "Who gets credit emails" },
+            { key: "texting", href: "/admin/texting", icon: "mail", title: "Texting", sub: "Twilio, test text, every text sent" },
             { key: "branches", href: "/admin/branches", icon: "pin", title: "Branches", sub: "Addresses and phones" },
             { key: "holidays", href: "/admin/holidays", icon: "calendar", title: "Holidays", sub: "Days AMBIT is closed" },
           ]}

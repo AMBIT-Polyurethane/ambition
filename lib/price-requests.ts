@@ -1,6 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, wrapEmail } from "@/lib/email";
+import { textStaff } from "@/lib/sms";
 import { escapeHtml as h, money, rate } from "@/lib/format";
 import { currentOrigin } from "@/lib/origin";
 import { sendPush } from "@/lib/push";
@@ -81,6 +82,8 @@ ${table(waiting, false)}
   await Promise.all([
     who.length ? sendEmail({ to: who.map((w) => w.email), subject, html: wrapEmail("Price request", inner), text: `${subject}\n\n${link}` }) : null,
     sendPush(who.map((w) => w.id), { title: `Price request · ${r.company_name}`, body: `${r.rep_name ?? "A rep"}: ${waiting.length} ${waiting.length === 1 ? "price" : "prices"} to approve`, url: `/price-requests/n/${r.id}`, tag: "prf" }).catch(() => 0),
+    // 0118: and a text, for approvers who turned text alerts on.
+    textStaff(who.map((w) => w.id), `AMBIT A.I.: price request ${prRef(r.id)} for ${r.company_name} has ${waiting.length} ${waiting.length === 1 ? "price" : "prices"} waiting on you. ${link}`, "waiting", String(r.id)).catch(() => 0),
   ]);
 }
 

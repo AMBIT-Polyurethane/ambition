@@ -1,6 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendPush } from "@/lib/push";
+import { textStaff } from "@/lib/sms";
+import { currentOrigin } from "@/lib/origin";
 
 // 0089: the database writes the hand-off note in the order chat when an order moves on; this sends each person tagged
 // in it a phone notification, once.
@@ -18,5 +20,8 @@ export async function pushHandoffs(db: SupabaseClient, orderId: string): Promise
       url: `/chat/${m.channel_id}?m=${m.id}`,
       tag: `handoff-${m.channel_id}`,
     }).catch(() => 0);
+    // 0118: and a text, for anyone tagged who turned text alerts on (Profile).
+    const origin = await currentOrigin().catch(() => "");
+    await textStaff(m.mentions, `AMBIT A.I.: ${m.body.slice(0, 300)}${origin ? ` ${origin}/chat/${m.channel_id}?m=${m.id}` : ""}`, "handoff", orderId).catch(() => 0);
   }
 }

@@ -8,6 +8,7 @@ import { PushToggle } from "@/components/push-toggle";
 import { ColorPicker } from "@/components/color-picker";
 import { readColors } from "@/lib/theme-colors";
 import { DeleteAccount } from "@/components/delete-account";
+import { MyTexts } from "@/components/my-texts";
 import { getTheme } from "@/lib/theme-server";
 import { CertForm } from "@/components/tax/cert-form";
 import { companyTax } from "@/lib/tax-server";
@@ -24,6 +25,8 @@ export default async function ProfilePage() {
     supabase.auth.getUser(),
   ]);
   const usesPassword = (who.user?.identities ?? []).some((i) => i.provider === "email");
+  // 0118: texts (before the update the columns aren't there; the card still shows, empty).
+  const { data: sms } = await supabase.from("profiles").select("sms_phone, sms_on").eq("id", profile.id).maybeSingle<{ sms_phone: string | null; sms_on: boolean }>();
   const theme = await getTheme();
   // Contractors: their tax-exempt certificate, and a place to send the renewal.
   const tax = !emp && profile.company_id ? await companyTax(supabase, profile.company_id) : null;
@@ -55,6 +58,8 @@ export default async function ProfilePage() {
       ) : null}
 
       <ProfileForm profile={profile} branches={branches ?? []} employee={emp} />
+
+      <MyTexts phone={sms?.sms_phone ?? null} on={Boolean(sms?.sms_on)} staff={emp} admin={profile.role === "admin"} />
 
       {!emp && profile.company_id && tax ? (
         <section className="section" id="tax">

@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { canEmailCustomers, sendEmail, type SendResult } from "@/lib/email";
 import { buildAdminChangeEmail, buildApprovalRequestEmail, buildChangeRequestEmail, buildDeskEmail, buildOrderEmail, buildOrderUpdatedEmail, buildScheduledEmail, type DeskNotice } from "@/lib/order-email";
+import { textApprovalLink, textScheduled } from "@/lib/order-texts";
 import { loadOrderDoc } from "@/lib/order-doc/load";
 import { pdfFileName, renderOrderPdf, type PdfAudience } from "@/lib/order-doc/pdf";
 import type { OrderDoc } from "@/lib/order-doc/types";
@@ -88,6 +89,8 @@ export async function sendApprovalRequest(supabase: SupabaseClient, orderId: str
     ...mail,
   });
   await supabase.rpc("mark_approval_email", { p_order: orderId, p_status: result.status, p_error: result.error ?? null });
+  // 0118: the same link by text, when the customer agreed to texts.
+  await textApprovalLink(supabase, orderId, approveUrl).catch(() => null);
   return result;
 }
 
@@ -165,6 +168,8 @@ export async function sendScheduledNotice(supabase: SupabaseClient, orderId: str
   const doc = await loadOrderDoc(supabase, orderId);
   if (!doc) return { status: "failed", error: "Order not found" };
   const o = doc.order;
+  // 0118: scheduled, by text too (when the customer agreed to texts).
+  await textScheduled(supabase, orderId).catch(() => null);
   const customer = customerEmail(doc);
   if (!customer) {
     await supabase.rpc("order_mark_notified", { p_order: orderId, p_status: "failed", p_error: "No customer email on file" });

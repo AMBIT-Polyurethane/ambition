@@ -114,6 +114,8 @@ export type Product = {
 };
 
 export type Order = {
+  /** 0118: the customer mobile that gets this order's texts (they agreed to texts). */
+  sms_phone?: string | null;
   id: string;
   tax_note?: string | null;
   /** Accounting, at the credit release: collect payment at pickup / delivery; no checks taken. */
