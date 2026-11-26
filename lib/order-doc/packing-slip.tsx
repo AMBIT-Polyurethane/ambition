@@ -176,7 +176,8 @@ function PackingSlip({ doc, printedBy, printedAt, signed }: { doc: OrderDoc; pri
 
   // Reasons not to load yet, most serious first.
   const waiting = awaitingCustomer(doc.state);
-  const missing = [!o.ambit_po ? "Sales Order #" : null, !o.invoice_no ? "Invoice #" : null].filter(Boolean) as string[];
+  // No more Sales Order # (0121): the Invoice # is the number to check (an older order may still have its Sales Order #).
+  const missing = [!o.invoice_no ? "Invoice #" : null].filter(Boolean) as string[];
   const hold = o.credit_status === "hold";
 
   const when = o.scheduled_for ? dateShort(o.scheduled_for) : null;
@@ -197,8 +198,8 @@ function PackingSlip({ doc, printedBy, printedAt, signed }: { doc: OrderDoc; pri
   ];
 
   const numbers: [string, string | null][] = [
-    ["SALES ORDER #", o.ambit_po ?? null],
     ["INVOICE #", o.invoice_no ?? null],
+    ...(o.ambit_po && o.ambit_po !== o.invoice_no ? ([["SALES ORDER #", o.ambit_po]] as [string, string | null][]) : []),
     ["CUSTOMER PO", o.po_number ?? "None"],
     ["AMBIT ORDER", no],
   ];

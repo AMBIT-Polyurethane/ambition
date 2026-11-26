@@ -171,7 +171,7 @@ export function orderFlow(x: FlowInput): FlowModel {
         actions: [details],
       };
     } else if (st === "needs_po") {
-      upNow = { team: team("Order desk"), text: "Enter the Sales Order #, the Invoice # and the invoice prices.", lines: [], actions: [{ ...details, primary: true }] };
+      upNow = { team: team("Order desk"), text: "Add the Invoice # and the invoice prices.", lines: [], actions: [{ ...details, primary: true }] };
     } else if (st === "invoice_update") {
       upNow = { team: team("Order desk"), text: "The order was edited: update the QuickBooks invoice to match, then mark it updated.", lines: [], actions: [{ ...details, primary: true }] };
     } else if (st === "credit") {

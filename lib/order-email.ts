@@ -290,7 +290,7 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, ch
   const head = {
     credit_needed: recheck
       ? { eyebrow: "CREDIT CHECK AGAIN", subject: `Credit check again (order edited) · ${no} · ${o.company_name}`, line: `${o.credit_note} The order desk updated the invoice (Invoice # ${o.invoice_no ?? ""}). Check for credit holds, then release the order or put it on hold.` }
-      : { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Sales Order # ${o.ambit_po ?? ""}${o.invoice_no ? ` and Invoice # ${o.invoice_no}` : ""}. Check for credit holds, then release the order or put it on hold.` },
+      : { eyebrow: "CREDIT CHECK NEEDED", subject: `Credit check needed · ${no} · ${o.company_name}`, line: `${o.po_by_name ?? "The order desk"} entered Invoice # ${o.invoice_no ?? o.ambit_po ?? ""}. Check for credit holds, then release the order or put it on hold.` },
     invoice_update: { eyebrow: "INVOICE UPDATE NEEDED", subject: `Invoice update needed · ${no} · ${o.company_name}`, line: `${ox.invoice_update_by_name ?? "AMBIT staff"} ${o.status === "completed" ? "corrected this order after it was " + (o.delivery_method === "pickup" ? "picked up" : "shipped out") : "edited this order"} (now revision ${ox.revision ?? 2}). Update the invoice in QuickBooks, then enter the new Invoice # and the prices on the order in the app.` },
     corrected: { eyebrow: "SETTLE THE DIFFERENCE", subject: `Corrected after ${o.delivery_method === "pickup" ? "pickup" : "delivery"} · ${no} · ${o.company_name}`, line: `This order was corrected after it was ${o.delivery_method === "pickup" ? "picked up" : "shipped out"}, and the order desk updated the invoice (Invoice # ${o.invoice_no ?? ""}). Collect the difference from the customer if the total went up, or credit them if it went down. Credit isn't checked again.` },
     credit_hold: { eyebrow: "ON CREDIT HOLD", subject: `On credit hold · ${no} · ${o.company_name}`, line: `${o.credit_by_name ?? "Accounting"} put this order on hold: ${o.credit_note ?? ""}` },
@@ -306,8 +306,8 @@ export function buildDeskEmail(kind: DeskNotice, doc: OrderDoc, link: string, ch
   const rows: [string, string][] = [
     ["Order", no],
     ["Customer", who],
-    ["Sales Order #", o.ambit_po ?? "-"],
     ["Invoice #", o.invoice_no ?? "-"],
+    ...(o.ambit_po && o.ambit_po !== o.invoice_no ? ([["Sales Order #", o.ambit_po]] as [string, string][]) : []),
     ["Customer PO", o.po_number ?? "-"],
     ["Delivery", whereText(doc)],
     ["Needed by", o.needed_by ? dateShort(o.needed_by) : "-"],
@@ -383,8 +383,8 @@ export function buildAdminChangeEmail(doc: OrderDoc, link: string, change: { by:
   const rows: [string, string][] = [
     ["Order", no],
     ["Customer", who],
-    ["Sales Order #", o.ambit_po ?? "-"],
     ["Invoice #", o.invoice_no ?? "-"],
+    ...(o.ambit_po && o.ambit_po !== o.invoice_no ? ([["Sales Order #", o.ambit_po]] as [string, string][]) : []),
     ["Customer PO", o.po_number ?? "-"],
     ["Delivery", whereText(doc)],
     ["Changed by", change.by],

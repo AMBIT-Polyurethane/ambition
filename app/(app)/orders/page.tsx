@@ -240,7 +240,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <Search size={18} aria-hidden="true" />
               {filter !== "all" && access !== "mine" ? <input type="hidden" name="status" value={filter} /> : null}
               {branch ? <input type="hidden" name="b" value={branch} /> : null}
-              <input type="search" name="q" defaultValue={q} placeholder="Customer, ORD #, PO, Sales Order # or invoice #" aria-label="Search orders" />
+              <input type="search" name="q" defaultValue={q} placeholder="Customer, ORD #, PO or invoice #" aria-label="Search orders" />
             </form>
             {access !== "mine" ? (
               <nav className="seg2" aria-label="Show">

@@ -290,7 +290,7 @@ export default async function OrderDetailPage({
       <div className="menu2-sep" />
       {canSetRep ? <Link href={`/orders/${order.id}?do=rep`} className="menu2-i"><UserRound size={18} /> Sales rep</Link> : null}
       {desk && isOpen && order.scheduled_for ? <Link href={`/orders/${order.id}?do=date`} className="menu2-i"><CalendarDays size={18} /> Change the date</Link> : null}
-      {desk && isOpen && order.ambit_po && st !== "invoice_update" ? <Link href={`/orders/${order.id}?do=numbers`} className="menu2-i"><Hash size={18} /> Sales Order # &amp; prices</Link> : null}
+      {desk && isOpen && order.ambit_po && st !== "invoice_update" ? <Link href={`/orders/${order.id}?do=numbers`} className="menu2-i"><Hash size={18} /> Invoice # &amp; prices</Link> : null}
       {admin && order.status === "completed" && lines.length ? <Link href={`/orders/${order.id}?do=reprice`} className="menu2-i"><Hash size={18} /> Fix prices</Link> : null}
       {approvedPrices.length ? <Link href={`/orders/${order.id}?do=prices`} className="menu2-i"><Tag size={18} /> Approved prices ({approvedPrices.length})</Link> : null}
       {canVary ? <Link href={`/orders/${order.id}?do=vary`} className="menu2-i"><Shuffle size={18} /> Swap a lot or item</Link> : null}
@@ -419,7 +419,7 @@ export default async function OrderDetailPage({
   } else if (doing === "numbers" && desk && isOpen) {
     panel = (
       <section className="panel2">
-        {panelHead("Sales Order #, Invoice # & prices")}
+        {panelHead("Invoice # & prices")}
         <NumbersForm orderId={order.id} po={order.ambit_po ?? null} invoice={order.invoice_no ?? null} lines={priceLines(lines.map((l) => ({ ...l, foam: foamOf(l, l.product?.category_id) })), { prefill: !order.priced_at })} />
       </section>
     );
@@ -567,7 +567,8 @@ export default async function OrderDetailPage({
   // The details, as a calm grid.
   const kv: { k: string; v: React.ReactNode; wide?: boolean; warn?: boolean }[] = [];
   if (order.po_number) kv.push({ k: "Customer PO", v: order.po_number });
-  if (emp) kv.push({ k: "Sales Order #", v: order.ambit_po ?? <span className="faint">–</span> });
+  // No more Sales Order # (0121): only an order from before then shows its own.
+  if (emp && order.ambit_po && order.ambit_po !== order.invoice_no) kv.push({ k: "Sales Order #", v: order.ambit_po });
   if (emp) kv.push({ k: "Invoice #", v: order.invoice_no ? <span className="col" style={{ gap: 6 }}>{order.invoice_no}<FileChips orderId={order.id} files={files.filter((f) => f.kind === "invoice")} label="Invoice" /></span> : <span className="faint">–</span> });
   if (order.delivery_method === "pickup") kv.push({ k: "Pickup at", v: branch ? `${branch.name}, ${branch.state}` : branchName ?? "–" });
   else kv.push({ k: "Ship to", v: order.ship_address ?? "–" });

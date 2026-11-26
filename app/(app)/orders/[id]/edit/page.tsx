@@ -92,7 +92,7 @@ export default async function EditOrderPage({ params, searchParams }: { params: 
     : st === "customer"
       ? `It's still waiting on the customer: saving sends them a fresh approval email${order.approval_email ? ` (${order.approval_email})` : ""} and the old link stops working.`
       : !order.ambit_po
-        ? "The Sales Order # isn't in yet: saving sends the updated order to orders@ambitpu.com. Stock is held on the lots you picked right away."
+        ? "The Invoice # isn't in yet: saving sends the updated order to orders@ambitpu.com. Stock is held on the lots you picked right away."
         : `The Invoice # is already in (${st ? STAGES[st].short : ""}): saving sends the order back to the order desk to update the invoice. Changing only the lots doesn't.`;
   // The details part (the same as the old Details page).
   let details: React.ComponentProps<typeof EditOrder>["details"] = null;

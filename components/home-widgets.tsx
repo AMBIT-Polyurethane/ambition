@@ -141,7 +141,7 @@ async function QueueWidget({ db }: { db: Db }) {
   return (
     <Card title="Your order desk" href="/orders/desk" link="Order desk">
       <div className="wg-rows">
-        <Row n={q.needsPo} label="need a Sales Order # and Invoice #" href="/orders?stage=needs_po" tone="warn" />
+        <Row n={q.needsPo} label="need an Invoice # and prices" href="/orders?stage=needs_po" tone="warn" />
         {q.invoiceUpdate ? <Row n={q.invoiceUpdate} label={`edited: ${q.invoiceUpdate === 1 ? "needs its" : "need their"} invoice updated`} href="/orders?stage=invoice_update" tone="err" /> : null}
         <Row n={q.toSchedule} label="released, need a date" href="/orders?stage=schedule" tone="warn" />
         <Row n={q.today} label="picking up or delivering today" href={`/orders?stage=scheduled&day=${todayCentral()}`} />

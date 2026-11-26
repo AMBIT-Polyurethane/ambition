@@ -146,7 +146,7 @@ function OfficeBox({ pickup, order: o }: { pickup: boolean; order: OrderDoc["ord
   return (
     <View style={[s.box, { flex: 1, marginLeft: 14 }]}>
       <View style={s.h3}><Text style={s.h3t}>FOR AMBIT USE</Text></View>
-      <Two a="Sales Order #" b="Credit OK" av={o.ambit_po} bv={credit} />
+      <Two a="Invoice #" b="Credit OK" av={o.invoice_no ?? null} bv={credit} />
       <Two a={pickup ? "Pickup date" : "Delivery date"} b="By" av={o.scheduled_for ? dateShort(o.scheduled_for) : null} bv={o.scheduled_by_name} />
       <Two a="Picked by" b="Date" />
       <Two a="Checked by" b="Date" />

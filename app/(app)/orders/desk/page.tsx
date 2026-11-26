@@ -142,8 +142,8 @@ export default async function OrderDeskPage({ searchParams }: { searchParams: Pr
                 <h1>Order desk</h1>
                 <Help label="How an order moves from step to step">
                   {mine
-                    ? "The orders you placed and your customers' orders. Customer approves, then CRM adds the Sales Order #, accounting checks credit, CRM sets the date, and it's picked up or shipped out."
-                    : "Order placed, then the customer approves, CRM adds the Sales Order #, accounting checks credit, and CRM sets the date (the customer is emailed). The warehouse loads it and the customer signs."}
+                    ? "The orders you placed and your customers' orders. Customer approves, then CRM adds the Invoice # and prices, accounting checks credit, CRM sets the date, and it's picked up or shipped out."
+                    : "Order placed, then the customer approves, CRM adds the Invoice # and prices, accounting checks credit, and CRM sets the date (the customer is emailed). The warehouse loads it and the customer signs."}
                 </Help>
               </div>
               <span className="o2-sub">Every open order, in the step it&apos;s on</span>

@@ -211,5 +211,5 @@ export async function setAutoRelease(form: FormData) {
   const on = String(form.get("on") ?? "") === "1";
   const { error } = await s.supabase.rpc("credit_auto_set", { p_on: on });
   revalidatePath("/credit", "layout");
-  redirect(`/credit?${error ? "err" : "msg"}=${encodeURIComponent(error ? nice68(error.message) : on ? "Automatic credit release is on. Orders from customers with a line of credit, nothing past due and room on the line release themselves after the Sales Order #." : "Automatic credit release is off. Accounting releases every order.")}`);
+  redirect(`/credit?${error ? "err" : "msg"}=${encodeURIComponent(error ? nice68(error.message) : on ? "Automatic credit release is on. Orders from customers with a line of credit, nothing past due and room on the line release themselves after the Invoice # is entered." : "Automatic credit release is off. Accounting releases every order.")}`);
 }

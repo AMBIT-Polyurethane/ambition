@@ -216,7 +216,7 @@ export function UpNow(p: Props) {
     );
   }
 
-  // ---------------------------------------------------------------- Sales Order #, Invoice # and prices
+  // ---------------------------------------------------------------- Invoice # and prices (no more Sales Order #, 0121)
   if (st === "needs_po" || st === "invoice_update") {
     const edited = st === "invoice_update";
     const pending = p.edits.filter((e) => !e.invoice_updated_at && e.stage_before && !["customer", "needs_po"].includes(e.stage_before));
@@ -224,7 +224,7 @@ export function UpNow(p: Props) {
       <Card
         tone="act"
         who="Up now · Order desk"
-        title={edited ? "Update the invoice" : "Sales Order #, Invoice # & prices"}
+        title={edited ? "Update the invoice" : "Invoice # & prices"}
         sub={edited ? `Edited by ${o.invoice_update_by_name ?? "AMBIT staff"} · ${dateTime(o.invoice_update_at)}` : undefined}
         pills={invoices.length ? <FileChips orderId={o.id} files={invoices} label="Invoice" /> : undefined}
       >
@@ -232,7 +232,7 @@ export function UpNow(p: Props) {
         <NumbersForm orderId={o.id} po={o.ambit_po ?? null} invoice={o.invoice_no ?? null} lines={priceLines(p.lines, { prefill: !edited && !o.priced_at })} />
       </Card>
     ) : (
-      <Card tone="wait" who="Waiting on the order desk" title={edited ? "Invoice update (order was edited)" : "Sales Order # & invoice"} />
+      <Card tone="wait" who="Waiting on the order desk" title={edited ? "Invoice update (order was edited)" : "Invoice # & prices"} />
     );
   }
 

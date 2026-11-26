@@ -79,7 +79,7 @@ export async function sendDropShips(orderId: string): Promise<{ made: string[]; 
     const { data: o } = await db.from("orders").select("*").eq("id", orderId).maybeSingle();
     if (!o) return { made: [], error: "Order not found." };
     const order = o as {
-      id: string; order_no: number; company_name: string; ship_address: string | null; delivery_method: string; branch_id: string | null; ambit_po?: string | null;
+      id: string; order_no: number; company_name: string; ship_address: string | null; delivery_method: string; branch_id: string | null; ambit_po?: string | null; invoice_no?: string | null;
       notes: string | null; company_id: string | null;
     };
     let shipTo = "";
@@ -100,7 +100,7 @@ export async function sendDropShips(orderId: string): Promise<{ made: string[]; 
       shipTo = [order.company_name, contact ? `Attn: ${contact}` : "", order.ship_address].filter(Boolean).join("\n");
     }
     const adc = /ADC-\d+/.exec(order.notes ?? "")?.[0] ?? null;
-    const ref = [`ORD-${order.order_no}`, order.ambit_po ? `Sales Order # ${order.ambit_po}` : "", adc].filter(Boolean).join(" · ");
+    const ref = [`ORD-${order.order_no}`, order.invoice_no ? `Invoice # ${order.invoice_no}` : order.ambit_po ? `Sales Order # ${order.ambit_po}` : "", adc].filter(Boolean).join(" · ");
 
     const made: string[] = [];
     for (const partnerId of [...new Set(lines.map((l) => l.partner))]) {

@@ -92,8 +92,13 @@ export function OrderDetailsForm({
     if (t(po) !== t(order.po_number ?? "")) out.po_number = t(po);
     if (needed !== (order.needed_by ?? "")) out.needed_by = needed || null;
     if (t(notes) !== t(order.notes ?? "")) out.notes = t(notes);
-    if (order.ambit_po && t(so) !== order.ambit_po) out.ambit_po = t(so);
-    if (order.invoice_no && t(inv) !== order.invoice_no) out.invoice_no = t(inv);
+    // No more Sales Order # (0121): newer orders keep the Invoice # in that slot too, so it follows the Invoice #.
+    const legacySo = Boolean(order.ambit_po && order.ambit_po !== order.invoice_no);
+    if (legacySo && t(so) !== order.ambit_po) out.ambit_po = t(so);
+    if (order.invoice_no && t(inv) !== order.invoice_no) {
+      out.invoice_no = t(inv);
+      if (!legacySo && order.ambit_po && t(inv)) out.ambit_po = t(inv);
+    }
     if (cod !== order.pay_cod) out.pay_cod = cod;
     if (noChecks !== order.pay_no_checks) out.pay_no_checks = noChecks;
     if (prepaid !== order.pay_prepaid) out.pay_prepaid = prepaid;
@@ -216,7 +221,7 @@ export function OrderDetailsForm({
           </div>
           {order.ambit_po || order.invoice_no ? (
             <div className="grid2">
-              {order.ambit_po ? (
+              {order.ambit_po && order.ambit_po !== order.invoice_no ? (
                 <label className="field">
                   <span className="label">Sales Order #</span>
                   <input className="input" value={so} onChange={(e) => setSo(e.target.value)} maxLength={40} />

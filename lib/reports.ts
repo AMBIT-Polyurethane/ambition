@@ -46,7 +46,7 @@ export const REPORT_DEFS: ReportDef[] = [
   { key: "price-requests", group: "sales", icon: "tag", range: "ytd", title: "Price Request Log", blurb: "Every price request made in the app: approved, auto-approved, declined, the discount and who decided." },
   { key: "addons", group: "sales", icon: "cart", range: "ytd", location: "sales", title: "Approval-Email Add-ons", blurb: "Items customers added themselves from the approval email, and what they were worth." },
   // ------------------------------------------------------------------ Orders
-  { key: "open-orders", group: "orders", icon: "clipboard", location: "sales", title: "Open Orders Aging", blurb: "Every open order, the step it's on (Sales Order #, credit, payment, scheduling) and how many days it's been there." },
+  { key: "open-orders", group: "orders", icon: "clipboard", location: "sales", title: "Open Orders Aging", blurb: "Every open order, the step it's on (Invoice #, credit, payment, scheduling) and how many days it's been there." },
   { key: "shipped", group: "orders", icon: "truck", range: "month", location: "sales", title: "Shipped Out / Picked Up Log", blurb: "Completed orders by day and location, shipped out or picked up, with the invoice #." },
   { key: "returns", group: "orders", icon: "receipt", range: "ytd", location: "sales", title: "Returns & Exchanges Log", blurb: "What came back, why, the credit, the lot numbers and when it was received." },
   // ------------------------------------------------------------------ Inventory & purchasing

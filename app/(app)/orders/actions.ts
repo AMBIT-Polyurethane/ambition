@@ -170,7 +170,7 @@ export async function approveWithoutEmail(form: FormData) {
   back(
     id,
     "msg",
-    `Approved without customer email approval.${sent.status === "sent" ? " The order went to orders@ambitpu.com." : ""} It's ready for its Sales Order # and Invoice #.`,
+    `Approved without customer email approval.${sent.status === "sent" ? " The order went to orders@ambitpu.com." : ""} It's ready for its Invoice # and prices.`,
   );
 }
 
@@ -383,13 +383,14 @@ async function addFiles(s: NonNullable<Awaited<ReturnType<typeof getSession>>>, 
   return null;
 }
 
-/** CRM: AMBIT's Sales Order # and Invoice # (and the invoice itself, if it's ready). The order moves on to the credit check. */
+/** CRM: the Invoice # and prices (and the invoice itself, if it's ready). The order moves on to the credit check.
+ *  No more Sales Order # (0121): the Invoice # goes in its slot too, unless the order already had one from before. */
 export async function setOrderPo(form: FormData) {
   const s = await getSession();
   if (!s?.profile) return;
   const id = String(form.get("id") ?? "");
-  const po = String(form.get("po") ?? "").trim();
   const invoice = String(form.get("invoice") ?? "").trim();
+  const po = String(form.get("po") ?? "").trim() || invoice;
   const { data: before } = await s.supabase
     .from("orders")
     .select("credit_status, invoice_update_at")
@@ -458,17 +459,17 @@ export async function setOrderPo(form: FormData) {
     if (!arErr) auto = (ar ?? {}) as { released?: boolean; reason?: string };
     await sendDeskNotice(s.supabase, id, auto.released ? "ready_to_schedule" : "credit_needed");
   }
-  if (fileErr) back(id, "err", `Sales Order # and Invoice # saved, but the invoice file wasn't added: ${fileErr}`);
+  if (fileErr) back(id, "err", `Invoice # saved, but the invoice file wasn't added: ${fileErr}`);
   if (auto.released) {
-    back(id, "msg", `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved. Credit released automatically (line of credit, nothing past due, fits the line). Schedule it now.`);
+    back(id, "msg", `Invoice # ${invoice}${prices ? " and prices" : ""} saved. Credit released automatically (line of credit, nothing past due, fits the line). Schedule it now.`);
   }
   const added = files.length ? ` ${files.length === 1 ? "Invoice file" : `${files.length} invoice files`} added.` : "";
   back(
     id,
     "msg",
     before?.credit_status
-      ? `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added}`
-      : `Sales Order # ${po}, Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added} Accounting has been asked for the credit check${auto.reason && auto.reason !== "off" ? ` (not released automatically: ${auto.reason})` : ""}.`,
+      ? `Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added}`
+      : `Invoice # ${invoice}${prices ? " and prices" : ""} saved.${added} Accounting has been asked for the credit check${auto.reason && auto.reason !== "off" ? ` (not released automatically: ${auto.reason})` : ""}.`,
   );
 }
 

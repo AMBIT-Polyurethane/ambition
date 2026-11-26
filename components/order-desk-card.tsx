@@ -183,12 +183,12 @@ export function OrderDeskCard({
     },
     {
       key: "po",
-      title: "Sales Order #, Invoice # & prices",
+      title: "Invoice # & prices",
       done: Boolean(o.ambit_po),
       current: st === "needs_po",
       detail: o.ambit_po ? (
         <>
-          Sales Order # <b>{o.ambit_po}</b> · Invoice # <b>{o.invoice_no ?? "not entered"}</b> · {o.po_by_name} · {dateTime(o.po_at)}
+          Invoice # <b>{o.invoice_no ?? "not entered"}</b>{o.invoice_no !== o.ambit_po ? <> · Sales Order # <b>{o.ambit_po}</b></> : null} · {o.po_by_name} · {dateTime(o.po_at)}
           {o.priced_at ? <><br />Invoice prices entered: <b>{money(o.est_subtotal)}</b> · {o.priced_by_name}</> : <><br /><span className="faint">Prices not entered yet.</span></>}
         </>
       ) : null,

@@ -57,7 +57,8 @@ const priceOk = (v: string) => /^\d+(\.\d{1,2})?$/.test(v.replace(/[$,\s]/g, "")
 const priceNum = (v: string) => Number(v.replace(/[$,\s]/g, ""));
 
 /**
- * Order desk: Sales Order # and Invoice # side by side (both required), the price of each line from the invoice
+ * Order desk: the Invoice # (required) and the price of each line from the invoice. No more Sales Order # (0121): an order
+ * entered before then keeps its old one (sent along unchanged); otherwise the Invoice # fills that slot too. Prices
  * (required for spray foam, fiberglass and anything else priced per customer; list prices are filled in for the
  * rest and can be changed to match the invoice). No invoice file: the invoices live in QuickBooks. ISO that goes with more than
  * one foam set (closed cell and open cell, say) has a price box for each set, since each set has its own price.
@@ -70,11 +71,12 @@ export function NumbersForm({ orderId, po, invoice, lines = [], fix = false }: {
   const missing = lines.filter((l) => !priceOk(prices[l.key] ?? ""));
   const split = lines.some((l) => l.with !== undefined);
   const filled = lines.filter((l) => l.fromLast);
+  // An order from before the Sales Order # was dropped keeps its own; newer ones hold the Invoice # there.
+  const oldPo = po && po !== invoice ? po : null;
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    if (!fix && !String(fd.get("po") ?? "").trim()) return setError("Enter the Sales Order #.");
-    if (!fix && !String(fd.get("invoice") ?? "").trim()) return setError("Enter the Invoice # too.");
+    if (!fix && !String(fd.get("invoice") ?? "").trim()) return setError("Enter the Invoice #.");
     if (missing.length) {
       const what = missing.map((l) => (l.with === undefined ? l.sku : `${l.sku} ${l.withName ? `with ${l.withName}` : "(extra)"}`));
       return setError(`Enter the price for ${[...new Set(what)].join(", ")} (from the invoice).`);
@@ -104,19 +106,21 @@ export function NumbersForm({ orderId, po, invoice, lines = [], fix = false }: {
       <input type="hidden" name="id" value={orderId} />
       {fix ? (
         <div className="price-note small">
-          This order is finished (Sales Order # {po ?? "-"} · Invoice # {invoice ?? "-"}). Saving sends it back to the order desk to update the
+          This order is finished (Invoice # {invoice ?? "-"}{oldPo ? ` · Sales Order # ${oldPo}` : ""}). Saving sends it back to the order desk to update the
           invoice in QuickBooks. When they save it, the credit team is emailed to collect or credit the difference.
         </div>
       ) : (
         <div className="grid2">
           <label className="field">
-            <span className="label">Add Sales Order #</span>
-            <input className="input sm" name="po" required defaultValue={po ?? ""} placeholder="Sales Order #" />
-          </label>
-          <label className="field">
             <span className="label">Add Invoice #</span>
             <input className="input sm" name="invoice" required defaultValue={invoice ?? ""} placeholder="Invoice #" />
           </label>
+          {oldPo ? (
+            <span className="tiny faint" style={{ alignSelf: "end" }}>
+              <input type="hidden" name="po" value={oldPo} />
+              Sales Order # {oldPo} (entered before Sales Order #s were dropped)
+            </span>
+          ) : null}
         </div>
       )}
       {lines.length ? (
@@ -199,7 +203,7 @@ export function NumbersForm({ orderId, po, invoice, lines = [], fix = false }: {
       {error ? <div className="alert err small" role="alert">{error}</div> : null}
       <button type="submit" className="btn sm" disabled={busy} style={{ alignSelf: "flex-start", gap: 8 }}>
         {busy ? <LoaderCircle size={16} className="spin" /> : null}
-        {busy ? "Saving…" : fix ? "Save the new prices" : po ? "Save changes" : "Save Sales Order #, Invoice # & prices"}
+        {busy ? "Saving…" : fix ? "Save the new prices" : invoice ? "Save changes" : "Save Invoice # & prices"}
       </button>
     </form>
   );

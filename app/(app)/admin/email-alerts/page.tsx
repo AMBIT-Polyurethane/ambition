@@ -33,7 +33,7 @@ export default async function EmailAlertsPage({ searchParams }: { searchParams: 
         <div className="col tight">
           <b>Credit check needed</b>
           <span className="small muted">
-            Emailed when the CRM enters an order&apos;s Sales Order # and Invoice #, and again if an edit makes the total go up. Whoever is ticked
+            Emailed when the CRM enters an order&apos;s Invoice # and prices, and again if an edit makes the total go up. Whoever is ticked
             gets it, with a link to the order.
           </span>
         </div>

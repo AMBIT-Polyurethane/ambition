@@ -189,7 +189,7 @@ export function ReturnForm({
             <div className="row between"><span className="small"><b>Customer pays the difference</b></span><b className="red">{outKnown && creditTotal ? money(Math.max(0, outTotal - creditTotal)) : "Set at the Sales Order # step"}</b></div>
           </>
         ) : null}
-        <span className="tiny faint">The order desk enters the final prices (and the credit memo) at the Sales Order # step, like any order.</span>
+        <span className="tiny faint">The order desk enters the final prices (and the credit memo) at the Invoice # step, like any order.</span>
       </section>
 
       {missingLot ? <div className="alert warn small"><CircleAlert size={16} style={{ flex: "none" }} /><span>Spray foam goes back into stock by lot: type the lot # from each drum&apos;s label.</span></div> : null}

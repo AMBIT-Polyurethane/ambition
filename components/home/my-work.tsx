@@ -69,7 +69,7 @@ export async function MyWork({ db, profile }: { db: SupabaseClient; profile: Pro
     items.push({ id: o.id, no: o.order_no, company: o.company_name ?? "", what, when: whenText ?? s.text, late: late || s.days >= 3, since: late ? 1e9 : s.days, icon, color });
   };
   for (const o of (byStage.data ?? []) as O[]) {
-    if (o.stage === "needs_po") push(o, "Enter the Sales Order # and invoice", <Hash size={17} />, "#6EA8FF");
+    if (o.stage === "needs_po") push(o, "Add the Invoice # and prices", <Hash size={17} />, "#6EA8FF");
     else if (o.stage === "invoice_update") push(o, "Update the invoice (order edited)", <Receipt size={17} />, "#F0B95A");
     else if (o.stage === "schedule") push(o, `Set the ${o.delivery_method === "pickup" ? "pickup" : "delivery"} date`, <CalendarDays size={17} />, "#5FD17A");
     else if (o.stage === "credit") push(o, "Check credit and release", <CircleDollarSign size={17} />, "#A78BFA");

@@ -136,7 +136,7 @@ export default async function CreditPage({ searchParams }: { searchParams: Promi
           <span className="grow row" style={{ gap: 8 }}>
             <b>Release good-standing orders automatically</b>
             <Help label="Which orders release on their own">
-              When the CRM enters the Sales Order #, the order releases itself if the customer Has Line Of Credit, nothing is past due (any amount, any location on a shared line) and the line covers the balance plus every open order including this one. Everything else goes to Accounting with the reason on the order.
+              When the CRM enters the Invoice #, the order releases itself if the customer Has Line Of Credit, nothing is past due (any amount, any location on a shared line) and the line covers the balance plus every open order including this one. Everything else goes to Accounting with the reason on the order.
             </Help>
           </span>
           {profile.role === "admin" ? (

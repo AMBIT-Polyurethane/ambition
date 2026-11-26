@@ -64,7 +64,7 @@ export function OrderReturnsCard({
         {kind === "exchange" ? (
           <div className="row between">
             <span className="small"><b>Customer pays the difference</b></span>
-            <b className="red">{!outAccount && credit ? money(Math.max(0, outTotal - credit)) : "New items' price − the credit (set at the Sales Order # step)"}</b>
+            <b className="red">{!outAccount && credit ? money(Math.max(0, outTotal - credit)) : "New items' price − the credit (set at the Invoice # step)"}</b>
           </div>
         ) : null}
       </div>

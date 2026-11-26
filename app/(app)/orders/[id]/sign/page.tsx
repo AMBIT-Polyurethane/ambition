@@ -71,8 +71,8 @@ export default async function SignSlipPage({ params }: { params: Promise<{ id: s
           <span className="pill ok">{pickup ? "Pickup" : "Delivery"}{o.scheduled_for ? ` · ${dateShort(o.scheduled_for)}` : ""}</span>
         </div>
         <dl className="kv slip-kv" style={{ margin: 0 }}>
-          <dt>Sales Order #</dt><dd>{o.ambit_po ?? <span className="red">Not entered</span>}</dd>
           <dt>Invoice #</dt><dd>{o.invoice_no ?? <span className="red">Not entered</span>}</dd>
+          {o.ambit_po && o.ambit_po !== o.invoice_no ? (<><dt>Sales Order #</dt><dd>{o.ambit_po}</dd></>) : null}
           {o.po_number ? (<><dt>Customer PO</dt><dd>{o.po_number}</dd></>) : null}
           <dt>{pickup ? "Pickup at" : "Ship to"}</dt><dd>{shipTo}</dd>
         </dl>

@@ -2,12 +2,12 @@ import type { Order, OrderStage } from "@/lib/types";
 import { can } from "@/lib/access";
 
 // The order desk: where each order sits after it's placed, and who moves it on.
-//   customer approval -> Sales Order # (CRM) -> credit check (Accounting) -> scheduled (CRM) -> completed
+//   customer approval -> Invoice # & prices (CRM) -> credit check (Accounting) -> scheduled (CRM) -> completed
 // Edited after the Invoice # was in: back to the CRM for an invoice update, then (if the total went up) credit again.
 
 export const STAGES: Record<OrderStage, { label: string; short: string; pill: string }> = {
   customer: { label: "Waiting on the customer", short: "With customer", pill: "pill warn" },
-  needs_po: { label: "Needs Sales Order #", short: "Needs Sales Order #", pill: "pill" },
+  needs_po: { label: "Needs Invoice #", short: "Needs Invoice #", pill: "pill" },
   invoice_update: { label: "Edited: needs an invoice update", short: "Invoice update", pill: "pill warn" },
   credit: { label: "Waiting on credit check", short: "Credit check", pill: "pill warn" },
   hold: { label: "On credit hold", short: "On hold", pill: "pill" },

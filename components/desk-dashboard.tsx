@@ -18,7 +18,7 @@ const color = (s: OrderStage) => `var(--dc${SLOT[s] ?? 1})`;
 
 const STEPS: { key: StepKey; label: string; who: string }[] = [
   { key: "customer", label: "Customer approval", who: "Contractor approves the emailed order" },
-  { key: "po", label: "Sales Order #", who: "CRM enters the Sales Order #" },
+  { key: "po", label: "Invoice #", who: "CRM adds the Invoice # and prices" },
   { key: "credit", label: "Credit check", who: "Credit approvals releases or holds it" },
   { key: "schedule", label: "Scheduling", who: "CRM sets the pickup or delivery date" },
 ];
