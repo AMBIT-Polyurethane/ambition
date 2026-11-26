@@ -3,7 +3,7 @@ import { TopBar } from "@/components/ui";
 import { CopyButton } from "@/components/copy-button";
 import { TestTextForm } from "@/components/test-text-form";
 import { currentOrigin } from "@/lib/origin";
-import { prettyPhone, smsReady, smsSetup } from "@/lib/sms";
+import { prettyPhone, smsErrorText, smsReady, smsSetup } from "@/lib/sms";
 import { dateTime } from "@/lib/format";
 
 export const metadata = { title: "Texting" };
@@ -61,6 +61,7 @@ export default async function TextingPage() {
               <div key={m.id} className="item col" style={{ gap: 2, alignItems: "flex-start", textAlign: "left" }}>
                 <span className="tiny faint">{dateTime(m.at)} · {m.direction === "in" ? `From ${prettyPhone(m.from_phone)}` : `To ${prettyPhone(m.to_phone)}`} · {KIND[m.kind ?? ""] ?? m.kind} · <b style={{ color: m.status === "failed" || m.status === "undelivered" ? "var(--err-text)" : m.status === "delivered" || m.status === "received" ? "var(--ok-text)" : undefined }}>{m.status}</b>{m.error ? ` · ${m.error}` : ""}</span>
                 <span className="small" style={{ overflowWrap: "anywhere" }}>{m.body}</span>
+                {smsErrorText(m.error) ? <span className="tiny err-text">{smsErrorText(m.error)}</span> : null}
               </div>
             ))}
           </div>

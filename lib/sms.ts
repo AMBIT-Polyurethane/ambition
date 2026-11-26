@@ -81,6 +81,23 @@ export async function sendSms(input: { to: string; body: string; kind: Kind; ref
   }
 }
 
+/** What Twilio's common error codes mean, in plain words (Admin > Texting). */
+const TWILIO_ERRORS: Record<string, string> = {
+  "30034": "Twilio blocked it: the texting number isn't tied to the approved campaign yet. Check the number is in the Messaging Service that holds the campaign.",
+  "30035": "The texting number is still being registered with the phone companies. It usually clears within 24 hours.",
+  "30007": "The phone company filtered it as possible spam.",
+  "30003": "The phone was off or out of service.",
+  "30005": "That number doesn't exist or isn't in service.",
+  "30006": "That's a landline or a number that can't get texts.",
+  "21610": "That number replied STOP.",
+  "21211": "That isn't a valid phone number.",
+  "21608": "Trial accounts can only text verified numbers.",
+};
+export function smsErrorText(error: string | null | undefined): string | null {
+  const code = String(error ?? "").match(/\b(\d{5})\b/)?.[1];
+  return code ? TWILIO_ERRORS[code] ?? null : null;
+}
+
 /** Staff who turned text alerts on (Profile), among these people. */
 export async function textStaff(userIds: string[], body: string, kind: Kind, ref?: string | null): Promise<number> {
   const ids = [...new Set(userIds.filter(Boolean))];
