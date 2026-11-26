@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const keep = was && (RANK[was] ?? 0) >= 9 && (RANK[status ?? ""] ?? 0) < 9;
     await db
       .from("sms_log")
-      .update({ ...(keep ? {} : { status }), ...(error ? { error } : {}), updated_at: new Date().toISOString() })
+      .update({ ...(keep ? {} : { status }), ...(error ? { error } : {}), ...(f.From ? { from_phone: f.From } : {}), updated_at: new Date().toISOString() })
       .eq("sid", sid);
   }
   return new Response(null, { status: 204 });

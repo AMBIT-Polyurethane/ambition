@@ -59,7 +59,7 @@ export default async function TextingPage() {
           <div className="list">
             {log.map((m) => (
               <div key={m.id} className="item col" style={{ gap: 2, alignItems: "flex-start", textAlign: "left" }}>
-                <span className="tiny faint">{dateTime(m.at)} · {m.direction === "in" ? `From ${prettyPhone(m.from_phone)}` : `To ${prettyPhone(m.to_phone)}`} · {KIND[m.kind ?? ""] ?? m.kind} · <b style={{ color: m.status === "failed" || m.status === "undelivered" ? "var(--err-text)" : m.status === "delivered" || m.status === "received" ? "var(--ok-text)" : undefined }}>{m.status}</b>{m.error ? ` · ${m.error}` : ""}</span>
+                <span className="tiny faint">{dateTime(m.at)} · {m.direction === "in" ? `From ${prettyPhone(m.from_phone)}` : `To ${prettyPhone(m.to_phone)}${m.from_phone ? ` from ${m.from_phone.startsWith("MG") ? `service ${m.from_phone.slice(0, 8)}…` : prettyPhone(m.from_phone)}` : ""}`} · {KIND[m.kind ?? ""] ?? m.kind} · <b style={{ color: m.status === "failed" || m.status === "undelivered" ? "var(--err-text)" : m.status === "delivered" || m.status === "received" ? "var(--ok-text)" : undefined }}>{m.status}</b>{m.error ? ` · ${m.error}` : ""}</span>
                 <span className="small" style={{ overflowWrap: "anywhere" }}>{m.body}</span>
                 {smsErrorText(m.error) ? <span className="tiny err-text">{smsErrorText(m.error)}</span> : null}
               </div>

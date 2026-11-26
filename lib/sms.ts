@@ -40,8 +40,8 @@ export async function sendSms(input: { to: string; body: string; kind: Kind; ref
   body = body.slice(0, 640);
   if (!smsReady()) return { status: "not_configured", error: "Texting isn't set up in Vercel yet." };
   const db = serviceClient();
-  const log = async (status: string, extra: { sid?: string; error?: string } = {}) => {
-    await db.from("sms_log").insert({ direction: "out", to_phone: to ?? input.to, kind: input.kind, ref: input.ref ?? null, user_id: input.userId ?? null, body, status, sid: extra.sid ?? null, error: extra.error ?? null });
+  const log = async (status: string, extra: { sid?: string; error?: string; from?: string | null } = {}) => {
+    await db.from("sms_log").insert({ direction: "out", to_phone: to ?? input.to, from_phone: extra.from ?? null, kind: input.kind, ref: input.ref ?? null, user_id: input.userId ?? null, body, status, sid: extra.sid ?? null, error: extra.error ?? null });
   };
   if (!to) {
     await log("skipped", { error: "Not a US mobile number" });
@@ -64,7 +64,7 @@ export async function sendSms(input: { to: string; body: string; kind: Kind; ref
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
-    const j = (await res.json().catch(() => ({}))) as { sid?: string; status?: string; message?: string; code?: number };
+    const j = (await res.json().catch(() => ({}))) as { sid?: string; status?: string; message?: string; code?: number; from?: string | null; messaging_service_sid?: string | null };
     if (!res.ok || !j.sid) {
       const error = `${j.message ?? `Twilio said ${res.status}`}${j.code ? ` (${j.code})` : ""}`;
       // 21610: the number replied STOP to us at Twilio. Remember it here too.
@@ -72,7 +72,8 @@ export async function sendSms(input: { to: string; body: string; kind: Kind; ref
       await log("failed", { error });
       return { status: "failed", error };
     }
-    await log(j.status ?? "queued", { sid: j.sid });
+    // Which number (or Messaging Service) Twilio sent it from: the status update fills in the number later.
+    await log(j.status ?? "queued", { sid: j.sid, from: j.from || j.messaging_service_sid || null });
     return { status: "sent", sid: j.sid };
   } catch (e) {
     const error = e instanceof Error ? e.message : "Couldn't reach Twilio";
