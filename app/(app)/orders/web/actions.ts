@@ -98,7 +98,7 @@ export async function acceptAdcOrder(f: FormData) {
   const id = Number(f.get("id"));
   if (!id) return;
   const { data } = await supabase.from("adc_orders").select("*").eq("id", id).maybeSingle();
-  type Item = { product_id?: string | null; sku: string; name: string; qty: number; set?: boolean };
+  type Item = { product_id?: string | null; sku: string; name: string; qty: number; set?: boolean; price?: number | null; promo?: string | null };
   type Strat = { best: string | null; options: { key: string; shipments: { from: string; kind: string; weight: number }[] }[] } | null;
   const o = data as {
     id: number; name: string; company: string | null; email: string; phone: string; delivery: string; pickup_branch: string | null; notes: string | null;
@@ -121,7 +121,14 @@ export async function acceptAdcOrder(f: FormData) {
   const dropShip = new Map(((ds ?? []) as { id: string; drop_ship_partner?: string | null; vendor_name: string | null }[]).filter((x) => x.drop_ship_partner).map((x) => [x.id, x.vendor_name ?? "the vendor"]));
   const items: { raw: string; product_id: string | null; qty: number; confidence: number; note: string | null }[] = o.items.map((l) => ({
     raw: `${l.sku} ${l.name}`, product_id: l.product_id ?? null, qty: Number(l.qty), confidence: l.product_id ? 1 : 0,
-    note: !l.product_id ? "Not in the catalog: price and add by hand" : dropShip.has(l.product_id) ? `Drop ship from ${dropShip.get(l.product_id)}: don't pick. It goes to them when credit is released.` : null,
+    note:
+      [
+        !l.product_id ? "Not in the catalog: price and add by hand" : dropShip.has(l.product_id) ? `Drop ship from ${dropShip.get(l.product_id)}: don't pick. It goes to them when credit is released.` : "",
+        // The price the customer saw on their web order (their price, a sale price): charge this on the invoice.
+        l.promo && l.price !== null && l.price !== undefined ? `Web order price $${Number(l.price).toFixed(2)} each (${l.promo}): use it on the invoice.` : "",
+      ]
+        .filter(Boolean)
+        .join(" ") || null,
   }));
   const sets = o.items.filter((l) => l.set).reduce((n, l) => n + Number(l.qty), 0);
   if (sets > 0) {

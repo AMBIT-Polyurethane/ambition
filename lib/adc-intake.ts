@@ -2,6 +2,7 @@ import "server-only";
 import { serviceClient, serviceReady } from "@/lib/supabase/service";
 import { siteUrl } from "@/lib/env";
 import { todayCentral } from "@/lib/sale";
+import { msrpRealPrices } from "@/lib/adc-my-prices";
 import { findExisting, matchCustomerByName, nearestBranch, planOrder, type Co, type Delivery, type Site, type Strategy } from "@/lib/adc-logistics";
 
 // What happens right after an ADC web order is saved: who the customer is (an AMBIT account we can confirm, someone
@@ -195,7 +196,7 @@ export type PricedLine = {
  * the full sale price on everything but spray foam, and the spray foam sale (per lb off) is theirs only: anyone else's
  * foam lines lose that note. Saves the new lines and subtotal on the web order; null when nothing changed.
  */
-export async function priceForCustomer(o: { id: number; lines: PricedLine[]; ambitCustomer: boolean }): Promise<{ lines: PricedLine[]; subtotal: number; has_quote: boolean } | null> {
+export async function priceForCustomer(o: { id: number; lines: PricedLine[]; ambitCustomer: boolean; companyId?: string | null; userId?: string | null }): Promise<{ lines: PricedLine[]; subtotal: number; has_quote: boolean } | null> {
   if (!serviceReady()) return null;
   const db = serviceClient();
   const ids = [...new Set(o.lines.map((l) => l.product_id).filter((x): x is string => Boolean(x)))];
@@ -210,6 +211,14 @@ export async function priceForCustomer(o: { id: number; lines: PricedLine[]; amb
   // Guns & parts stay at MSRP on the web order (Graco and Binks): the order desk sets the real price in A.I. (0105).
   const mc = new Set(((msrpCats ?? []) as { id: string }[]).map((c) => c.id));
   const msrp = new Set(((prods ?? []) as { id: string; category_id: string | null }[]).filter((p) => p.category_id && mc.has(p.category_id)).map((p) => p.id));
+  // Graco and Binks parts: the public store shows MSRP, but the order gets the real price (our price, the sale price
+  // or the customer's own), like the signed-in cart showed. The AMBIT account: the verified match, else the shopper's own link.
+  let companyId = o.ambitCustomer ? o.companyId ?? null : null;
+  if (!companyId && o.userId) {
+    const { data: me } = await db.from("profiles").select("company_id").eq("id", o.userId).maybeSingle();
+    companyId = (me as { company_id: string | null } | null)?.company_id ?? null;
+  }
+  const real = msrp.size ? await msrpRealPrices({ companyId, productIds: [...msrp] }) : new Map<string, { price: number; sale: boolean }>();
   const full = new Map<string, number>();
   if (sale && o.ambitCustomer) {
     const { data: s } = await db.from("web_sales").select("id").eq("slug", sale.slug).maybeSingle();
@@ -226,7 +235,12 @@ export async function priceForCustomer(o: { id: number; lines: PricedLine[]; amb
       changed = true;
       return o.ambitCustomer ? { ...l, promo: `AMBIT customer ${l.promo}` } : { ...l, promo: null };
     }
-    if (msrp.has(l.product_id)) return l;
+    if (msrp.has(l.product_id)) {
+      const r = real.get(l.product_id);
+      if (!r || (l.price !== null && r.price >= l.price)) return l;
+      changed = true;
+      return { ...l, price: r.price, on_sale: r.sale, promo: r.sale ? `${sale?.name ?? "Sale"} price (MSRP ${l.price === null ? "-" : `$${l.price.toFixed(2)}`})` : `Your price (MSRP ${l.price === null ? "-" : `$${l.price.toFixed(2)}`})` };
+    }
     const f = full.get(l.product_id);
     if (f === undefined || (l.price !== null && f >= l.price)) return l;
     changed = true;

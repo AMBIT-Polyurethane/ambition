@@ -4927,6 +4927,14 @@ body:has(.adc) { background: #f4f4f2; }
 .adc-msrp { align-self: center; font-size: 11px; font-weight: 800; letter-spacing: .06em; text-decoration: none; color: var(--a-ink2); border: 1px solid currentColor; border-radius: 5px; padding: 1px 6px; line-height: 1.4; cursor: help; }
 .adc-price.big .adc-msrp { font-size: 13px; padding: 2px 8px; }
 .adc-msrp.sm { font-size: 10px; padding: 0 5px; vertical-align: 1px; }
+.adc-msrp.sm.yours { color: var(--a-red, #E33527); cursor: default; }
+.adc-msrp-in { flex-basis: 100%; font-size: 12px; font-weight: 700; color: var(--a-red, #E33527); text-decoration: underline; text-underline-offset: 2px; }
+.adc-msrp-note { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0 4px; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; line-height: 1.45;
+  background: color-mix(in srgb, var(--a-red, #E33527) 8%, transparent); border: 1px solid color-mix(in srgb, var(--a-red, #E33527) 30%, transparent); }
+.adc-msrp-note svg { flex: none; margin-top: 2px; color: var(--a-red, #E33527); }
+.adc-msrp-note a { font-weight: 800; color: var(--a-red, #E33527); }
+.adc-msrp-note.ok { background: color-mix(in srgb, #16a34a 8%, transparent); border-color: color-mix(in srgb, #16a34a 30%, transparent); }
+.adc-msrp-note.ok svg { color: #16a34a; }
 .adc-promo { align-self: flex-start; font-size: 12.5px; font-weight: 800; color: var(--a-red); background: #fdecea; border-radius: 8px; padding: 4px 8px; }
 .adc-promo.big { font-size: 14px; padding: 6px 10px; }
 

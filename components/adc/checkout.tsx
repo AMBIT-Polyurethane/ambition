@@ -12,6 +12,7 @@ import { AdcSmsCheck } from "@/components/adc/sms";
 import { usPhone } from "@/lib/sms-text";
 import { adcShipEstimate, placeAdcOrder, type ShipQuote } from "@/app/adc/actions";
 import { useAdc } from "@/components/adc/lang";
+import { useMyPrices } from "@/components/adc/my-prices";
 import { errText } from "@/lib/adc-i18n";
 
 export type CatInfo = {
@@ -61,14 +62,19 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
   const [quote, setQuote] = useState<ShipQuote | null>(null);
   const [quoting, setQuoting] = useState(false);
 
+  // Graco and Binks parts: MSRP for guests; a signed-in shopper's cart shows their real price (0105).
+  const mine = useMyPrices();
   const rows = lines.map((l) => {
     const c = l.id ? cat[l.id] : undefined;
-    const price = c ? (c.quote ? null : c.sale_price ?? c.list_price) : null;
-    return { ...l, c, price, gone: Boolean(l.id && !c) };
+    const real = c?.msrp && l.id ? mine.prices[l.id] : undefined;
+    const yours = Boolean(real && (c?.list_price === null || (real && c && c.list_price !== null && real.price < c.list_price)));
+    const price = c ? (yours && real ? real.price : c.quote ? null : c.sale_price ?? c.list_price) : null;
+    return { ...l, c, price, yours, gone: Boolean(l.id && !c) };
   });
   const live = rows.filter((r) => !r.gone);
   const subtotal = live.reduce((s, r) => s + (r.price ?? 0) * r.qty, 0);
-  const saved = live.reduce((s, r) => s + (r.c && r.c.sale_price !== null && r.c.list_price !== null && !r.c.quote ? Math.max(0, r.c.list_price - r.c.sale_price) * r.qty : 0), 0);
+  const saved = live.reduce((s, r) => s + (!r.yours && r.c && r.c.sale_price !== null && r.c.list_price !== null && !r.c.quote ? Math.max(0, r.c.list_price - r.c.sale_price) * r.qty : 0), 0);
+  const msrpGuest = !mine.signedIn && live.some((r) => r.c?.msrp && r.price !== null);
   const toConfirm = live.some((r) => r.price === null);
 
   // How it gets there: pick up only items, fiberglass (pick up or a full truck), freight items.
@@ -194,7 +200,7 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
             )}
             <span className="adc-line-b">
               <b>{r.c?.name ?? r.name}</b>
-              <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}{r.c?.msrp && r.price !== null ? <> <abbr className="adc-msrp sm" title={t.msrpTitle}>{t.msrp}</abbr></> : null}</span>
+              <span>{t.partLine(r.sku)}{r.gone ? ` · ${t.gone}` : r.price === null ? ` · ${t.toConfirm}` : ` · ${t.each(usd(r.price))}`}{r.yours ? <> <span className="adc-msrp sm yours">{t.yourPrice}</span></> : r.c?.msrp && r.price !== null ? <> <abbr className="adc-msrp sm" title={t.msrpTitle}>{t.msrp}</abbr></> : null}</span>
               {r.c?.is_set ? <span className="adc-set">{t.setBadge} · {t.sets(r.qty)}</span> : null}
               {seasonOf({ sku: r.sku, name: r.c?.name ?? r.name, category_id: r.c ? (r.c.foam ? "ambit-foam" : "other") : null }) ? (
                 <span className="adc-line-season"><SeasonChip season={seasonOf({ sku: r.sku, name: r.c?.name ?? r.name, category_id: r.c ? (r.c.foam ? "ambit-foam" : "other") : null })} lang={lang} /></span>
@@ -211,6 +217,17 @@ export function AdcCheckout({ cat, branches, foamNote, me, saleName = null }: { 
             <button type="button" className="adc-x" onClick={() => setQty(r.key, 0)} aria-label={t.remove(r.name)}><Trash2 size={17} /></button>
           </div>
         ))}
+        {msrpGuest ? (
+          <div className="adc-msrp-note">
+            <Info size={16} aria-hidden="true" />
+            <span>{t.msrpCartNote} <Link href="/adc/account">{t.signInPrice}</Link></span>
+          </div>
+        ) : mine.signedIn && live.some((r) => r.yours) ? (
+          <div className="adc-msrp-note ok">
+            <BadgeCheck size={16} aria-hidden="true" />
+            <span>{t.msrpYours}</span>
+          </div>
+        ) : null}
         <div className="adc-tot">
           {saved > 0 ? <span className="adc-saved">{t.youSave(usd(saved))}</span> : null}
           <span>{toConfirm ? t.subtotalPriced : t.subtotal}</span>

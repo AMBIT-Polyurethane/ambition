@@ -8,6 +8,8 @@ import { AdcLogo } from "@/components/adc/logo";
 import { AdcLangProvider, AdcLangSwitch } from "@/components/adc/lang";
 import { catName, dict } from "@/lib/adc-i18n";
 import { adcLang } from "@/lib/adc-lang";
+import { adcMyPrices } from "@/lib/adc-me";
+import { AdcMyPricesProvider } from "@/components/adc/my-prices";
 
 // The ADC web store: AMBIT Distribution Centers. A store of its own: no sign-in, no links into AMBIT Intelligence.
 export async function generateMetadata(): Promise<Metadata> {
@@ -23,11 +25,12 @@ export const viewport: Viewport = { themeColor: "#0A0A0B" };
 export const dynamic = "force-dynamic";
 
 export default async function AdcLayout({ children }: { children: React.ReactNode }) {
-  const [{ items, sale }, lang] = await Promise.all([adcCatalog(), adcLang()]);
+  const [{ items, sale }, lang, mine] = await Promise.all([adcCatalog(), adcLang(), adcMyPrices()]);
   const cats = adcCategories(items);
   const t = dict(lang);
   return (
     <AdcLangProvider lang={lang}>
+    <AdcMyPricesProvider value={mine}>
     <AdcCartProvider>
       <div className="adc" lang={lang}>
         <header className="adc-head">
@@ -63,6 +66,7 @@ export default async function AdcLayout({ children }: { children: React.ReactNod
         </footer>
       </div>
     </AdcCartProvider>
+    </AdcMyPricesProvider>
     </AdcLangProvider>
   );
 }

@@ -5,19 +5,32 @@ import { useEffect, useState } from "react";
 import { Check, Minus, Plus, ShoppingCart } from "lucide-react";
 import { useAdcCart } from "@/components/adc/cart";
 import { useAdc } from "@/components/adc/lang";
+import { useMyPrices } from "@/components/adc/my-prices";
 import { longDay } from "@/lib/adc-i18n";
 
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /** Price line: the sale price with the old one crossed out, the list price, or "Request a quote". */
-export function AdcPrice({ list, sale, quote, big = false, msrp = false }: { list: number | null; sale: number | null; quote: boolean; big?: boolean; msrp?: boolean }) {
+export function AdcPrice({ id, list, sale, quote, big = false, msrp = false }: { id?: string; list: number | null; sale: number | null; quote: boolean; big?: boolean; msrp?: boolean }) {
   const { t } = useAdc();
-  // Guns & parts (0105): the maker's MSRP, tagged, never a sale price.
+  const mine = useMyPrices();
+  // Guns & parts (0105): the public page shows the maker's MSRP only. Signed in, the shopper sees their real price.
+  const real = msrp && id ? mine.prices[id] : undefined;
+  if (msrp && real && (list === null || real.price < list)) {
+    return (
+      <span className={`adc-price${big ? " big" : ""}`}>
+        <b className="now">{usd(real.price)}</b>
+        {list !== null ? <s title={t.msrpTitle}>{usd(list)}</s> : null}
+        <span className="off">{t.yourPrice}</span>
+      </span>
+    );
+  }
   if (msrp && !quote && list !== null) {
     return (
       <span className={`adc-price${big ? " big" : ""}`}>
         <b>{usd(list)}</b>
         <abbr className="adc-msrp" title={t.msrpTitle}>{t.msrp}</abbr>
+        {!mine.signedIn ? <Link href="/adc/account" className="adc-msrp-in">{t.signInPrice}</Link> : null}
       </span>
     );
   }

@@ -248,7 +248,7 @@ export async function placeAdcOrder(o: AdcOrderInput): Promise<AdcOrderResult> {
   // Prices by who it is: an AMBIT customer gets the full sale price (the store only shows 5% off), and the spray
   // foam sale is for AMBIT customers only.
   try {
-    const priced = await priceForCustomer({ id: res.id, lines, ambitCustomer: intake?.match === "verified" });
+    const priced = await priceForCustomer({ id: res.id, lines, ambitCustomer: intake?.match === "verified", companyId: intake?.company?.id ?? null, userId: auth.user?.id ?? null });
     if (priced) {
       lines = priced.lines as Line[];
       res.subtotal = priced.subtotal;
